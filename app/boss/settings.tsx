@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import { UserRepository } from '@/lib/repositories';
 
 export default function SettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
@@ -14,6 +15,9 @@ export default function SettingsScreen() {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [isChanging, setIsChanging] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -44,12 +48,12 @@ export default function SettingsScreen() {
       return;
     }
 
-    if (newPin.length !== 4) {
-      Alert.alert('Error', 'PIN must be 4 digits');
+    if (newPin.length < 4 || newPin.length > 8) {
+      Alert.alert('Error', 'PIN must be between 4 and 8 digits');
       return;
     }
 
-    if (!/^\d{4}$/.test(newPin)) {
+    if (!/^\d+$/.test(newPin)) {
       Alert.alert('Error', 'PIN must contain only numbers');
       return;
     }
@@ -73,15 +77,53 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleChangeName = async () => {
+    if (!newName.trim()) {
+      Alert.alert('Error', 'Please enter a name');
+      return;
+    }
+
+    if (newName.trim() === user?.name) {
+      Alert.alert('Error', 'Please enter a different name');
+      return;
+    }
+
+    setIsUpdatingName(true);
+    try {
+      const userRepo = new UserRepository();
+      if (user?.id) {
+        await userRepo.update(user.id, { name: newName.trim() });
+        Alert.alert('Success', 'Name updated successfully. Please re-login to see changes.');
+        setShowNameModal(false);
+        setNewName('');
+        setTimeout(() => {
+          logout();
+          router.replace('/' as any);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('[Settings] Failed to update name:', error);
+      Alert.alert('Error', 'Failed to update name');
+    } finally {
+      setIsUpdatingName(false);
+    }
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
-          <View style={styles.listItem}>
-            <Text style={[styles.label, { color: theme.text }]}>Name</Text>
+          <TouchableOpacity style={styles.listItem} onPress={() => {
+            setNewName(user?.name || '');
+            setShowNameModal(true);
+          }}>
+            <View style={styles.listItemLeft}>
+              <Edit size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Name</Text>
+            </View>
             <Text style={[styles.value, { color: theme.textSecondary }]}>{user?.name}</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.listItem}>
             <Text style={[styles.label, { color: theme.text }]}>Role</Text>
             <Text style={[styles.value, { color: theme.textSecondary }]}>
@@ -183,19 +225,19 @@ export default function SettingsScreen() {
                 placeholder="Enter current PIN"
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={8}
                 secureTextEntry
               />
 
-              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New PIN</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New PIN (4-8 digits)</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={newPin}
                 onChangeText={setNewPin}
-                placeholder="Enter new 4-digit PIN"
+                placeholder="Enter new PIN (4-8 digits)"
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={8}
                 secureTextEntry
               />
 
@@ -207,7 +249,7 @@ export default function SettingsScreen() {
                 placeholder="Re-enter new PIN"
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={8}
                 secureTextEntry
               />
 
@@ -220,6 +262,49 @@ export default function SettingsScreen() {
                   <ActivityIndicator color="#FFF" />
                 ) : (
                   <Text style={styles.modalButtonText}>Change PIN</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showNameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNameModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Change Name</Text>
+              <TouchableOpacity onPress={() => setShowNameModal(false)}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New Name</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="Enter new name"
+                placeholderTextColor={theme.textSecondary}
+                autoCapitalize="words"
+                autoFocus
+              />
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handleChangeName}
+                disabled={isUpdatingName}
+              >
+                {isUpdatingName ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Update Name</Text>
                 )}
               </TouchableOpacity>
             </View>
