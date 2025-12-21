@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const MIGRATIONS = [
   {
@@ -475,6 +475,17 @@ export const MIGRATIONS = [
     `,
     down: `
       DROP TABLE expenses;
+    `,
+  },
+  {
+    version: 10,
+    up: `
+      ALTER TABLE audit_logs ADD COLUMN deleted_at INTEGER;
+      CREATE INDEX idx_audit_logs_deleted_at ON audit_logs(deleted_at);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_audit_logs_deleted_at;
+      ALTER TABLE audit_logs DROP COLUMN deleted_at;
     `,
   },
 ];

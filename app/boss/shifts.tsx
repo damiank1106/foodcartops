@@ -191,8 +191,13 @@ export default function BossShiftsScreen() {
       return;
     }
 
-    if (!startingCash || isNaN(parseFloat(startingCash)) || parseFloat(startingCash) < 0) {
+    if (!startingCash || isNaN(parseFloat(startingCash))) {
       Alert.alert('Error', 'Please enter a valid starting cash amount');
+      return;
+    }
+
+    if (parseFloat(startingCash) < 0) {
+      Alert.alert('Error', 'Starting cash cannot be negative');
       return;
     }
 

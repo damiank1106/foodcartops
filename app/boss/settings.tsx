@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { UserRepository } from '@/lib/repositories';
+import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
 import { resetDatabase } from '@/lib/database/init';
 import { seedDatabase } from '@/lib/utils/seed';
 
@@ -139,6 +139,59 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleWipeWorkersAndShifts = () => {
+    Alert.alert(
+      'Wipe Workers & Shifts',
+      'This will delete all workers, shifts, sales, and related data. Boss account will remain. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Wipe',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('[Settings] Wiping workers and shifts...');
+              const userRepo = new UserRepository();
+              const shiftRepo = new ShiftRepository();
+              const auditRepo = new AuditRepository();
+              
+              const workers = await userRepo.findAll();
+              for (const worker of workers) {
+                if (worker.role === 'worker') {
+                  await userRepo.update(worker.id, { is_active: 0 });
+                  await auditRepo.log({
+                    user_id: user?.id,
+                    entity_type: 'user',
+                    entity_id: worker.id,
+                    action: 'delete',
+                    old_data: JSON.stringify(worker),
+                  });
+                }
+              }
+              
+              const shifts = await shiftRepo.getShifts();
+              for (const shift of shifts) {
+                await shiftRepo.deleteShift(shift.id);
+              }
+              
+              await auditRepo.log({
+                user_id: user?.id,
+                entity_type: 'system',
+                entity_id: 'wipe_workers_shifts',
+                action: 'wipe_workers_shifts',
+              });
+              
+              Alert.alert('Success', 'All workers and shifts have been removed.');
+            } catch (error) {
+              console.error('[Settings] Wipe failed:', error);
+              Alert.alert('Error', 'Failed to wipe data.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
@@ -194,6 +247,13 @@ export default function SettingsScreen() {
               <Text style={[styles.label, { color: theme.text }]}>Backup Data</Text>
             </View>
             <Text style={[styles.value, { color: theme.textSecondary }]}>Coming Soon</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.listItem} onPress={handleWipeWorkersAndShifts}>
+            <View style={styles.listItemLeft}>
+              <Trash2 size={20} color={theme.warning || '#F59E0B'} />
+              <Text style={[styles.label, { color: theme.warning || '#F59E0B' }]}>Wipe Workers & Shifts</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.listItem} onPress={handleResetDatabase}>
             <View style={styles.listItemLeft}>

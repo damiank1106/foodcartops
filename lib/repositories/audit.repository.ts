@@ -51,8 +51,52 @@ export class AuditRepository extends BaseRepository {
   async getRecentLogs(limit: number = 100): Promise<AuditLog[]> {
     const db = await this.getDb();
     return await db.getAllAsync<AuditLog>(
-      'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?',
+      'SELECT * FROM audit_logs WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ?',
       [limit]
     );
+  }
+
+  async softDeleteLog(logId: string, deletedByUserId: string): Promise<void> {
+    const db = await this.getDb();
+    const now = this.now();
+
+    await db.runAsync(
+      'UPDATE audit_logs SET deleted_at = ? WHERE id = ?',
+      [now, logId]
+    );
+
+    await this.log({
+      user_id: deletedByUserId,
+      entity_type: 'audit_log',
+      entity_id: logId,
+      action: 'hide',
+      new_data: JSON.stringify({ deleted_at: now }),
+    });
+
+    console.log('[AuditRepo] Soft-deleted log:', logId);
+  }
+
+  async clearAllLogs(deletedByUserId: string): Promise<void> {
+    const db = await this.getDb();
+    const now = this.now();
+
+    const activeLogs = await db.getAllAsync<AuditLog>(
+      'SELECT id FROM audit_logs WHERE deleted_at IS NULL'
+    );
+
+    await db.runAsync(
+      'UPDATE audit_logs SET deleted_at = ? WHERE deleted_at IS NULL',
+      [now]
+    );
+
+    await this.log({
+      user_id: deletedByUserId,
+      entity_type: 'audit_log',
+      entity_id: 'all',
+      action: 'clear_all',
+      new_data: JSON.stringify({ count: activeLogs.length, deleted_at: now }),
+    });
+
+    console.log('[AuditRepo] Cleared all logs:', activeLogs.length);
   }
 }

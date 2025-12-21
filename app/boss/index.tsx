@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -14,6 +14,7 @@ export default function BossDashboard() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity' | 'saved'>('overview');
   
   const saleRepo = new SaleRepository();
@@ -98,6 +99,44 @@ export default function BossDashboard() {
     },
     refetchInterval: 30000,
   });
+
+  const handleDeleteActivity = (logId: string) => {
+    Alert.alert(
+      'Remove Activity',
+      'Remove this activity from the list?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return;
+            await auditRepo.softDeleteLog(logId, user.id);
+            queryClient.invalidateQueries({ queryKey: ['boss-activity-feed'] });
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearAllActivity = () => {
+    Alert.alert(
+      'Clear All Activity',
+      'Remove all activity items from the list? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return;
+            await auditRepo.clearAllLogs(user.id);
+            queryClient.invalidateQueries({ queryKey: ['boss-activity-feed'] });
+          },
+        },
+      ]
+    );
+  };
 
   const { data: savedItems } = useQuery({
     queryKey: ['saved-items', user?.id],
@@ -370,18 +409,37 @@ export default function BossDashboard() {
 
           {selectedTab === 'activity' && (
             <>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>Recent Activity</Text>
+              <View style={styles.activityHeader}>
+                <Text style={[styles.pageTitle, { color: theme.text }]}>Recent Activity</Text>
+                {recentActivity && recentActivity.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.clearAllButton, { backgroundColor: theme.error + '20' }]}
+                    onPress={handleClearAllActivity}
+                  >
+                    <Trash2 size={16} color={theme.error} />
+                    <Text style={[styles.clearAllText, { color: theme.error }]}>Clear All</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
               {recentActivity && recentActivity.length > 0 ? (
                 recentActivity.map((log) => (
                   <View key={log.id} style={[styles.activityCard, { backgroundColor: theme.card }]}>
                     <View style={styles.activityHeader}>
-                      <Text style={[styles.activityAction, { color: theme.text }]}>
-                        {log.action.toUpperCase()} {log.entity_type}
-                      </Text>
-                      <Text style={[styles.activityTime, { color: theme.textSecondary }]}>
-                        {format(log.created_at, 'h:mm a')}
-                      </Text>
+                      <View style={styles.activityLeft}>
+                        <Text style={[styles.activityAction, { color: theme.text }]}>
+                          {log.action.toUpperCase()} {log.entity_type}
+                        </Text>
+                        <Text style={[styles.activityTime, { color: theme.textSecondary }]}>
+                          {format(log.created_at, 'h:mm a')}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.deleteActivityButton, { backgroundColor: theme.error + '15' }]}
+                        onPress={() => handleDeleteActivity(log.id)}
+                      >
+                        <Trash2 size={16} color={theme.error} />
+                      </TouchableOpacity>
                     </View>
                     {log.user_id && (
                       <Text style={[styles.activityUser, { color: theme.textSecondary }]}>
@@ -639,6 +697,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  clearAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  clearAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   activityCard: {
     padding: 16,
     borderRadius: 12,
@@ -649,21 +725,26 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  activityHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+  activityLeft: {
+    flex: 1,
   },
   activityAction: {
     fontSize: 14,
     fontWeight: '600',
+    marginBottom: 4,
   },
   activityTime: {
     fontSize: 12,
   },
   activityUser: {
     fontSize: 12,
+  },
+  deleteActivityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyState: {
     alignItems: 'center',

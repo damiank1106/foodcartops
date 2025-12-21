@@ -225,14 +225,27 @@ export default function WorkerExpensesScreen() {
       return;
     }
 
-    const cents = Math.round(parseFloat(amount) * 100);
-    createExpenseMutation.mutate({
-      category,
-      amount_cents: cents,
-      paid_from: paidFrom,
-      notes: notes || undefined,
-      receipt_image_uri: receiptUri || undefined,
-    });
+    Alert.alert(
+      'Submit Expense',
+      'Submit this expense for review?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit',
+          style: 'default',
+          onPress: () => {
+            const cents = Math.round(parseFloat(amount) * 100);
+            createExpenseMutation.mutate({
+              category,
+              amount_cents: cents,
+              paid_from: paidFrom,
+              notes: notes || undefined,
+              receipt_image_uri: receiptUri || undefined,
+            });
+          },
+        },
+      ]
+    );
   };
 
   const getStatusColor = (status: string) => {
