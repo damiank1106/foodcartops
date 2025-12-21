@@ -4,7 +4,6 @@ import * as SecureStore from 'expo-secure-store';
 import createContextHook from '@nkzw/create-context-hook';
 import { User } from '../types';
 import { UserRepository, ShiftRepository } from '../repositories';
-import { UserCartAssignmentRepository } from '../repositories/user-cart-assignment.repository';
 
 const AUTH_KEY = 'foodcartops_auth';
 const CART_KEY = 'foodcartops_selected_cart';
@@ -39,7 +38,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     try {
       const userRepo = new UserRepository();
       const shiftRepo = new ShiftRepository();
-      const assignmentRepo = new UserCartAssignmentRepository();
 
       const authData = await SecureStore.getItemAsync(AUTH_KEY);
       const cartId = await SecureStore.getItemAsync(CART_KEY);
@@ -53,17 +51,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           let selectedCart = cartId;
           let assignedCartIds: string[] = [];
 
-          if (user.role === 'worker' || user.role === 'manager') {
+          if (user.role === 'worker') {
             const activeShift = await shiftRepo.getActiveShift(user.id);
             activeShiftId = activeShift?.id || null;
             if (activeShift && !selectedCart) {
               selectedCart = activeShift.cart_id;
               await SecureStore.setItemAsync(CART_KEY, activeShift.cart_id);
             }
-          }
-
-          if (user.role === 'manager') {
-            assignedCartIds = await assignmentRepo.getAssignedCartIds(user.id);
           }
 
           setState({
@@ -92,7 +86,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     try {
       const userRepo = new UserRepository();
       const shiftRepo = new ShiftRepository();
-      const assignmentRepo = new UserCartAssignmentRepository();
 
       const user = await userRepo.findByPin(pin);
 
@@ -105,13 +98,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       let activeShiftId: string | null = null;
       let assignedCartIds: string[] = [];
 
-      if (user.role === 'worker' || user.role === 'manager') {
+      if (user.role === 'worker') {
         const activeShift = await shiftRepo.getActiveShift(user.id);
         activeShiftId = activeShift?.id || null;
-      }
-
-      if (user.role === 'manager') {
-        assignedCartIds = await assignmentRepo.getAssignedCartIds(user.id);
       }
 
       setState((prev) => ({
@@ -134,7 +123,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     try {
       const shiftRepo = new ShiftRepository();
 
-      if ((state.user?.role === 'worker' || state.user?.role === 'manager') && state.activeShiftId) {
+      if (state.user?.role === 'worker' && state.activeShiftId) {
         await shiftRepo.endShift(state.activeShiftId);
       }
 
@@ -166,8 +155,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   };
 
   const startShift = async (cartId: string, startingCashCents: number = 0) => {
-    if (!state.user || (state.user.role !== 'worker' && state.user.role !== 'manager')) {
-      throw new Error('Only workers and managers can start shifts');
+    if (!state.user || state.user.role !== 'worker') {
+      throw new Error('Only workers can start shifts');
     }
 
     try {
@@ -220,18 +209,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     if (!state.user) return false;
     if (state.user.role === 'boss') return true;
     if (state.user.role === 'worker') return true;
-    if (state.user.role === 'manager') {
-      return state.assignedCartIds.length === 0 || state.assignedCartIds.includes(cartId);
-    }
     return false;
   };
 
   const hasPermission = (permission: 'approve_expenses' | 'create_settlements' | 'view_all_data' | 'manage_users'): boolean => {
     if (!state.user) return false;
     if (state.user.role === 'boss') return true;
-    if (state.user.role === 'manager') {
-      return permission === 'approve_expenses' || permission === 'create_settlements';
-    }
     return false;
   };
 
@@ -248,7 +231,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     isAuthenticated: !!state.user,
     isBoss: state.user?.role === 'boss',
     isWorker: state.user?.role === 'worker',
-    isManager: state.user?.role === 'manager',
-    canDoWorkerTasks: state.user?.role === 'worker' || state.user?.role === 'manager',
+    canDoWorkerTasks: state.user?.role === 'worker',
   };
 });

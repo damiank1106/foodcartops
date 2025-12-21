@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Key, UserX, UserCheck, X } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { UserRepository, CartRepository } from '@/lib/repositories';
+import { UserRepository } from '@/lib/repositories';
 import { UserCartAssignmentRepository } from '@/lib/repositories/user-cart-assignment.repository';
 import { User, UserRole } from '@/lib/types';
 
@@ -36,7 +36,6 @@ export default function UsersScreen() {
   });
 
   const userRepo = new UserRepository();
-  const cartRepo = new CartRepository();
   const assignmentRepo = new UserCartAssignmentRepository();
 
   const { data: users, isLoading } = useQuery({
@@ -44,10 +43,7 @@ export default function UsersScreen() {
     queryFn: () => userRepo.getAllWithCartCounts(),
   });
 
-  const { data: carts } = useQuery({
-    queryKey: ['carts'],
-    queryFn: () => cartRepo.findAll(),
-  });
+
 
   useQuery({
     queryKey: ['user-assignments', selectedUser?.id, modalMode, selectedUser],
@@ -72,11 +68,7 @@ export default function UsersScreen() {
         currentUser.id
       );
 
-      if (data.role === 'manager' && data.assignedCartIds.length > 0) {
-        for (const cartId of data.assignedCartIds) {
-          await assignmentRepo.assign(user.id, cartId, currentUser.id);
-        }
-      }
+
 
       return user;
     },
@@ -107,12 +99,7 @@ export default function UsersScreen() {
         await userRepo.updateRole(data.userId, data.updates.role, currentUser.id);
       }
 
-      await assignmentRepo.clearUserAssignments(data.userId, currentUser.id);
-      if (data.updates.role === 'manager' && data.updates.assignedCartIds.length > 0) {
-        for (const cartId of data.updates.assignedCartIds) {
-          await assignmentRepo.assign(data.userId, cartId, currentUser.id);
-        }
-      }
+
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
@@ -213,18 +200,10 @@ export default function UsersScreen() {
     }
   };
 
-  const toggleCartAssignment = (cartId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      assignedCartIds: prev.assignedCartIds.includes(cartId)
-        ? prev.assignedCartIds.filter((id) => id !== cartId)
-        : [...prev.assignedCartIds, cartId],
-    }));
-  };
+
 
   const getRoleBadgeColor = (role: UserRole) => {
     if (role === 'boss') return theme.error;
-    if (role === 'manager') return theme.primary;
     return theme.success;
   };
 
@@ -264,13 +243,7 @@ export default function UsersScreen() {
                       {user.role.toUpperCase()}
                     </Text>
                   </View>
-                  {user.role === 'manager' && user.assigned_carts_count > 0 && (
-                    <View style={[styles.cartBadge, { backgroundColor: theme.textSecondary + '20' }]}>
-                      <Text style={[styles.cartBadgeText, { color: theme.textSecondary }]}>
-                        {user.assigned_carts_count} cart{user.assigned_carts_count !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  )}
+
                   {user.is_active === 0 && (
                     <View style={[styles.inactiveBadge, { backgroundColor: theme.error + '20' }]}>
                       <Text style={[styles.inactiveBadgeText, { color: theme.error }]}>INACTIVE</Text>
@@ -342,64 +315,8 @@ export default function UsersScreen() {
                     placeholderTextColor={theme.textSecondary}
                   />
 
-                  <Text style={[styles.label, { color: theme.text }]}>Role *</Text>
-                  <View style={styles.roleButtons}>
-                    <TouchableOpacity
-                      style={[
-                        styles.roleButton,
-                        { backgroundColor: theme.background, borderColor: theme.border },
-                        formData.role === 'worker' && { backgroundColor: theme.success + '20', borderColor: theme.success },
-                      ]}
-                      onPress={() => setFormData((prev) => ({ ...prev, role: 'worker' }))}
-                    >
-                      <Text style={[styles.roleButtonText, { color: formData.role === 'worker' ? theme.success : theme.text }]}>
-                        Worker
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.roleButton,
-                        { backgroundColor: theme.background, borderColor: theme.border },
-                        formData.role === 'manager' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
-                      ]}
-                      onPress={() => setFormData((prev) => ({ ...prev, role: 'manager' }))}
-                    >
-                      <Text style={[styles.roleButtonText, { color: formData.role === 'manager' ? theme.primary : theme.text }]}>
-                        Manager
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {formData.role === 'manager' && (
-                    <>
-                      <Text style={[styles.label, { color: theme.text }]}>Assigned Carts</Text>
-                      <View style={styles.cartList}>
-                        {carts?.map((cart) => (
-                          <TouchableOpacity
-                            key={cart.id}
-                            style={[
-                              styles.cartItem,
-                              { backgroundColor: theme.background, borderColor: theme.border },
-                              formData.assignedCartIds.includes(cart.id) && {
-                                backgroundColor: theme.primary + '20',
-                                borderColor: theme.primary,
-                              },
-                            ]}
-                            onPress={() => toggleCartAssignment(cart.id)}
-                          >
-                            <Text
-                              style={[
-                                styles.cartItemText,
-                                { color: formData.assignedCartIds.includes(cart.id) ? theme.primary : theme.text },
-                              ]}
-                            >
-                              {cart.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </>
-                  )}
+                  <Text style={[styles.label, { color: theme.text }]}>Role: Worker</Text>
+                  <Text style={[styles.roleInfo, { color: theme.textSecondary }]}>All users are created as Workers</Text>
                 </>
               )}
 
@@ -653,5 +570,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  roleInfo: {
+    fontSize: 12,
+    marginTop: 4,
   },
 });

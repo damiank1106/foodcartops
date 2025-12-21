@@ -135,7 +135,7 @@ export class SaleRepository extends BaseRepository {
 
       const shift = await shiftRepo.getShiftById(data.shift_id);
       if (shift) {
-        const newExpectedCash = shift.starting_cash_cents + totalCashPayments;
+        const newExpectedCash = (shift.starting_cash_cents || 0) + totalCashPayments;
         await shiftRepo.updateExpectedCash(data.shift_id, newExpectedCash);
       }
     }

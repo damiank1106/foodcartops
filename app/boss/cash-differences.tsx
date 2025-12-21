@@ -10,22 +10,20 @@ import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.re
 
 export default function CashDifferencesScreen() {
   const { theme } = useTheme();
-  const { user, assignedCartIds, isBoss, isManager } = useAuth();
+  const { user, assignedCartIds, isBoss } = useAuth();
   const queryClient = useQueryClient();
   const settlementRepo = new SettlementRepository();
   const savedItemsRepo = new BossSavedItemsRepository();
 
   const { data: cashDifferences, isLoading } = useQuery({
-    queryKey: ['cash-differences', assignedCartIds, isBoss, isManager],
+    queryKey: ['cash-differences', assignedCartIds, isBoss],
     queryFn: () => {
       if (isBoss) {
         return settlementRepo.getCashDifferences();
-      } else if (isManager) {
-        return settlementRepo.getCashDifferences(assignedCartIds);
       }
       return Promise.resolve([]);
     },
-    enabled: !!(isBoss || isManager),
+    enabled: !!isBoss,
   });
 
   const saveMutation = useMutation({
@@ -55,7 +53,7 @@ export default function CashDifferencesScreen() {
     },
   });
 
-  if (!user || (!isBoss && !isManager)) {
+  if (!user || !isBoss) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Text style={[styles.errorText, { color: theme.error }]}>Access Denied</Text>

@@ -10,24 +10,22 @@ import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.re
 
 export default function PendingExpensesScreen() {
   const { theme } = useTheme();
-  const { user, assignedCartIds, isBoss, isManager } = useAuth();
+  const { user, assignedCartIds, isBoss } = useAuth();
   const queryClient = useQueryClient();
   const expenseRepo = new ExpenseRepository();
   const savedItemsRepo = new BossSavedItemsRepository();
 
   const { data: pendingExpenses, isLoading } = useQuery({
-    queryKey: ['pending-expenses', assignedCartIds, isBoss, isManager],
+    queryKey: ['pending-expenses', assignedCartIds, isBoss],
     queryFn: async () => {
       const allExpenses = await expenseRepo.findWithDetails({ status: 'SUBMITTED' });
       
       if (isBoss) {
         return allExpenses;
-      } else if (isManager) {
-        return allExpenses.filter((e) => assignedCartIds.includes(e.cart_id));
       }
       return [];
     },
-    enabled: !!(isBoss || isManager),
+    enabled: !!isBoss,
   });
 
   const approveMutation = useMutation({
@@ -87,7 +85,7 @@ export default function PendingExpensesScreen() {
     },
   });
 
-  if (!user || (!isBoss && !isManager)) {
+  if (!user || !isBoss) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Text style={[styles.errorText, { color: theme.error }]}>Access Denied</Text>

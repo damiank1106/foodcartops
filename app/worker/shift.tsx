@@ -177,7 +177,7 @@ export default function WorkerShiftScreen() {
     const hours = Math.floor(duration / 60);
     const minutes = duration % 60;
     const totals = calculateTotals();
-    const startingCashDollars = activeShift.starting_cash_cents / 100;
+    const startingCashDollars = (activeShift.starting_cash_cents || 0) / 100;
     const expectedCashDollars = startingCashDollars + totals.cash - totals.cashExpenses;
 
     return (

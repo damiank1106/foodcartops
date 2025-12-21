@@ -1,4 +1,4 @@
-export type UserRole = 'boss' | 'worker' | 'manager';
+export type UserRole = 'boss' | 'worker';
 
 export type PaymentMethod = 'CASH' | 'GCASH' | 'CARD' | 'OTHER';
 
@@ -100,7 +100,7 @@ export interface WorkerShift {
   cart_id: string;
   clock_in: number;
   clock_out?: number;
-  starting_cash_cents: number;
+  starting_cash_cents: number | null;
   expected_cash_cents: number;
   notes?: string;
   status: ShiftStatus;
@@ -166,7 +166,7 @@ export interface AppSetting {
 
 export interface Expense {
   id: string;
-  shift_id: string;
+  shift_id: string | null;
   cart_id: string;
   submitted_by_user_id: string;
   approved_by_user_id?: string;

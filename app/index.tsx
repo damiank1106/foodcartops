@@ -25,8 +25,6 @@ export default function LoginScreen() {
     if (!isLoading && user) {
       if (user.role === 'boss') {
         router.replace('/boss' as any);
-      } else if (user.role === 'manager') {
-        router.replace('/manager' as any);
       } else {
         router.replace('/worker' as any);
       }
@@ -153,12 +151,7 @@ export default function LoginScreen() {
           )}
         </View>
 
-        <Text style={[styles.hint, { color: theme.textSecondary }]}>
-          Demo PINs: 0000 (Boss) • 1111, 2222, 3333 (Workers)
-        </Text>
-        <Text style={[styles.hint, { color: theme.textSecondary, marginTop: 8 }]}>
-          Enter 4-8 digit PIN and tap ✓ to login
-        </Text>
+
       </View>
     </KeyboardAvoidingView>
   );

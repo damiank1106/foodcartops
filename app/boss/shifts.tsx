@@ -322,7 +322,7 @@ export default function BossShiftsScreen() {
                     <View style={styles.detailRow}>
                       <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Starting Cash:</Text>
                       <Text style={[styles.detailValue, { color: theme.text }]}>
-                        ₱{(shift.starting_cash_cents / 100).toFixed(2)}
+                        ₱{((shift.starting_cash_cents || 0) / 100).toFixed(2)}
                       </Text>
                     </View>
                   </View>

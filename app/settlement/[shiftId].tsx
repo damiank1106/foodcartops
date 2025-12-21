@@ -24,7 +24,7 @@ import { SettlementService } from '@/lib/services/settlement.service';
 
 export default function SettlementEditorScreen() {
   const { theme } = useTheme();
-  const { user, assignedCartIds, isBoss, isManager } = useAuth();
+  const { user, isBoss } = useAuth();
   const { shiftId } = useLocalSearchParams<{ shiftId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -41,16 +41,12 @@ export default function SettlementEditorScreen() {
   const ledgerRepo = new LedgerRepository();
 
   const { data: shiftData, isLoading } = useQuery({
-    queryKey: ['shift-settlement-data', shiftId, isManager],
+    queryKey: ['shift-settlement-data', shiftId],
     queryFn: async () => {
       if (!shiftId) return null;
 
       const shift = await shiftRepo.getShiftById(shiftId);
       if (!shift) throw new Error('Shift not found');
-
-      if (isManager && !assignedCartIds.includes(shift.cart_id)) {
-        throw new Error('Access denied: shift not in assigned carts');
-      }
 
       const existingSettlement = await settlementRepo.findByShiftId(shiftId);
 
@@ -111,7 +107,7 @@ export default function SettlementEditorScreen() {
         paymentsByMethod,
       };
     },
-    enabled: !!shiftId && !!(isBoss || isManager),
+    enabled: !!shiftId && !!isBoss,
   });
 
   const saveDraftMutation = useMutation({
@@ -259,7 +255,7 @@ export default function SettlementEditorScreen() {
     );
   };
 
-  if (!user || (!isBoss && !isManager)) {
+  if (!user || !isBoss) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Stack.Screen options={{ title: 'Access Denied' }} />
