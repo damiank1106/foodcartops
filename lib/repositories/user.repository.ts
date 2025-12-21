@@ -142,4 +142,96 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Changed PIN for user:', id);
     return true;
   }
+
+  async resetPin(id: string, newPin: string, resetByUserId: string): Promise<void> {
+    const oldUser = await this.findById(id);
+    
+    const newPinHash = await hashPin(newPin);
+    await this.update(id, { pin: newPinHash });
+
+    await this.auditLog(resetByUserId, 'users', id, 'reset_pin', oldUser, {
+      ...oldUser,
+      pin: newPinHash,
+    });
+
+    console.log('[UserRepo] Reset PIN for user:', id);
+  }
+
+  async updateRole(id: string, newRole: UserRole, updatedByUserId: string): Promise<void> {
+    const oldUser = await this.findById(id);
+    
+    await this.update(id, { role: newRole });
+
+    await this.auditLog(updatedByUserId, 'users', id, 'assign_role', oldUser, {
+      ...oldUser,
+      role: newRole,
+    });
+
+    console.log('[UserRepo] Updated role for user:', id, 'to', newRole);
+  }
+
+  async createWithAudit(data: {
+    name: string;
+    role: UserRole;
+    pin?: string;
+    password_hash?: string;
+    email?: string;
+  }, createdByUserId: string): Promise<User> {
+    const user = await this.create(data);
+
+    await this.auditLog(createdByUserId, 'users', user.id, 'create', null, user);
+
+    console.log('[UserRepo] Created user with audit:', user.id);
+    return user;
+  }
+
+  async updateWithAudit(id: string, data: Partial<Omit<User, 'id' | 'created_at'>>, updatedByUserId: string): Promise<void> {
+    const oldUser = await this.findById(id);
+    
+    await this.update(id, data);
+
+    const newUser = await this.findById(id);
+
+    await this.auditLog(updatedByUserId, 'users', id, 'update', oldUser, newUser);
+
+    console.log('[UserRepo] Updated user with audit:', id);
+  }
+
+  async deactivateWithAudit(id: string, deactivatedByUserId: string): Promise<void> {
+    const oldUser = await this.findById(id);
+    
+    await this.deactivate(id);
+
+    const newUser = await this.findById(id);
+
+    await this.auditLog(deactivatedByUserId, 'users', id, 'deactivate', oldUser, newUser);
+
+    console.log('[UserRepo] Deactivated user with audit:', id);
+  }
+
+  async activateWithAudit(id: string, activatedByUserId: string): Promise<void> {
+    const oldUser = await this.findById(id);
+    
+    await this.update(id, { is_active: 1 });
+
+    const newUser = await this.findById(id);
+
+    await this.auditLog(activatedByUserId, 'users', id, 'activate', oldUser, newUser);
+
+    console.log('[UserRepo] Activated user with audit:', id);
+  }
+
+  async getAllWithCartCounts(): Promise<(User & { assigned_carts_count: number })[]> {
+    const db = await this.getDb();
+    const results = await db.getAllAsync<User & { assigned_carts_count: number }>(
+     
+      `SELECT u.*, 
+        COALESCE(COUNT(DISTINCT uca.cart_id), 0) as assigned_carts_count
+       FROM users u
+       LEFT JOIN user_cart_assignments uca ON u.id = uca.user_id
+       GROUP BY u.id
+       ORDER BY u.name ASC`
+    );
+    return results;
+  }
 }

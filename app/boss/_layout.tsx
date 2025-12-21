@@ -69,9 +69,9 @@ export default function BossLayout() {
         }}
       />
       <Tabs.Screen
-        name="workers"
+        name="users"
         options={{
-          title: 'Workers',
+          title: 'Users',
           tabBarIcon: ({ color }) => <Users size={24} color={color} />,
         }}
       />
@@ -80,6 +80,30 @@ export default function BossLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="unsettled-shifts"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="cash-differences"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="pending-expenses"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="workers"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen

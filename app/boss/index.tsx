@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { SaleRepository, ShiftRepository, CartRepository, ExpenseRepository, AuditRepository } from '@/lib/repositories';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
@@ -9,6 +10,7 @@ import { startOfDay, endOfDay, format } from 'date-fns';
 
 export default function BossDashboard() {
   const { theme } = useTheme();
+  const router = useRouter();
   const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity'>('overview');
   
   const saleRepo = new SaleRepository();
@@ -228,7 +230,10 @@ export default function BossDashboard() {
               <Text style={[styles.pageTitle, { color: theme.text }]}>Exceptions & Alerts</Text>
 
               {stats && stats.unsettled_shifts_count > 0 && (
-                <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
+                <TouchableOpacity
+                  style={[styles.exceptionCard, { backgroundColor: theme.card }]}
+                  onPress={() => router.push('/boss/unsettled-shifts' as any)}
+                >
                   <View style={styles.exceptionHeader}>
                     <View style={[styles.exceptionIcon, { backgroundColor: theme.warning + '20' }]}>
                       <Clock size={20} color={theme.warning} />
@@ -252,11 +257,14 @@ export default function BossDashboard() {
                       </Text>
                     </View>
                   ))}
-                </View>
+                </TouchableOpacity>
               )}
 
               {stats && stats.cash_differences.length > 0 && (
-                <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
+                <TouchableOpacity
+                  style={[styles.exceptionCard, { backgroundColor: theme.card }]}
+                  onPress={() => router.push('/boss/cash-differences' as any)}
+                >
                   <View style={styles.exceptionHeader}>
                     <View style={[styles.exceptionIcon, { backgroundColor: theme.error + '20' }]}>
                       <AlertTriangle size={20} color={theme.error} />
@@ -280,11 +288,14 @@ export default function BossDashboard() {
                       </Text>
                     </View>
                   ))}
-                </View>
+                </TouchableOpacity>
               )}
 
               {stats && stats.pending_expenses_count > 0 && (
-                <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
+                <TouchableOpacity
+                  style={[styles.exceptionCard, { backgroundColor: theme.card }]}
+                  onPress={() => router.push('/boss/pending-expenses' as any)}
+                >
                   <View style={styles.exceptionHeader}>
                     <View style={[styles.exceptionIcon, { backgroundColor: theme.primary + '20' }]}>
                       <ShoppingBag size={20} color={theme.primary} />
@@ -298,7 +309,7 @@ export default function BossDashboard() {
                       </Text>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               )}
 
               {stats && stats.voided_sales_count > 0 && (
