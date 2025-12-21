@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const MIGRATIONS = [
   {
@@ -118,6 +118,19 @@ export const MIGRATIONS = [
       DROP TABLE IF EXISTS products;
       DROP TABLE IF EXISTS carts;
       DROP TABLE IF EXISTS users;
+    `,
+  },
+  {
+    version: 2,
+    up: `
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `,
+    down: `
+      DROP TABLE IF EXISTS app_settings;
     `,
   },
 ];

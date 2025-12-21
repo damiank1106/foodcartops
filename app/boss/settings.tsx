@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 
@@ -55,6 +55,19 @@ export default function SettingsScreen() {
             <Text style={[styles.value, { color: theme.textSecondary }]}>
               {isDark ? 'On' : 'Off'}
             </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Developer</Text>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => router.push('/boss/debug' as any)}
+          >
+            <View style={styles.listItemLeft}>
+              <Database size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Database Debug</Text>
+            </View>
           </TouchableOpacity>
         </View>
 

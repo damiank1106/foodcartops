@@ -50,6 +50,12 @@ export default function BossLayout() {
           tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="debug"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

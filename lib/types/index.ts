@@ -109,3 +109,9 @@ export interface DashboardStats {
   revenue_by_cart: { cart_name: string; revenue: number }[];
   revenue_by_payment: { payment_method: PaymentMethod; revenue: number }[];
 }
+
+export interface AppSetting {
+  key: string;
+  value_json: string;
+  updated_at: number;
+}
