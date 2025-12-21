@@ -94,6 +94,14 @@ export async function resetDatabase(): Promise<void> {
   isInitializing = false;
   initPromise = null;
 
-  await SQLiteModule.deleteDatabaseAsync(DB_NAME);
-  console.log('[DB] Database reset');
+  try {
+    await SQLiteModule.deleteDatabaseAsync(DB_NAME);
+    console.log('[DB] Database reset');
+  } catch (error: any) {
+    if (error?.message?.includes('not found')) {
+      console.log('[DB] Database does not exist, skipping delete');
+    } else {
+      throw error;
+    }
+  }
 }
