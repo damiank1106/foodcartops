@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const MIGRATIONS = [
   {
@@ -284,6 +284,111 @@ export const MIGRATIONS = [
     `,
     down: `
       DROP TABLE IF EXISTS expenses;
+    `,
+  },
+  {
+    version: 6,
+    up: `
+      ALTER TABLE users ADD COLUMN role_new TEXT;
+      UPDATE users SET role_new = role;
+      
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('boss', 'worker', 'manager')),
+        pin TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1
+      );
+
+      INSERT INTO users_new SELECT id, name, role_new, pin, password_hash, email, created_at, updated_at, is_active FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      CREATE TABLE IF NOT EXISTS user_cart_assignments (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        cart_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        UNIQUE(user_id, cart_id)
+      );
+
+      CREATE INDEX idx_user_cart_assignments_user_id ON user_cart_assignments(user_id);
+      CREATE INDEX idx_user_cart_assignments_cart_id ON user_cart_assignments(cart_id);
+
+      CREATE TABLE IF NOT EXISTS settlements (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT NOT NULL,
+        cart_id TEXT NOT NULL,
+        worker_user_id TEXT NOT NULL,
+        created_by_user_id TEXT NOT NULL,
+        finalized_by_user_id TEXT,
+        computed_json TEXT,
+        cash_expected_cents INTEGER NOT NULL DEFAULT 0,
+        cash_counted_cents INTEGER NOT NULL DEFAULT 0,
+        cash_difference_cents INTEGER NOT NULL DEFAULT 0,
+        net_due_to_worker_cents INTEGER NOT NULL DEFAULT 0,
+        net_due_to_boss_cents INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT', 'FINALIZED')),
+        notes TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        finalized_at INTEGER,
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        FOREIGN KEY (worker_user_id) REFERENCES users(id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id),
+        FOREIGN KEY (finalized_by_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_settlements_shift_id ON settlements(shift_id);
+      CREATE INDEX idx_settlements_status ON settlements(status);
+      CREATE INDEX idx_settlements_cart_id ON settlements(cart_id);
+      CREATE INDEX idx_settlements_worker_id ON settlements(worker_user_id);
+
+      CREATE TABLE IF NOT EXISTS payroll_rules (
+        id TEXT PRIMARY KEY,
+        worker_user_id TEXT NOT NULL,
+        base_daily_cents INTEGER NOT NULL DEFAULT 0,
+        commission_type TEXT NOT NULL DEFAULT 'NONE' CHECK(commission_type IN ('NONE', 'PERCENT_OF_SALES', 'PERCENT_OF_PROFIT')),
+        commission_rate_bps INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (worker_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_payroll_rules_worker_id ON payroll_rules(worker_user_id);
+      CREATE INDEX idx_payroll_rules_is_active ON payroll_rules(is_active);
+
+      CREATE TABLE IF NOT EXISTS worker_ledger (
+        id TEXT PRIMARY KEY,
+        worker_user_id TEXT NOT NULL,
+        shift_id TEXT,
+        type TEXT NOT NULL CHECK(type IN ('WAGE', 'COMMISSION', 'ADVANCE', 'DEDUCTION', 'BONUS', 'ADJUSTMENT')),
+        amount_cents INTEGER NOT NULL,
+        notes TEXT,
+        created_by_user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (worker_user_id) REFERENCES users(id),
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_worker_ledger_worker_id ON worker_ledger(worker_user_id);
+      CREATE INDEX idx_worker_ledger_shift_id ON worker_ledger(shift_id);
+      CREATE INDEX idx_worker_ledger_type ON worker_ledger(type);
+    `,
+    down: `
+      DROP TABLE IF EXISTS worker_ledger;
+      DROP TABLE IF EXISTS payroll_rules;
+      DROP TABLE IF EXISTS settlements;
+      DROP TABLE IF EXISTS user_cart_assignments;
     `,
   },
 ];

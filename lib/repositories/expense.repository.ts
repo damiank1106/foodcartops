@@ -171,6 +171,44 @@ export class ExpenseRepository extends BaseRepository {
     return rows;
   }
 
+  async approve(id: string, approvedByUserId: string, notes?: string): Promise<void> {
+    const db = await getDatabase();
+    const now = Date.now();
+
+    const old = await this.findById(id);
+
+    await db.runAsync(
+      `UPDATE expenses 
+       SET status = 'APPROVED', approved_by_user_id = ?, reviewed_at = ?, updated_at = ?
+       WHERE id = ?`,
+      [approvedByUserId, now, now, id]
+    );
+
+    await this.auditLog(approvedByUserId, 'expenses', id, 'approve', old, {
+      status: 'APPROVED',
+      notes,
+    });
+  }
+
+  async reject(id: string, rejectedByUserId: string, notes?: string): Promise<void> {
+    const db = await getDatabase();
+    const now = Date.now();
+
+    const old = await this.findById(id);
+
+    await db.runAsync(
+      `UPDATE expenses 
+       SET status = 'REJECTED', approved_by_user_id = ?, reviewed_at = ?, updated_at = ?
+       WHERE id = ?`,
+      [rejectedByUserId, now, now, id]
+    );
+
+    await this.auditLog(rejectedByUserId, 'expenses', id, 'reject', old, {
+      status: 'REJECTED',
+      notes,
+    });
+  }
+
   async delete(id: string): Promise<void> {
     const db = await getDatabase();
     await db.runAsync('DELETE FROM expenses WHERE id = ?', [id]);

@@ -25,6 +25,8 @@ export default function LoginScreen() {
     if (!isLoading && user) {
       if (user.role === 'boss') {
         router.replace('/boss' as any);
+      } else if (user.role === 'manager') {
+        router.replace('/manager' as any);
       } else {
         router.replace('/worker' as any);
       }

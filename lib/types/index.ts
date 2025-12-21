@@ -1,4 +1,4 @@
-export type UserRole = 'boss' | 'worker';
+export type UserRole = 'boss' | 'worker' | 'manager';
 
 export type PaymentMethod = 'CASH' | 'GCASH' | 'CARD' | 'OTHER';
 
@@ -9,6 +9,12 @@ export type SyncStatus = 'pending' | 'syncing' | 'failed' | 'synced';
 export type ExpenseStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED';
 
 export type PaidFrom = 'CASH_DRAWER' | 'PERSONAL' | 'COMPANY';
+
+export type SettlementStatus = 'DRAFT' | 'FINALIZED';
+
+export type CommissionType = 'NONE' | 'PERCENT_OF_SALES' | 'PERCENT_OF_PROFIT';
+
+export type LedgerEntryType = 'WAGE' | 'COMMISSION' | 'ADVANCE' | 'DEDUCTION' | 'BONUS' | 'ADJUSTMENT';
 
 export interface User {
   id: string;
@@ -173,4 +179,103 @@ export interface ExpenseWithDetails extends Expense {
   submitted_by_name: string;
   approved_by_name?: string;
   cart_name: string;
+}
+
+export interface UserCartAssignment {
+  id: string;
+  user_id: string;
+  cart_id: string;
+  created_at: number;
+}
+
+export interface Settlement {
+  id: string;
+  shift_id: string;
+  cart_id: string;
+  worker_user_id: string;
+  created_by_user_id: string;
+  finalized_by_user_id?: string;
+  computed_json?: string;
+  cash_expected_cents: number;
+  cash_counted_cents: number;
+  cash_difference_cents: number;
+  net_due_to_worker_cents: number;
+  net_due_to_boss_cents: number;
+  status: SettlementStatus;
+  notes?: string;
+  created_at: number;
+  updated_at: number;
+  finalized_at?: number;
+}
+
+export interface SettlementWithDetails extends Settlement {
+  worker_name: string;
+  cart_name: string;
+  created_by_name: string;
+  finalized_by_name?: string;
+}
+
+export interface PayrollRule {
+  id: string;
+  worker_user_id: string;
+  base_daily_cents: number;
+  commission_type: CommissionType;
+  commission_rate_bps: number;
+  is_active: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface WorkerLedgerEntry {
+  id: string;
+  worker_user_id: string;
+  shift_id?: string;
+  type: LedgerEntryType;
+  amount_cents: number;
+  notes?: string;
+  created_by_user_id: string;
+  created_at: number;
+}
+
+export interface WorkerLedgerEntryWithDetails extends WorkerLedgerEntry {
+  worker_name: string;
+  created_by_name: string;
+}
+
+export interface SettlementComputation {
+  total_sales_cents: number;
+  cash_sales_cents: number;
+  non_cash_sales_cents: number;
+  approved_expenses_cash_drawer_cents: number;
+  starting_cash_cents: number;
+  cash_expected_cents: number;
+  base_wage_cents: number;
+  commission_cents: number;
+  advances_cents: number;
+  deductions_cents: number;
+  bonuses_cents: number;
+  net_due_to_worker_cents: number;
+  net_due_to_boss_cents: number;
+}
+
+export interface MonitoringStats {
+  today_sales_cents: number;
+  today_expenses_cents: number;
+  estimated_profit_cents: number;
+  unsettled_shifts_count: number;
+  cash_differences_sum_cents: number;
+  pending_expenses_count: number;
+  voided_sales_count: number;
+}
+
+export interface MonitoringException {
+  id: string;
+  type: 'UNSETTLED_SHIFT' | 'CASH_DIFFERENCE' | 'PENDING_EXPENSE' | 'VOIDED_SALE';
+  shift_id?: string;
+  settlement_id?: string;
+  expense_id?: string;
+  sale_id?: string;
+  description: string;
+  amount_cents?: number;
+  created_at: number;
 }
