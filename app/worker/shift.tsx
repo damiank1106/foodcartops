@@ -92,18 +92,18 @@ export default function WorkerShiftScreen() {
   };
 
   const handleStartShift = async () => {
-    if (startingCash === '' || isNaN(parseFloat(startingCash))) {
+    if (startingCash !== '' && isNaN(parseFloat(startingCash))) {
       Alert.alert('Error', 'Please enter a valid starting cash amount');
       return;
     }
 
-    if (parseFloat(startingCash) < 0) {
+    if (startingCash !== '' && parseFloat(startingCash) < 0) {
       Alert.alert('Error', 'Starting cash cannot be negative');
       return;
     }
 
     try {
-      const cents = Math.round(parseFloat(startingCash) * 100);
+      const cents = startingCash === '' ? 0 : Math.round(parseFloat(startingCash) * 100);
       await startShift(selectedCart, cents);
       setShowStartModal(false);
       queryClient.invalidateQueries({ queryKey: ['active-shift'] });
@@ -355,7 +355,7 @@ export default function WorkerShiftScreen() {
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Start Shift</Text>
             <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
-              Enter the starting cash amount in the drawer
+              Enter the starting cash amount (optional, defaults to 0)
             </Text>
 
             <View style={[styles.inputContainer, { backgroundColor: theme.background }]}>
