@@ -158,8 +158,13 @@ export default function WorkersScreen() {
       return;
     }
 
-    if (workerPin && workerPin.length < 4) {
-      Alert.alert('Error', 'PIN must be at least 4 digits');
+    if (workerPin && (workerPin.length < 4 || workerPin.length > 8)) {
+      Alert.alert('Error', 'PIN must be between 4 and 8 digits');
+      return;
+    }
+
+    if (workerPin && !/^\d+$/.test(workerPin)) {
+      Alert.alert('Error', 'PIN must contain only numbers');
       return;
     }
 
@@ -285,17 +290,17 @@ export default function WorkersScreen() {
               />
 
               <Text style={[styles.label, { color: theme.text }]}>
-                {editingWorker ? 'New PIN (leave blank to keep current)' : 'PIN'}
+                {editingWorker ? 'New PIN (leave blank to keep current)' : 'PIN (4-8 digits)'}
               </Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
                 value={workerPin}
                 onChangeText={setWorkerPin}
-                placeholder={editingWorker ? 'Enter new PIN' : 'Enter 4-digit PIN'}
+                placeholder={editingWorker ? 'Enter new PIN (4-8 digits)' : 'Enter 4-8 digit PIN'}
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
                 secureTextEntry
-                maxLength={6}
+                maxLength={8}
               />
             </ScrollView>
 

@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogIn } from 'lucide-react-native';
+import { LogIn, Check } from 'lucide-react-native';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { useTheme } from '@/lib/contexts/theme.context';
 
@@ -32,14 +32,9 @@ export default function LoginScreen() {
   }, [isLoading, user, router]);
 
   const addDigit = (digit: string) => {
-    if (pin.length < 4) {
+    if (pin.length < 8) {
       const newPin = pin + digit;
       setPin(newPin);
-      if (newPin.length === 4) {
-        setTimeout(() => {
-          handleLoginWithPin(newPin);
-        }, 100);
-      }
     }
   };
 
@@ -113,17 +108,19 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.pinContainer}>
-          <View style={styles.pinDots}>
-            {[0, 1, 2, 3].map((index) => (
-              <View
-                key={index}
-                style={[
-                  styles.pinDot,
-                  { borderColor: theme.border },
-                  index < pin.length && { backgroundColor: theme.primary },
-                ]}
-              />
-            ))}
+          <View style={styles.pinDisplay}>
+            <Text style={[styles.pinText, { color: theme.text }]}>
+              {pin ? '•'.repeat(pin.length) : 'Enter PIN (4-8 digits)'}
+            </Text>
+            {pin.length >= 4 && (
+              <TouchableOpacity
+                style={[styles.confirmButton, { backgroundColor: theme.primary }]}
+                onPress={() => handleLoginWithPin(pin)}
+                disabled={loading}
+              >
+                <Check size={20} color="#FFF" />
+              </TouchableOpacity>
+            )}
           </View>
 
           {error ? <Text style={[styles.error, { color: theme.error }]}>{error}</Text> : null}
@@ -157,6 +154,9 @@ export default function LoginScreen() {
         <Text style={[styles.hint, { color: theme.textSecondary }]}>
           Demo PINs: 0000 (Boss) • 1111, 2222, 3333 (Workers)
         </Text>
+        <Text style={[styles.hint, { color: theme.textSecondary, marginTop: 8 }]}>
+          Enter 4-8 digit PIN and tap ✓ to login
+        </Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -188,16 +188,31 @@ const styles = StyleSheet.create({
   pinContainer: {
     alignItems: 'center',
     marginBottom: 48,
+    width: '100%',
   },
-  pinDots: {
+  pinDisplay: {
     flexDirection: 'row',
-    gap: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    gap: 12,
   },
-  pinDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
+  pinText: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    letterSpacing: 4,
+  },
+  confirmButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   error: {
     marginTop: 16,

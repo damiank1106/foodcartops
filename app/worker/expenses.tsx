@@ -309,7 +309,7 @@ export default function WorkerExpensesScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScroll}>
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
               <Text style={[styles.label, { color: theme.text }]}>Category</Text>
               <View style={styles.categoryGrid}>
                 {EXPENSE_CATEGORIES.map((cat) => (
@@ -616,6 +616,9 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     padding: 20,
+  },
+  modalScrollContent: {
+    paddingBottom: 20,
   },
   label: {
     fontSize: 14,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, User as UserIcon, Key, ChevronRight, X } from 'lucide-react-native';
+import { LogOut, Moon, Sun, User as UserIcon, Key, ChevronRight, X, Info, ExternalLink } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 
@@ -14,6 +14,7 @@ export default function WorkerProfileScreen() {
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [isChanging, setIsChanging] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -44,12 +45,12 @@ export default function WorkerProfileScreen() {
       return;
     }
 
-    if (newPin.length !== 4) {
-      Alert.alert('Error', 'PIN must be 4 digits');
+    if (newPin.length < 4 || newPin.length > 8) {
+      Alert.alert('Error', 'PIN must be between 4 and 8 digits');
       return;
     }
 
-    if (!/^\d{4}$/.test(newPin)) {
+    if (!/^\d+$/.test(newPin)) {
       Alert.alert('Error', 'PIN must contain only numbers');
       return;
     }
@@ -108,6 +109,24 @@ export default function WorkerProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Information</Text>
+          <TouchableOpacity style={styles.listItem} onPress={() => setShowInfoModal(true)}>
+            <View style={styles.listItemLeft}>
+              <Info size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>How to Use App</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.listItem} onPress={() => Alert.alert('Privacy Policy', 'Privacy policy link will be added soon')}>
+            <View style={styles.listItemLeft}>
+              <ExternalLink size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Privacy Policy</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
           style={[styles.logoutButton, { backgroundColor: theme.error }]}
           onPress={handleLogout}
@@ -141,19 +160,19 @@ export default function WorkerProfileScreen() {
                 placeholder="Enter current PIN"
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={8}
                 secureTextEntry
               />
 
-              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New PIN</Text>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New PIN (4-8 digits)</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
                 value={newPin}
                 onChangeText={setNewPin}
-                placeholder="Enter new 4-digit PIN"
+                placeholder="Enter new PIN (4-8 digits)"
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={8}
                 secureTextEntry
               />
 
@@ -165,7 +184,7 @@ export default function WorkerProfileScreen() {
                 placeholder="Re-enter new PIN"
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={8}
                 secureTextEntry
               />
 
@@ -179,6 +198,87 @@ export default function WorkerProfileScreen() {
                 ) : (
                   <Text style={styles.modalButtonText}>Change PIN</Text>
                 )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showInfoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>How to Use App</Text>
+              <TouchableOpacity onPress={() => setShowInfoModal(false)}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.instructionSection}>
+                <Text style={[styles.instructionTitle, { color: theme.text }]}>Starting Your Shift</Text>
+                <Text style={[styles.instructionText, { color: theme.textSecondary }]}>
+                  1. Go to &ldquo;My Shift&rdquo; tab{`\n`}
+                  2. Tap &ldquo;Select a Cart to begin&rdquo;{`\n`}
+                  3. Choose your assigned cart{`\n`}
+                  4. Enter the amount of money in the drawer{`\n`}
+                  5. Tap &ldquo;Start Shift&rdquo;
+                </Text>
+              </View>
+
+              <View style={styles.instructionSection}>
+                <Text style={[styles.instructionTitle, { color: theme.text }]}>Recording Sales</Text>
+                <Text style={[styles.instructionText, { color: theme.textSecondary }]}>
+                  1. Go to &ldquo;New Sale&rdquo; tab{`\n`}
+                  2. Tap on products to add them to cart{`\n`}
+                  3. Adjust quantities using + and - buttons{`\n`}
+                  4. Select payment method (Cash, GCash, Card){`\n`}
+                  5. Tap &ldquo;Complete Sale&rdquo; to finish
+                </Text>
+              </View>
+
+              <View style={styles.instructionSection}>
+                <Text style={[styles.instructionTitle, { color: theme.text }]}>Adding Expenses</Text>
+                <Text style={[styles.instructionText, { color: theme.textSecondary }]}>
+                  1. Go to &ldquo;Expenses&rdquo; tab{`\n`}
+                  2. Tap &ldquo;Add Expense&rdquo;{`\n`}
+                  3. Select category and enter amount{`\n`}
+                  4. Choose where payment came from{`\n`}
+                  5. Optionally take a photo of receipt{`\n`}
+                  6. Tap &ldquo;Submit&rdquo; for approval
+                </Text>
+              </View>
+
+              <View style={styles.instructionSection}>
+                <Text style={[styles.instructionTitle, { color: theme.text }]}>Ending Your Shift</Text>
+                <Text style={[styles.instructionText, { color: theme.textSecondary }]}>
+                  1. Go to &ldquo;My Shift&rdquo; tab{`\n`}
+                  2. Review your shift summary{`\n`}
+                  3. Count cash in drawer{`\n`}
+                  4. Enter actual ending cash amount{`\n`}
+                  5. Tap &ldquo;End Shift&rdquo; to complete
+                </Text>
+              </View>
+
+              <View style={styles.instructionSection}>
+                <Text style={[styles.instructionTitle, { color: theme.text }]}>Logout</Text>
+                <Text style={[styles.instructionText, { color: theme.textSecondary }]}>
+                  Go to &ldquo;Profile&rdquo; tab and tap the &ldquo;Logout&rdquo; button when you&apos;re done.
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.infoModalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={() => setShowInfoModal(false)}
+              >
+                <Text style={styles.modalButtonText}>Got It</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -320,5 +420,22 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  instructionSection: {
+    marginBottom: 24,
+  },
+  instructionTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginBottom: 8,
+  },
+  instructionText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  infoModalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
 });

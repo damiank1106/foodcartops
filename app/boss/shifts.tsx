@@ -28,6 +28,8 @@ export default function BossShiftsScreen() {
   const [selectedCartId, setSelectedCartId] = useState<string>('');
   const [startingCash, setStartingCash] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [newCartName, setNewCartName] = useState<string>('');
+  const [showNewCartInput, setShowNewCartInput] = useState<boolean>(false);
 
   const shiftRepo = new ShiftRepository();
   const userRepo = new UserRepository();
@@ -160,16 +162,32 @@ export default function BossShiftsScreen() {
     setSelectedCartId('');
     setStartingCash('');
     setNotes('');
+    setNewCartName('');
+    setShowNewCartInput(false);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedWorkerId) {
       Alert.alert('Error', 'Please select a worker');
       return;
     }
 
-    if (!selectedCartId) {
-      Alert.alert('Error', 'Please select a cart');
+    let cartId = selectedCartId;
+
+    if (showNewCartInput && newCartName.trim()) {
+      try {
+        const newCart = await cartRepo.create({ name: newCartName.trim() });
+        cartId = newCart.id;
+        queryClient.invalidateQueries({ queryKey: ['carts'] });
+        queryClient.invalidateQueries({ queryKey: ['cart-map'] });
+      } catch {
+        Alert.alert('Error', 'Failed to create new cart');
+        return;
+      }
+    }
+
+    if (!cartId) {
+      Alert.alert('Error', 'Please select a cart or create a new one');
       return;
     }
 
@@ -182,7 +200,7 @@ export default function BossShiftsScreen() {
 
     createShiftMutation.mutate({
       worker_id: selectedWorkerId,
-      cart_id: selectedCartId,
+      cart_id: cartId,
       starting_cash_cents: cents,
       notes: notes || undefined,
     });
@@ -392,25 +410,66 @@ export default function BossShiftsScreen() {
                     style={[
                       styles.selectOption,
                       { backgroundColor: theme.background },
-                      selectedCartId === cart.id && {
+                      selectedCartId === cart.id && !showNewCartInput && {
                         backgroundColor: theme.primary + '20',
                         borderColor: theme.primary,
                       },
                     ]}
-                    onPress={() => setSelectedCartId(cart.id)}
+                    onPress={() => {
+                      setSelectedCartId(cart.id);
+                      setShowNewCartInput(false);
+                      setNewCartName('');
+                    }}
                   >
                     <Text
                       style={[
                         styles.selectOptionText,
                         { color: theme.text },
-                        selectedCartId === cart.id && { color: theme.primary, fontWeight: '600' as const },
+                        selectedCartId === cart.id && !showNewCartInput && { color: theme.primary, fontWeight: '600' as const },
                       ]}
                     >
                       {cart.name}
                     </Text>
                   </TouchableOpacity>
                 ))}
+                <TouchableOpacity
+                  style={[
+                    styles.selectOption,
+                    { backgroundColor: theme.background },
+                    showNewCartInput && {
+                      backgroundColor: theme.primary + '20',
+                      borderColor: theme.primary,
+                    },
+                  ]}
+                  onPress={() => {
+                    setShowNewCartInput(true);
+                    setSelectedCartId('');
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.selectOptionText,
+                      { color: theme.text },
+                      showNewCartInput && { color: theme.primary, fontWeight: '600' as const },
+                    ]}
+                  >
+                    + New Cart
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              {showNewCartInput && (
+                <>
+                  <Text style={[styles.label, { color: theme.text }]}>New Cart Name</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
+                    value={newCartName}
+                    onChangeText={setNewCartName}
+                    placeholder="Enter cart name"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                </>
+              )}
 
               <Text style={[styles.label, { color: theme.text }]}>Starting Cash</Text>
               <View style={[styles.inputContainer, { backgroundColor: theme.background }]}>
@@ -669,6 +728,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '600' as const,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   textArea: {
     padding: 14,
