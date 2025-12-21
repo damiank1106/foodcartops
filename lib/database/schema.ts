@@ -164,27 +164,68 @@ export const MIGRATIONS = [
   {
     version: 4,
     up: `
-      ALTER TABLE sales ADD COLUMN shift_id TEXT;
-      ALTER TABLE sales ADD COLUMN subtotal_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE sales ADD COLUMN discount_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE sales ADD COLUMN total_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE sales ADD COLUMN voided_at INTEGER;
-      ALTER TABLE sales ADD COLUMN voided_by TEXT;
-      ALTER TABLE sales ADD COLUMN edited_at INTEGER;
+      CREATE TABLE sales_new (
+        id TEXT PRIMARY KEY,
+        cart_id TEXT NOT NULL,
+        worker_id TEXT NOT NULL,
+        shift_id TEXT,
+        total_amount REAL NOT NULL,
+        subtotal_cents INTEGER NOT NULL DEFAULT 0,
+        discount_cents INTEGER NOT NULL DEFAULT 0,
+        total_cents INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        receipt_photo TEXT,
+        voided_at INTEGER,
+        voided_by TEXT,
+        edited_at INTEGER,
+        created_at INTEGER NOT NULL,
+        synced_at INTEGER,
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        FOREIGN KEY (worker_id) REFERENCES users(id)
+      );
 
-      UPDATE sales SET 
+      INSERT INTO sales_new (id, cart_id, worker_id, total_amount, notes, receipt_photo, created_at, synced_at)
+      SELECT id, cart_id, worker_id, total_amount, notes, receipt_photo, created_at, synced_at FROM sales;
+
+      UPDATE sales_new SET 
         subtotal_cents = CAST(total_amount * 100 AS INTEGER),
         total_cents = CAST(total_amount * 100 AS INTEGER);
 
-      ALTER TABLE sale_items ADD COLUMN unit_price_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE sale_items ADD COLUMN line_total_cents INTEGER NOT NULL DEFAULT 0;
+      DROP TABLE sales;
+      ALTER TABLE sales_new RENAME TO sales;
 
-      UPDATE sale_items SET 
+      CREATE INDEX idx_sales_cart_id ON sales(cart_id);
+      CREATE INDEX idx_sales_worker_id ON sales(worker_id);
+      CREATE INDEX idx_sales_created_at ON sales(created_at);
+      CREATE INDEX idx_sales_shift_id ON sales(shift_id);
+
+      CREATE TABLE sale_items_new (
+        id TEXT PRIMARY KEY,
+        sale_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        unit_price REAL NOT NULL,
+        total_price REAL NOT NULL,
+        unit_price_cents INTEGER NOT NULL DEFAULT 0,
+        line_total_cents INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (sale_id) REFERENCES sales(id),
+        FOREIGN KEY (product_id) REFERENCES products(id)
+      );
+
+      INSERT INTO sale_items_new (id, sale_id, product_id, quantity, unit_price, total_price, created_at)
+      SELECT id, sale_id, product_id, quantity, unit_price, total_price, created_at FROM sale_items;
+
+      UPDATE sale_items_new SET 
         unit_price_cents = CAST(unit_price * 100 AS INTEGER),
         line_total_cents = CAST(total_price * 100 AS INTEGER);
 
-      ALTER TABLE products ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0;
+      DROP TABLE sale_items;
+      ALTER TABLE sale_items_new RENAME TO sale_items;
 
+      CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id);
+
+      ALTER TABLE products ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0;
       UPDATE products SET price_cents = CAST(price * 100 AS INTEGER);
 
       CREATE TABLE IF NOT EXISTS payments (
@@ -197,7 +238,6 @@ export const MIGRATIONS = [
       );
 
       CREATE INDEX idx_payments_sale_id ON payments(sale_id);
-      CREATE INDEX idx_sales_shift_id ON sales(shift_id);
     `,
     down: `
       DROP TABLE IF EXISTS payments;
