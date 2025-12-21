@@ -5,6 +5,8 @@ import { MIGRATIONS, SCHEMA_VERSION } from './schema';
 const DB_NAME = 'foodcartops.db';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
+let isInitializing = false;
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getSQLiteModule() {
   if (Platform.OS === 'web') {
@@ -23,10 +25,21 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
     return dbInstance;
   }
 
-  const SQLiteModule = getSQLiteModule();
-  dbInstance = await SQLiteModule.openDatabaseAsync(DB_NAME);
-  await runMigrations(dbInstance);
-  return dbInstance;
+  if (isInitializing && initPromise) {
+    return initPromise;
+  }
+
+  isInitializing = true;
+  initPromise = (async () => {
+    const SQLiteModule = getSQLiteModule();
+    const db = await SQLiteModule.openDatabaseAsync(DB_NAME);
+    await runMigrations(db);
+    dbInstance = db;
+    isInitializing = false;
+    return db;
+  })();
+
+  return initPromise;
 }
 
 async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -77,6 +90,9 @@ export async function resetDatabase(): Promise<void> {
     await dbInstance.closeAsync();
     dbInstance = null;
   }
+
+  isInitializing = false;
+  initPromise = null;
 
   await SQLiteModule.deleteDatabaseAsync(DB_NAME);
   console.log('[DB] Database reset');
