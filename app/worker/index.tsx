@@ -169,7 +169,7 @@ export default function WorkerSaleScreen() {
                         {product.name}
                       </Text>
                       <Text style={[styles.productPrice, { color: theme.primary }]}>
-                        ${product.price.toFixed(2)}
+                        ₱{product.price.toFixed(2)}
                       </Text>
                       {inCart && (
                         <View style={[styles.quantityBadge, { backgroundColor: theme.primary }]}>
@@ -194,7 +194,7 @@ export default function WorkerSaleScreen() {
                     {item.product.name}
                   </Text>
                   <Text style={[styles.cartItemPrice, { color: theme.textSecondary }]}>
-                    ${item.product.price.toFixed(2)} × {item.quantity}
+                    ₱{item.product.price.toFixed(2)} × {item.quantity}
                   </Text>
                 </View>
                 <View style={styles.cartItemActions}>
@@ -252,7 +252,7 @@ export default function WorkerSaleScreen() {
             ) : (
               <>
                 <ShoppingCart size={20} color="#FFF" />
-                <Text style={styles.checkoutText}>Complete Sale - ${(getCartTotal() / 100).toFixed(2)}</Text>
+                <Text style={styles.checkoutText}>Complete Sale - ₱{(getCartTotal() / 100).toFixed(2)}</Text>
               </>
             )}
           </TouchableOpacity>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { DollarSign, Users, ShoppingBag } from 'lucide-react-native';
+import { Coins, Users, ShoppingBag } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { SaleRepository, ShiftRepository, CartRepository } from '@/lib/repositories';
 import { startOfDay, endOfDay, format } from 'date-fns';
@@ -76,10 +76,10 @@ export default function BossDashboard() {
         <View style={styles.statsGrid}>
           <View style={[styles.statCard, { backgroundColor: theme.card }]}>
             <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
-              <DollarSign size={24} color={theme.primary} />
+              <Coins size={24} color={theme.primary} />
             </View>
             <Text style={[styles.statValue, { color: theme.text }]}>
-              ${stats?.today_revenue.toFixed(2)}
+              ₱{stats?.today_revenue.toFixed(2)}
             </Text>
             <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Today&apos;s Revenue</Text>
           </View>
@@ -107,7 +107,7 @@ export default function BossDashboard() {
             <View key={index} style={styles.listItem}>
               <Text style={[styles.listItemLabel, { color: theme.text }]}>{item.cart_name}</Text>
               <Text style={[styles.listItemValue, { color: theme.primary }]}>
-                ${item.revenue.toFixed(2)}
+                ₱{item.revenue.toFixed(2)}
               </Text>
             </View>
           ))}
@@ -121,7 +121,7 @@ export default function BossDashboard() {
                 {item.payment_method}
               </Text>
               <Text style={[styles.listItemValue, { color: theme.primary }]}>
-                ${item.revenue.toFixed(2)}
+                ₱{item.revenue.toFixed(2)}
               </Text>
             </View>
           ))}

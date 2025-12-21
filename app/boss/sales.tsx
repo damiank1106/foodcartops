@@ -115,7 +115,7 @@ export default function BossSalesScreen() {
         <View style={[styles.revenueCard, { backgroundColor: theme.card }]}>
           <Text style={[styles.revenueLabel, { color: theme.textSecondary }]}>Total Revenue</Text>
           <Text style={[styles.revenueValue, { color: theme.primary }]}>
-            ${totalRevenue.toFixed(2)}
+            ₱{totalRevenue.toFixed(2)}
           </Text>
         </View>
       </View>
@@ -137,7 +137,7 @@ export default function BossSalesScreen() {
                 </Text>
               </View>
               <Text style={[styles.saleAmount, { color: theme.primary }]}>
-                ${sale.total_amount.toFixed(2)}
+                ₱{sale.total_amount.toFixed(2)}
               </Text>
             </View>
 

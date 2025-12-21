@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, MapPin, LogOut, DollarSign, CreditCard, Wallet, TrendingUp, Activity } from 'lucide-react-native';
+import { Clock, MapPin, LogOut, Coins, CreditCard, Wallet, TrendingUp, Activity } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { CartRepository, ShiftRepository, SaleRepository } from '@/lib/repositories';
@@ -23,19 +23,11 @@ export default function WorkerShiftScreen() {
   const [showStartModal, setShowStartModal] = useState<boolean>(false);
   const [selectedCart, setSelectedCart] = useState<string>('');
   const [startingCash, setStartingCash] = useState<string>('');
-  const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const queryClient = useQueryClient();
 
   const cartRepo = new CartRepository();
   const shiftRepo = new ShiftRepository();
   const saleRepo = new SaleRepository();
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   const { data: carts, isLoading: cartsLoading } = useQuery({
     queryKey: ['carts'],
@@ -151,7 +143,9 @@ export default function WorkerShiftScreen() {
   };
 
   if (activeShift) {
-    const duration = Math.floor((currentTime - activeShift.clock_in) / 1000 / 60);
+    const currentTime = Date.now();
+    const durationMs = Math.max(0, currentTime - activeShift.clock_in);
+    const duration = Math.floor(durationMs / 1000 / 60);
     const hours = Math.floor(duration / 60);
     const minutes = duration % 60;
     const totals = calculateTotals();
@@ -199,10 +193,10 @@ export default function WorkerShiftScreen() {
             <View style={styles.statsGrid}>
               <View style={styles.statItem}>
                 <View style={[styles.statIcon, { backgroundColor: theme.success + '20' }]}>
-                  <DollarSign size={20} color={theme.success} />
+                  <Coins size={20} color={theme.success} />
                 </View>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Cash Sales</Text>
-                <Text style={[styles.statValue, { color: theme.text }]}>${totals.cash.toFixed(2)}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>₱{totals.cash.toFixed(2)}</Text>
               </View>
               
               <View style={styles.statItem}>
@@ -210,7 +204,7 @@ export default function WorkerShiftScreen() {
                   <CreditCard size={20} color={theme.primary} />
                 </View>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Card</Text>
-                <Text style={[styles.statValue, { color: theme.text }]}>${totals.card.toFixed(2)}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>₱{totals.card.toFixed(2)}</Text>
               </View>
               
               <View style={styles.statItem}>
@@ -218,7 +212,7 @@ export default function WorkerShiftScreen() {
                   <Wallet size={20} color="#9333EA" />
                 </View>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>GCash</Text>
-                <Text style={[styles.statValue, { color: theme.text }]}>${totals.gcash.toFixed(2)}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>₱{totals.gcash.toFixed(2)}</Text>
               </View>
               
               <View style={styles.statItem}>
@@ -226,22 +220,22 @@ export default function WorkerShiftScreen() {
                   <TrendingUp size={20} color={theme.primary} />
                 </View>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Sales</Text>
-                <Text style={[styles.statValue, { color: theme.text }]}>${totals.total.toFixed(2)}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>₱{totals.total.toFixed(2)}</Text>
               </View>
             </View>
 
             <View style={[styles.cashDrawer, { backgroundColor: theme.background }]}>
               <View style={styles.cashRow}>
                 <Text style={[styles.cashLabel, { color: theme.textSecondary }]}>Starting Cash</Text>
-                <Text style={[styles.cashValue, { color: theme.text }]}>${startingCashDollars.toFixed(2)}</Text>
+                <Text style={[styles.cashValue, { color: theme.text }]}>₱{startingCashDollars.toFixed(2)}</Text>
               </View>
               <View style={styles.cashRow}>
                 <Text style={[styles.cashLabel, { color: theme.textSecondary }]}>+ Cash Sales</Text>
-                <Text style={[styles.cashValue, { color: theme.success }]}>+${totals.cash.toFixed(2)}</Text>
+                <Text style={[styles.cashValue, { color: theme.success }]}>+₱{totals.cash.toFixed(2)}</Text>
               </View>
               <View style={[styles.cashRow, styles.cashRowTotal]}>
                 <Text style={[styles.cashLabel, { color: theme.text }]}>Expected Cash</Text>
-                <Text style={[styles.cashValueTotal, { color: theme.primary }]}>${expectedCashDollars.toFixed(2)}</Text>
+                <Text style={[styles.cashValueTotal, { color: theme.primary }]}>₱{expectedCashDollars.toFixed(2)}</Text>
               </View>
             </View>
 
@@ -326,7 +320,7 @@ export default function WorkerShiftScreen() {
             </Text>
 
             <View style={[styles.inputContainer, { backgroundColor: theme.background }]}>
-              <DollarSign size={20} color={theme.textSecondary} />
+              <Coins size={20} color={theme.textSecondary} />
               <TextInput
                 style={[styles.input, { color: theme.text }]}
                 value={startingCash}

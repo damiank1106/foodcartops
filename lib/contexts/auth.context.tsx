@@ -47,15 +47,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         if (user) {
           let activeShiftId: string | null = null;
+          let selectedCart = cartId;
 
           if (user.role === 'worker') {
             const activeShift = await shiftRepo.getActiveShift(user.id);
             activeShiftId = activeShift?.id || null;
+            if (activeShift && !selectedCart) {
+              selectedCart = activeShift.cart_id;
+              await SecureStore.setItemAsync(CART_KEY, activeShift.cart_id);
+            }
           }
 
           setState({
             user,
-            selectedCartId: cartId,
+            selectedCartId: selectedCart,
             activeShiftId,
             isLoading: false,
           });
