@@ -81,6 +81,14 @@ export class UserRepository extends BaseRepository {
     return await db.getAllAsync<User>('SELECT * FROM users ORDER BY name ASC');
   }
 
+  async findByRole(role: UserRole): Promise<User[]> {
+    const db = await this.getDb();
+    return await db.getAllAsync<User>(
+      'SELECT * FROM users WHERE role = ? AND is_active = 1 ORDER BY name ASC',
+      [role]
+    );
+  }
+
   async getActiveWorkers(): Promise<User[]> {
     const db = await this.getDb();
     return await db.getAllAsync<User>(

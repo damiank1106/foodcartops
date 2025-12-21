@@ -1,6 +1,6 @@
 export type UserRole = 'boss' | 'worker';
 
-export type PaymentMethod = 'cash' | 'card' | 'digital';
+export type PaymentMethod = 'CASH' | 'GCASH' | 'CARD' | 'OTHER';
 
 export type SyncAction = 'create' | 'update' | 'delete';
 
@@ -31,6 +31,7 @@ export interface Product {
   id: string;
   name: string;
   price: number;
+  price_cents: number;
   category?: string;
   is_active: number;
   created_at: number;
@@ -41,10 +42,17 @@ export interface Sale {
   id: string;
   cart_id: string;
   worker_id: string;
+  shift_id?: string;
   total_amount: number;
+  subtotal_cents: number;
+  discount_cents: number;
+  total_cents: number;
   payment_method: PaymentMethod;
   notes?: string;
   receipt_photo?: string;
+  voided_at?: number;
+  voided_by?: string;
+  edited_at?: number;
   created_at: number;
   synced_at?: number;
 }
@@ -55,7 +63,17 @@ export interface SaleItem {
   product_id: string;
   quantity: number;
   unit_price: number;
+  unit_price_cents: number;
   total_price: number;
+  line_total_cents: number;
+  created_at: number;
+}
+
+export interface Payment {
+  id: string;
+  sale_id: string;
+  method: PaymentMethod;
+  amount_cents: number;
   created_at: number;
 }
 
@@ -111,6 +129,7 @@ export interface SyncQueueItem {
 
 export interface SaleWithItems extends Sale {
   items: (SaleItem & { product_name: string })[];
+  payments: Payment[];
   worker_name: string;
   cart_name: string;
 }

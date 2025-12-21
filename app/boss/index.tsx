@@ -34,9 +34,13 @@ export default function BossDashboard() {
         return { cart_name: cart.name, revenue };
       });
 
-      const revenueByPayment = ['cash', 'card', 'digital'].map((method) => {
-        const methodSales = todaySales.filter((sale) => sale.payment_method === method);
-        const revenue = methodSales.reduce((sum, sale) => sum + sale.total_amount, 0);
+      const revenueByPayment = (['CASH', 'CARD', 'GCASH', 'OTHER'] as const).map((method) => {
+        const revenue = todaySales.reduce((sum, sale) => {
+          const paymentTotal = sale.payments
+            .filter(p => p.method === method)
+            .reduce((s, p) => s + p.amount_cents, 0);
+          return sum + paymentTotal / 100;
+        }, 0);
         return { payment_method: method, revenue };
       });
 
@@ -114,7 +118,7 @@ export default function BossDashboard() {
           {stats?.revenue_by_payment.map((item, index) => (
             <View key={index} style={styles.listItem}>
               <Text style={[styles.listItemLabel, { color: theme.text }]}>
-                {item.payment_method.charAt(0).toUpperCase() + item.payment_method.slice(1)}
+                {item.payment_method}
               </Text>
               <Text style={[styles.listItemValue, { color: theme.primary }]}>
                 ${item.revenue.toFixed(2)}

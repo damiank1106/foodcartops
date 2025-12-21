@@ -126,23 +126,26 @@ export default function WorkerShiftScreen() {
   }
 
   const calculateTotals = () => {
-    if (!shiftSales) return { cash: 0, card: 0, digital: 0, total: 0, transactions: 0 };
+    if (!shiftSales) return { cash: 0, card: 0, gcash: 0, total: 0, transactions: 0 };
     
     let cash = 0;
     let card = 0;
-    let digital = 0;
+    let gcash = 0;
     
     shiftSales.forEach(sale => {
-      if (sale.payment_method === 'cash') cash += sale.total_amount;
-      else if (sale.payment_method === 'card') card += sale.total_amount;
-      else if (sale.payment_method === 'digital') digital += sale.total_amount;
+      sale.payments.forEach(payment => {
+        const amount = payment.amount_cents / 100;
+        if (payment.method === 'CASH') cash += amount;
+        else if (payment.method === 'CARD') card += amount;
+        else if (payment.method === 'GCASH') gcash += amount;
+      });
     });
     
     return {
       cash,
       card,
-      digital,
-      total: cash + card + digital,
+      gcash,
+      total: cash + card + gcash,
       transactions: shiftSales.length,
     };
   };
@@ -214,8 +217,8 @@ export default function WorkerShiftScreen() {
                 <View style={[styles.statIcon, { backgroundColor: '#9333EA20' }]}>
                   <Wallet size={20} color="#9333EA" />
                 </View>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Digital</Text>
-                <Text style={[styles.statValue, { color: theme.text }]}>${totals.digital.toFixed(2)}</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>GCash</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>${totals.gcash.toFixed(2)}</Text>
               </View>
               
               <View style={styles.statItem}>

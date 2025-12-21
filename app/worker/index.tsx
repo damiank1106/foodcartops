@@ -19,7 +19,7 @@ export default function WorkerSaleScreen() {
   const { theme } = useTheme();
   const { user, selectedCartId, activeShiftId } = useAuth();
   const [cart, setCart] = useState<Map<string, { product: Product; quantity: number }>>(new Map());
-  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('cash');
+  const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('CASH');
 
   const queryClient = useQueryClient();
   const productRepo = new ProductRepository();
@@ -39,8 +39,8 @@ export default function WorkerSaleScreen() {
 
   const createSaleMutation = useMutation({
     mutationFn: async (data: {
-      items: { product_id: string; quantity: number; unit_price: number }[];
-      total: number;
+      items: { product_id: string; quantity: number; unit_price_cents: number }[];
+      total_cents: number;
     }) => {
       if (!user || !selectedCartId) throw new Error('Missing user or cart');
       if (!activeShiftId) throw new Error('No active shift');
@@ -48,9 +48,8 @@ export default function WorkerSaleScreen() {
       return saleRepo.create({
         cart_id: selectedCartId,
         worker_id: user.id,
-        total_amount: data.total,
-        payment_method: selectedPayment,
         items: data.items,
+        payments: [{ method: selectedPayment, amount_cents: data.total_cents }],
         shift_id: activeShiftId,
       });
     },
@@ -105,7 +104,7 @@ export default function WorkerSaleScreen() {
   const getCartTotal = () => {
     let total = 0;
     cart.forEach((item) => {
-      total += item.product.price * item.quantity;
+      total += item.product.price_cents * item.quantity;
     });
     return total;
   };
@@ -119,12 +118,12 @@ export default function WorkerSaleScreen() {
     const items = Array.from(cart.values()).map((item) => ({
       product_id: item.product.id,
       quantity: item.quantity,
-      unit_price: item.product.price,
+      unit_price_cents: item.product.price_cents,
     }));
 
     createSaleMutation.mutate({
       items,
-      total: getCartTotal(),
+      total_cents: getCartTotal(),
     });
   };
 
@@ -220,7 +219,7 @@ export default function WorkerSaleScreen() {
           </ScrollView>
 
           <View style={styles.paymentMethods}>
-            {(['cash', 'card', 'digital'] as PaymentMethod[]).map((method) => (
+            {(['CASH', 'CARD', 'GCASH'] as PaymentMethod[]).map((method) => (
               <TouchableOpacity
                 key={method}
                 style={[
@@ -237,7 +236,7 @@ export default function WorkerSaleScreen() {
                     selectedPayment === method && { color: '#FFF' },
                   ]}
                 >
-                  {method.charAt(0).toUpperCase() + method.slice(1)}
+                  {method}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -253,7 +252,7 @@ export default function WorkerSaleScreen() {
             ) : (
               <>
                 <ShoppingCart size={20} color="#FFF" />
-                <Text style={styles.checkoutText}>Complete Sale - ${getCartTotal().toFixed(2)}</Text>
+                <Text style={styles.checkoutText}>Complete Sale - ${(getCartTotal() / 100).toFixed(2)}</Text>
               </>
             )}
           </TouchableOpacity>

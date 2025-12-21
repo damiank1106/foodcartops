@@ -1,79 +1,171 @@
 import { BaseRepository } from './base';
-import { Sale, SaleItem, SaleWithItems, PaymentMethod } from '../types';
+import { Sale, SaleItem, SaleWithItems, PaymentMethod, Payment } from '../types';
 import { ShiftRepository } from './shift.repository';
+import { PaymentRepository } from './payment.repository';
 import { startOfDay, endOfDay } from 'date-fns';
 
 export class SaleRepository extends BaseRepository {
   async create(data: {
     cart_id: string;
     worker_id: string;
-    total_amount: number;
-    payment_method: PaymentMethod;
-    notes?: string;
-    receipt_photo?: string;
     items: {
       product_id: string;
       quantity: number;
-      unit_price: number;
+      unit_price_cents: number;
     }[];
+    payments: {
+      method: PaymentMethod;
+      amount_cents: number;
+    }[];
+    discount_cents?: number;
+    notes?: string;
+    receipt_photo?: string;
     shift_id?: string;
-  }): Promise<Sale> {
+  }): Promise<SaleWithItems> {
     const db = await this.getDb();
     const saleId = this.generateId();
     const now = this.now();
+
+    const subtotal_cents = data.items.reduce(
+      (sum, item) => sum + item.quantity * item.unit_price_cents,
+      0
+    );
+    const discount_cents = data.discount_cents || 0;
+    const total_cents = subtotal_cents - discount_cents;
+
+    const payment_method = data.payments[0]?.method || 'CASH';
+    const total_amount = total_cents / 100;
 
     const sale: Sale = {
       id: saleId,
       cart_id: data.cart_id,
       worker_id: data.worker_id,
-      total_amount: data.total_amount,
-      payment_method: data.payment_method,
+      shift_id: data.shift_id,
+      total_amount,
+      subtotal_cents,
+      discount_cents,
+      total_cents,
+      payment_method,
       notes: data.notes,
       receipt_photo: data.receipt_photo,
       created_at: now,
     };
 
     await db.runAsync(
-      `INSERT INTO sales (id, cart_id, worker_id, total_amount, payment_method, notes, receipt_photo, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [sale.id, sale.cart_id, sale.worker_id, sale.total_amount, sale.payment_method, sale.notes || null, sale.receipt_photo || null, sale.created_at]
+      `INSERT INTO sales (id, cart_id, worker_id, shift_id, total_amount, subtotal_cents, discount_cents, total_cents, payment_method, notes, receipt_photo, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        sale.id,
+        sale.cart_id,
+        sale.worker_id,
+        sale.shift_id || null,
+        sale.total_amount,
+        sale.subtotal_cents,
+        sale.discount_cents,
+        sale.total_cents,
+        sale.payment_method,
+        sale.notes || null,
+        sale.receipt_photo || null,
+        sale.created_at,
+      ]
     );
 
+    const saleItems: (SaleItem & { product_name: string })[] = [];
     for (const item of data.items) {
       const itemId = this.generateId();
-      const totalPrice = item.quantity * item.unit_price;
+      const line_total_cents = item.quantity * item.unit_price_cents;
+      const unit_price = item.unit_price_cents / 100;
+      const total_price = line_total_cents / 100;
 
       await db.runAsync(
-        `INSERT INTO sale_items (id, sale_id, product_id, quantity, unit_price, total_price, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [itemId, saleId, item.product_id, item.quantity, item.unit_price, totalPrice, now]
+        `INSERT INTO sale_items (id, sale_id, product_id, quantity, unit_price, unit_price_cents, total_price, line_total_cents, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          itemId,
+          saleId,
+          item.product_id,
+          item.quantity,
+          unit_price,
+          item.unit_price_cents,
+          total_price,
+          line_total_cents,
+          now,
+        ]
       );
+
+      const product = await db.getFirstAsync<{ name: string }>(
+        'SELECT name FROM products WHERE id = ?',
+        [item.product_id]
+      );
+
+      saleItems.push({
+        id: itemId,
+        sale_id: saleId,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price,
+        unit_price_cents: item.unit_price_cents,
+        total_price,
+        line_total_cents,
+        created_at: now,
+        product_name: product?.name || 'Unknown',
+      });
+    }
+
+    const paymentRepo = new PaymentRepository();
+    const payments: Payment[] = [];
+    for (const payment of data.payments) {
+      const p = await paymentRepo.create({
+        sale_id: saleId,
+        method: payment.method,
+        amount_cents: payment.amount_cents,
+      });
+      payments.push(p);
     }
 
     if (data.shift_id) {
       const shiftRepo = new ShiftRepository();
       await shiftRepo.addShiftEvent(data.shift_id, 'sale_completed', {
         sale_id: saleId,
-        total_amount: data.total_amount,
-        payment_method: data.payment_method,
+        total_cents,
+        payment_methods: data.payments.map((p) => p.method).join(', '),
         items_count: data.items.length,
       });
 
-      const totalCashSales = data.payment_method === 'cash' ? data.total_amount : 0;
+      const totalCashPayments = data.payments
+        .filter((p) => p.method === 'CASH')
+        .reduce((sum, p) => sum + p.amount_cents, 0);
+
       const shift = await shiftRepo.getShiftById(data.shift_id);
       if (shift) {
-        const newExpectedCash = shift.starting_cash_cents + (totalCashSales * 100);
+        const newExpectedCash = shift.starting_cash_cents + totalCashPayments;
         await shiftRepo.updateExpectedCash(data.shift_id, newExpectedCash);
       }
     }
 
     console.log('[SaleRepo] Created sale:', sale.id);
-    return sale;
+
+    const worker = await db.getFirstAsync<{ name: string }>(
+      'SELECT name FROM users WHERE id = ?',
+      [data.worker_id]
+    );
+    const cart = await db.getFirstAsync<{ name: string }>(
+      'SELECT name FROM carts WHERE id = ?',
+      [data.cart_id]
+    );
+
+    return {
+      ...sale,
+      items: saleItems,
+      payments,
+      worker_name: worker?.name || 'Unknown',
+      cart_name: cart?.name || 'Unknown',
+    };
   }
 
   async findById(id: string): Promise<SaleWithItems | null> {
     const db = await this.getDb();
-    
+
     const sale = await db.getFirstAsync<Sale & { worker_name: string; cart_name: string }>(
       `SELECT s.*, u.name as worker_name, c.name as cart_name
        FROM sales s
@@ -93,7 +185,10 @@ export class SaleRepository extends BaseRepository {
       [id]
     );
 
-    return { ...sale, items };
+    const paymentRepo = new PaymentRepository();
+    const payments = await paymentRepo.findBySaleId(id);
+
+    return { ...sale, items, payments };
   }
 
   async findAll(options?: {
@@ -101,10 +196,15 @@ export class SaleRepository extends BaseRepository {
     worker_id?: string;
     start_date?: Date;
     end_date?: Date;
+    include_voided?: boolean;
   }): Promise<SaleWithItems[]> {
     const db = await this.getDb();
     const conditions: string[] = ['1=1'];
     const params: any[] = [];
+
+    if (!options?.include_voided) {
+      conditions.push('s.voided_at IS NULL');
+    }
 
     if (options?.cart_id) {
       conditions.push('s.cart_id = ?');
@@ -138,6 +238,7 @@ export class SaleRepository extends BaseRepository {
 
     const salesWithItems: SaleWithItems[] = [];
 
+    const paymentRepo = new PaymentRepository();
     for (const sale of sales) {
       const items = await db.getAllAsync<SaleItem & { product_name: string }>(
         `SELECT si.*, p.name as product_name
@@ -147,7 +248,9 @@ export class SaleRepository extends BaseRepository {
         [sale.id]
       );
 
-      salesWithItems.push({ ...sale, items });
+      const payments = await paymentRepo.findBySaleId(sale.id);
+
+      salesWithItems.push({ ...sale, items, payments });
     }
 
     return salesWithItems;
@@ -167,7 +270,7 @@ export class SaleRepository extends BaseRepository {
     end_date?: Date;
   }): Promise<number> {
     const db = await this.getDb();
-    const conditions: string[] = ['1=1'];
+    const conditions: string[] = ['1=1', 'voided_at IS NULL'];
     const params: any[] = [];
 
     if (options?.cart_id) {
@@ -193,5 +296,33 @@ export class SaleRepository extends BaseRepository {
     );
 
     return result?.total || 0;
+  }
+
+  async voidSale(saleId: string, userId: string): Promise<void> {
+    const db = await this.getDb();
+    const now = this.now();
+
+    await db.runAsync(
+      'UPDATE sales SET voided_at = ?, voided_by = ? WHERE id = ?',
+      [now, userId, saleId]
+    );
+
+    console.log('[SaleRepo] Voided sale:', saleId);
+  }
+
+  async canEdit(saleId: string, userId: string, userRole: string): Promise<boolean> {
+    if (userRole === 'boss') return true;
+
+    const db = await this.getDb();
+    const sale = await db.getFirstAsync<Sale>(
+      'SELECT * FROM sales WHERE id = ? AND worker_id = ?',
+      [saleId, userId]
+    );
+
+    if (!sale) return false;
+
+    const now = Date.now();
+    const twoMinutes = 2 * 60 * 1000;
+    return now - sale.created_at < twoMinutes;
   }
 }

@@ -5,3 +5,4 @@ export { SaleRepository } from './sale.repository';
 export { ShiftRepository } from './shift.repository';
 export { AuditRepository } from './audit.repository';
 export { SyncRepository } from './sync.repository';
+export { PaymentRepository } from './payment.repository';

@@ -7,10 +7,13 @@ export class ProductRepository extends BaseRepository {
     const id = this.generateId();
     const now = this.now();
 
+    const price_cents = Math.round(data.price * 100);
+
     const product: Product = {
       id,
       name: data.name,
       price: data.price,
+      price_cents,
       category: data.category,
       is_active: 1,
       created_at: now,
@@ -18,9 +21,9 @@ export class ProductRepository extends BaseRepository {
     };
 
     await db.runAsync(
-      `INSERT INTO products (id, name, price, category, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [product.id, product.name, product.price, product.category || null, product.is_active, product.created_at, product.updated_at]
+      `INSERT INTO products (id, name, price, price_cents, category, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [product.id, product.name, product.price, product.price_cents, product.category || null, product.is_active, product.created_at, product.updated_at]
     );
 
     console.log('[ProductRepo] Created product:', product.id);

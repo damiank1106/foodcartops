@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const MIGRATIONS = [
   {
@@ -159,6 +159,58 @@ export const MIGRATIONS = [
       ALTER TABLE worker_shifts DROP COLUMN expected_cash_cents;
       ALTER TABLE worker_shifts DROP COLUMN notes;
       ALTER TABLE worker_shifts DROP COLUMN status;
+    `,
+  },
+  {
+    version: 4,
+    up: `
+      ALTER TABLE sales ADD COLUMN shift_id TEXT;
+      ALTER TABLE sales ADD COLUMN subtotal_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sales ADD COLUMN discount_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sales ADD COLUMN total_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sales ADD COLUMN voided_at INTEGER;
+      ALTER TABLE sales ADD COLUMN voided_by TEXT;
+      ALTER TABLE sales ADD COLUMN edited_at INTEGER;
+
+      UPDATE sales SET 
+        subtotal_cents = CAST(total_amount * 100 AS INTEGER),
+        total_cents = CAST(total_amount * 100 AS INTEGER);
+
+      ALTER TABLE sale_items ADD COLUMN unit_price_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sale_items ADD COLUMN line_total_cents INTEGER NOT NULL DEFAULT 0;
+
+      UPDATE sale_items SET 
+        unit_price_cents = CAST(unit_price * 100 AS INTEGER),
+        line_total_cents = CAST(total_price * 100 AS INTEGER);
+
+      ALTER TABLE products ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0;
+
+      UPDATE products SET price_cents = CAST(price * 100 AS INTEGER);
+
+      CREATE TABLE IF NOT EXISTS payments (
+        id TEXT PRIMARY KEY,
+        sale_id TEXT NOT NULL,
+        method TEXT NOT NULL CHECK(method IN ('CASH', 'GCASH', 'CARD', 'OTHER')),
+        amount_cents INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (sale_id) REFERENCES sales(id)
+      );
+
+      CREATE INDEX idx_payments_sale_id ON payments(sale_id);
+      CREATE INDEX idx_sales_shift_id ON sales(shift_id);
+    `,
+    down: `
+      DROP TABLE IF EXISTS payments;
+      ALTER TABLE sales DROP COLUMN shift_id;
+      ALTER TABLE sales DROP COLUMN subtotal_cents;
+      ALTER TABLE sales DROP COLUMN discount_cents;
+      ALTER TABLE sales DROP COLUMN total_cents;
+      ALTER TABLE sales DROP COLUMN voided_at;
+      ALTER TABLE sales DROP COLUMN voided_by;
+      ALTER TABLE sales DROP COLUMN edited_at;
+      ALTER TABLE sale_items DROP COLUMN unit_price_cents;
+      ALTER TABLE sale_items DROP COLUMN line_total_cents;
+      ALTER TABLE products DROP COLUMN price_cents;
     `,
   },
 ];

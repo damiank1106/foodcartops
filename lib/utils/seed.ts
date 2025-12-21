@@ -99,46 +99,43 @@ export async function seedDatabase(): Promise<void> {
       createdProducts.push(p);
     }
 
-    await shiftRepo.startShift(worker1.id, cart1.id, 10000);
-    await shiftRepo.startShift(worker2.id, cart2.id, 15000);
-    const sales = [
-      {
-        cart_id: cart1.id,
-        worker_id: worker1.id,
-        total_amount: 14.98,
-        payment_method: 'cash' as const,
-        items: [
-          { product_id: createdProducts[0].id, quantity: 2, unit_price: 5.99 },
-          { product_id: createdProducts[3].id, quantity: 1, unit_price: 2.49 },
-          { product_id: createdProducts[4].id, quantity: 1, unit_price: 1.99 },
-        ],
-      },
-      {
-        cart_id: cart1.id,
-        worker_id: worker1.id,
-        total_amount: 12.48,
-        payment_method: 'card' as const,
-        items: [
-          { product_id: createdProducts[1].id, quantity: 1, unit_price: 8.99 },
-          { product_id: createdProducts[2].id, quantity: 1, unit_price: 3.49 },
-        ],
-      },
-      {
-        cart_id: cart2.id,
-        worker_id: worker2.id,
-        total_amount: 23.45,
-        payment_method: 'digital' as const,
-        items: [
-          { product_id: createdProducts[1].id, quantity: 2, unit_price: 8.99 },
-          { product_id: createdProducts[5].id, quantity: 1, unit_price: 4.49 },
-          { product_id: createdProducts[4].id, quantity: 1, unit_price: 1.99 },
-        ],
-      },
-    ];
+    const shift1 = await shiftRepo.startShift(worker1.id, cart1.id, 10000);
+    const shift2 = await shiftRepo.startShift(worker2.id, cart2.id, 15000);
 
-    for (const sale of sales) {
-      await saleRepo.create(sale);
-    }
+    await saleRepo.create({
+      cart_id: cart1.id,
+      worker_id: worker1.id,
+      shift_id: shift1.id,
+      items: [
+        { product_id: createdProducts[0].id, quantity: 2, unit_price_cents: createdProducts[0].price_cents },
+        { product_id: createdProducts[3].id, quantity: 1, unit_price_cents: createdProducts[3].price_cents },
+        { product_id: createdProducts[4].id, quantity: 1, unit_price_cents: createdProducts[4].price_cents },
+      ],
+      payments: [{ method: 'CASH', amount_cents: 1498 }],
+    });
+
+    await saleRepo.create({
+      cart_id: cart1.id,
+      worker_id: worker1.id,
+      shift_id: shift1.id,
+      items: [
+        { product_id: createdProducts[1].id, quantity: 1, unit_price_cents: createdProducts[1].price_cents },
+        { product_id: createdProducts[2].id, quantity: 1, unit_price_cents: createdProducts[2].price_cents },
+      ],
+      payments: [{ method: 'CARD', amount_cents: 1248 }],
+    });
+
+    await saleRepo.create({
+      cart_id: cart2.id,
+      worker_id: worker2.id,
+      shift_id: shift2.id,
+      items: [
+        { product_id: createdProducts[1].id, quantity: 2, unit_price_cents: createdProducts[1].price_cents },
+        { product_id: createdProducts[5].id, quantity: 1, unit_price_cents: createdProducts[5].price_cents },
+        { product_id: createdProducts[4].id, quantity: 1, unit_price_cents: createdProducts[4].price_cents },
+      ],
+      payments: [{ method: 'GCASH', amount_cents: 2345 }],
+    });
 
     await AsyncStorage.setItem(SEED_KEY, 'true');
     console.log('[Seed] Database seeded successfully');
