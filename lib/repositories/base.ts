@@ -1,6 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
 import { getDatabase } from '../database/init';
-import { AuditRepository } from './audit.repository';
 
 export class BaseRepository {
   protected async getDb(): Promise<SQLite.SQLiteDatabase> {
@@ -23,14 +22,25 @@ export class BaseRepository {
     oldData: any,
     newData: any
   ): Promise<void> {
-    const auditRepo = new AuditRepository();
-    await auditRepo.log({
-      user_id: userId,
-      entity_type: entityType,
-      entity_id: entityId,
-      action,
-      old_data: oldData,
-      new_data: newData,
-    });
+    const db = await this.getDb();
+    const id = this.generateId();
+    const now = this.now();
+
+    await db.runAsync(
+      `INSERT INTO audit_logs (id, user_id, entity_type, entity_id, action, old_data, new_data, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        userId || null,
+        entityType,
+        entityId,
+        action,
+        oldData ? JSON.stringify(oldData) : null,
+        newData ? JSON.stringify(newData) : null,
+        now,
+      ]
+    );
+
+    console.log('[AuditRepo] Logged action:', action, entityType, entityId);
   }
 }

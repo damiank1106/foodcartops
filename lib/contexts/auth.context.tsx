@@ -26,13 +26,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     isLoading: true,
   });
 
-  const userRepo = new UserRepository();
-  const shiftRepo = new ShiftRepository();
-  const assignmentRepo = new UserCartAssignmentRepository();
-
   useEffect(() => {
     loadAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAuth = async () => {
@@ -42,6 +37,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
 
     try {
+      const userRepo = new UserRepository();
+      const shiftRepo = new ShiftRepository();
+      const assignmentRepo = new UserCartAssignmentRepository();
+
       const authData = await SecureStore.getItemAsync(AUTH_KEY);
       const cartId = await SecureStore.getItemAsync(CART_KEY);
 
@@ -91,6 +90,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
 
     try {
+      const userRepo = new UserRepository();
+      const shiftRepo = new ShiftRepository();
+      const assignmentRepo = new UserCartAssignmentRepository();
+
       const user = await userRepo.findByPin(pin);
 
       if (!user) {
@@ -129,6 +132,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const logout = async () => {
     try {
+      const shiftRepo = new ShiftRepository();
+
       if ((state.user?.role === 'worker' || state.user?.role === 'manager') && state.activeShiftId) {
         await shiftRepo.endShift(state.activeShiftId);
       }
@@ -166,6 +171,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
 
     try {
+      const shiftRepo = new ShiftRepository();
       const shift = await shiftRepo.startShift(state.user.id, cartId, startingCashCents);
       setState((prev) => ({ ...prev, activeShiftId: shift.id, selectedCartId: cartId }));
       await SecureStore.setItemAsync(CART_KEY, cartId);
@@ -182,6 +188,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
 
     try {
+      const shiftRepo = new ShiftRepository();
       await shiftRepo.endShift(state.activeShiftId, notes);
       setState((prev) => ({ ...prev, activeShiftId: null }));
       console.log('[Auth] Shift ended');
@@ -197,6 +204,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
 
     try {
+      const userRepo = new UserRepository();
       const success = await userRepo.changePin(state.user.id, oldPin, newPin);
       if (success) {
         console.log('[Auth] PIN changed successfully');
