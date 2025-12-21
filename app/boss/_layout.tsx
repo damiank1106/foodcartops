@@ -86,6 +86,7 @@ export default function BossLayout() {
         name="unsettled-shifts"
         options={{
           href: null,
+          headerShown: false,
         }}
       />
       <Tabs.Screen
