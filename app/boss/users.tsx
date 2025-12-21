@@ -74,6 +74,8 @@ export default function UsersScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
+      queryClient.invalidateQueries({ queryKey: ['shift-eligible-workers'] });
+      queryClient.invalidateQueries({ queryKey: ['shift-eligible-worker-map'] });
       setModalMode(null);
       resetForm();
       Alert.alert('Success', 'User created successfully');
@@ -500,7 +502,7 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     padding: 20,
-    maxHeight: 400,
+    maxHeight: 500,
   },
   label: {
     fontSize: 14,

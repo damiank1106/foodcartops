@@ -9,6 +9,13 @@ export class ShiftRepository extends BaseRepository {
     notes?: string
   ): Promise<WorkerShift> {
     const db = await this.getDb();
+    
+    const existingActive = await this.getActiveShift(worker_id);
+    if (existingActive) {
+      console.log('[ShiftRepo] Worker already has an active shift:', existingActive.id);
+      throw new Error('Worker already has an active shift');
+    }
+    
     const id = this.generateId();
     const now = this.now();
 
@@ -86,7 +93,7 @@ export class ShiftRepository extends BaseRepository {
   async getActiveShift(worker_id: string): Promise<WorkerShift | null> {
     const db = await this.getDb();
     const shift = await db.getFirstAsync<WorkerShift>(
-      "SELECT * FROM worker_shifts WHERE worker_id = ? AND status = 'active' ORDER BY clock_in DESC LIMIT 1",
+      "SELECT DISTINCT * FROM worker_shifts WHERE worker_id = ? AND status = 'active' ORDER BY clock_in DESC LIMIT 1",
       [worker_id]
     );
     return shift || null;
@@ -117,7 +124,7 @@ export class ShiftRepository extends BaseRepository {
     }
 
     return await db.getAllAsync<WorkerShift>(
-      `SELECT * FROM worker_shifts WHERE ${conditions.join(' AND ')} ORDER BY clock_in DESC`,
+      `SELECT DISTINCT * FROM worker_shifts WHERE ${conditions.join(' AND ')} ORDER BY clock_in DESC`,
       params
     );
   }

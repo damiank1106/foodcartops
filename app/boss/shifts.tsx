@@ -191,17 +191,20 @@ export default function BossShiftsScreen() {
       return;
     }
 
-    if (!startingCash || isNaN(parseFloat(startingCash))) {
-      Alert.alert('Error', 'Please enter a valid starting cash amount');
-      return;
-    }
+    let cents = 0;
+    if (startingCash && startingCash.trim() !== '') {
+      if (isNaN(parseFloat(startingCash))) {
+        Alert.alert('Error', 'Please enter a valid starting cash amount');
+        return;
+      }
 
-    if (parseFloat(startingCash) < 0) {
-      Alert.alert('Error', 'Starting cash cannot be negative');
-      return;
-    }
+      if (parseFloat(startingCash) < 0) {
+        Alert.alert('Error', 'Starting cash cannot be negative');
+        return;
+      }
 
-    const cents = Math.round(parseFloat(startingCash) * 100);
+      cents = Math.round(parseFloat(startingCash) * 100);
+    }
 
     createShiftMutation.mutate({
       worker_id: selectedWorkerId,
@@ -476,7 +479,7 @@ export default function BossShiftsScreen() {
                 </>
               )}
 
-              <Text style={[styles.label, { color: theme.text }]}>Starting Cash</Text>
+              <Text style={[styles.label, { color: theme.text }]}>Starting Cash (Optional)</Text>
               <View style={[styles.inputContainer, { backgroundColor: theme.background }]}>
                 <Text style={[styles.currencySymbol, { color: theme.textSecondary }]}>₱</Text>
                 <TextInput

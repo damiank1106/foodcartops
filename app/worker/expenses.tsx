@@ -69,6 +69,11 @@ export default function WorkerExpensesScreen() {
       notes?: string;
       receipt_image_uri?: string;
     }) => {
+      console.log('[Expense] Creating expense with data:', data);
+      console.log('[Expense] User ID:', user?.id);
+      console.log('[Expense] Selected Cart ID:', selectedCartId);
+      console.log('[Expense] Active Shift ID:', activeShiftId);
+
       if (!user) {
         throw new Error('User not found');
       }
@@ -78,16 +83,18 @@ export default function WorkerExpensesScreen() {
       }
 
       const expense = await expenseRepo.create({
-        shift_id: activeShiftId ? activeShiftId : null,
+        shift_id: activeShiftId || null,
         cart_id: selectedCartId,
         submitted_by_user_id: user.id,
         category: data.category,
         amount_cents: data.amount_cents,
         paid_from: data.paid_from,
-        notes: data.notes,
-        receipt_image_uri: data.receipt_image_uri,
+        notes: data.notes || undefined,
+        receipt_image_uri: data.receipt_image_uri || undefined,
         status: activeShiftId ? 'SUBMITTED' : 'DRAFT',
       });
+
+      console.log('[Expense] Created expense:', expense.id);
 
       await auditRepo.log({
         user_id: user.id,
@@ -106,8 +113,9 @@ export default function WorkerExpensesScreen() {
       resetForm();
       Alert.alert('Success', activeShiftId ? 'Expense submitted for approval' : 'Expense saved as draft');
     },
-    onError: () => {
-      Alert.alert('Error', 'Failed to submit expense');
+    onError: (error: Error) => {
+      console.error('[Expense] Failed to create expense:', error);
+      Alert.alert('Error', `Failed to submit expense: ${error.message}`);
     },
   });
 
