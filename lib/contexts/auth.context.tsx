@@ -168,6 +168,23 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
+  const changePin = async (oldPin: string, newPin: string): Promise<boolean> => {
+    if (!state.user) {
+      throw new Error('No user logged in');
+    }
+
+    try {
+      const success = await userRepo.changePin(state.user.id, oldPin, newPin);
+      if (success) {
+        console.log('[Auth] PIN changed successfully');
+      }
+      return success;
+    } catch (error) {
+      console.error('[Auth] Failed to change PIN:', error);
+      throw error;
+    }
+  };
+
   return {
     ...state,
     loginWithPin,
@@ -175,6 +192,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     selectCart,
     startShift,
     endShift,
+    changePin,
     isAuthenticated: !!state.user,
     isBoss: state.user?.role === 'boss',
     isWorker: state.user?.role === 'worker',

@@ -1,14 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, User as UserIcon } from 'lucide-react-native';
+import { LogOut, Moon, Sun, User as UserIcon, Key, ChevronRight, X } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 
 export default function WorkerProfileScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, changePin } = useAuth();
   const router = useRouter();
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [oldPin, setOldPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [isChanging, setIsChanging] = useState(false);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -28,6 +33,46 @@ export default function WorkerProfileScreen() {
     setThemeMode(isDark ? 'light' : 'dark');
   };
 
+  const handleChangePin = async () => {
+    if (!oldPin || !newPin || !confirmPin) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (newPin !== confirmPin) {
+      Alert.alert('Error', 'New PIN and confirmation do not match');
+      return;
+    }
+
+    if (newPin.length !== 4) {
+      Alert.alert('Error', 'PIN must be 4 digits');
+      return;
+    }
+
+    if (!/^\d{4}$/.test(newPin)) {
+      Alert.alert('Error', 'PIN must contain only numbers');
+      return;
+    }
+
+    setIsChanging(true);
+    try {
+      const success = await changePin(oldPin, newPin);
+      if (success) {
+        Alert.alert('Success', 'PIN changed successfully');
+        setShowPinModal(false);
+        setOldPin('');
+        setNewPin('');
+        setConfirmPin('');
+      } else {
+        Alert.alert('Error', 'Current PIN is incorrect');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to change PIN');
+    } finally {
+      setIsChanging(false);
+    }
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
@@ -40,11 +85,14 @@ export default function WorkerProfileScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
-          <View style={styles.listItem}>
-            <Text style={[styles.label, { color: theme.text }]}>PIN</Text>
-            <Text style={[styles.value, { color: theme.textSecondary }]}>{user?.pin}</Text>
-          </View>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Security</Text>
+          <TouchableOpacity style={styles.listItem} onPress={() => setShowPinModal(true)}>
+            <View style={styles.listItemLeft}>
+              <Key size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Change PIN</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.card }]}>
@@ -68,6 +116,74 @@ export default function WorkerProfileScreen() {
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={showPinModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPinModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Change PIN</Text>
+              <TouchableOpacity onPress={() => setShowPinModal(false)}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Current PIN</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={oldPin}
+                onChangeText={setOldPin}
+                placeholder="Enter current PIN"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="number-pad"
+                maxLength={4}
+                secureTextEntry
+              />
+
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New PIN</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={newPin}
+                onChangeText={setNewPin}
+                placeholder="Enter new 4-digit PIN"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="number-pad"
+                maxLength={4}
+                secureTextEntry
+              />
+
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Confirm New PIN</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={confirmPin}
+                onChangeText={setConfirmPin}
+                placeholder="Re-enter new PIN"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="number-pad"
+                maxLength={4}
+                secureTextEntry
+              />
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handleChangePin}
+                disabled={isChanging}
+              >
+                {isChanging ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Change PIN</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -147,6 +263,60 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   logoutText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+  },
+  modalButton: {
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalButtonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: '600' as const,
