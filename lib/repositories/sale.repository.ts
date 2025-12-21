@@ -322,4 +322,21 @@ export class SaleRepository extends BaseRepository {
     const twoMinutes = 2 * 60 * 1000;
     return now - sale.created_at < twoMinutes;
   }
+
+  async unvoidSale(saleId: string): Promise<void> {
+    const db = await this.getDb();
+    await db.runAsync(
+      'UPDATE sales SET voided_at = NULL, voided_by = NULL WHERE id = ?',
+      [saleId]
+    );
+    console.log('[SaleRepo] Unvoided sale:', saleId);
+  }
+
+  async deleteSale(saleId: string): Promise<void> {
+    const db = await this.getDb();
+    await db.runAsync('DELETE FROM sale_items WHERE sale_id = ?', [saleId]);
+    await db.runAsync('DELETE FROM payments WHERE sale_id = ?', [saleId]);
+    await db.runAsync('DELETE FROM sales WHERE id = ?', [saleId]);
+    console.log('[SaleRepo] Sale deleted:', saleId);
+  }
 }

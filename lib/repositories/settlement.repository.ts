@@ -203,4 +203,14 @@ export class SettlementRepository extends BaseRepository {
     const results = await db.getAllAsync<{ settlement_id: string; shift_id: string; worker_name: string; cash_difference_cents: number; created_at: number }>(query, params);
     return results;
   }
+
+  async delete(id: string, userId: string): Promise<void> {
+    const db = await this.getDb();
+    const old = await this.findById(id);
+    
+    await db.runAsync('DELETE FROM settlements WHERE id = ?', [id]);
+    
+    await this.auditLog(userId, 'settlements', id, 'delete', old, null);
+    console.log('[SettlementRepo] Settlement deleted:', id);
+  }
 }

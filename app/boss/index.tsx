@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save } from 'lucide-react-native';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -205,6 +205,35 @@ export default function BossDashboard() {
     },
   });
 
+  const deleteShiftMutation = useMutation({
+    mutationFn: async (shiftId: string) => {
+      await shiftRepo.deleteShift(shiftId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
+      Alert.alert('Success', 'Unsettled shift deleted');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to delete shift: ${error}`);
+    },
+  });
+
+  const deleteSettlementMutation = useMutation({
+    mutationFn: async (settlementId: string) => {
+      if (!user?.id) throw new Error('No user');
+      await settlementRepo.delete(settlementId, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
+      Alert.alert('Success', 'Cash difference settlement deleted');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to delete settlement: ${error}`);
+    },
+  });
+
+
+
   const handleSaveException = (type: any, title: string, notes?: string, linkedType?: string, linkedId?: string) => {
     Alert.alert(
       'Save Exception',
@@ -253,6 +282,38 @@ export default function BossDashboard() {
       ]
     );
   };
+
+  const handleDeleteShift = (shiftId: string, workerName: string) => {
+    Alert.alert(
+      'Delete Unsettled Shift',
+      `Are you sure you want to delete ${workerName}'s shift? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteShiftMutation.mutate(shiftId),
+        },
+      ]
+    );
+  };
+
+  const handleDeleteSettlement = (settlementId: string, workerName: string) => {
+    Alert.alert(
+      'Delete Cash Difference',
+      `Are you sure you want to delete ${workerName}'s settlement? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteSettlementMutation.mutate(settlementId),
+        },
+      ]
+    );
+  };
+
+
 
   if (isLoading) {
     return (
@@ -421,13 +482,21 @@ export default function BossDashboard() {
                       </View>
                     </View>
                     {stats.unsettled_shifts.slice(0, 3).map((shift) => (
-                      <View key={shift.shift_id} style={styles.exceptionDetail}>
-                        <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
-                          {shift.worker_name} at {shift.cart_name}
-                        </Text>
-                        <Text style={[styles.exceptionDetailTime, { color: theme.textSecondary }]}>
-                          {format(shift.clock_out, 'MMM d, h:mm a')}
-                        </Text>
+                      <View key={shift.shift_id} style={styles.exceptionDetailRow}>
+                        <View style={styles.exceptionDetail}>
+                          <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
+                            {shift.worker_name} at {shift.cart_name}
+                          </Text>
+                          <Text style={[styles.exceptionDetailTime, { color: theme.textSecondary }]}>
+                            {format(shift.clock_out, 'MMM d, h:mm a')}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.deleteIconButton, { backgroundColor: theme.error + '15' }]}
+                          onPress={() => handleDeleteShift(shift.shift_id, shift.worker_name)}
+                        >
+                          <X size={14} color={theme.error} />
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </TouchableOpacity>
@@ -469,13 +538,21 @@ export default function BossDashboard() {
                       </View>
                     </View>
                     {stats.cash_differences.slice(0, 3).map((diff) => (
-                      <View key={diff.settlement_id} style={styles.exceptionDetail}>
-                        <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
-                          {diff.worker_name}
-                        </Text>
-                        <Text style={[styles.exceptionDetailAmount, { color: diff.cash_difference_cents > 0 ? theme.success : theme.error }]}>
-                          {diff.cash_difference_cents > 0 ? '+' : ''}₱{(diff.cash_difference_cents / 100).toFixed(2)}
-                        </Text>
+                      <View key={diff.settlement_id} style={styles.exceptionDetailRow}>
+                        <View style={styles.exceptionDetail}>
+                          <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
+                            {diff.worker_name}
+                          </Text>
+                          <Text style={[styles.exceptionDetailAmount, { color: diff.cash_difference_cents > 0 ? theme.success : theme.error }]}>
+                            {diff.cash_difference_cents > 0 ? '+' : ''}₱{(diff.cash_difference_cents / 100).toFixed(2)}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.deleteIconButton, { backgroundColor: theme.error + '15' }]}
+                          onPress={() => handleDeleteSettlement(diff.settlement_id, diff.worker_name)}
+                        >
+                          <X size={14} color={theme.error} />
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </TouchableOpacity>
@@ -499,10 +576,7 @@ export default function BossDashboard() {
 
               {stats && stats.pending_expenses_count > 0 && (
                 <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
-                  <TouchableOpacity
-                    style={styles.exceptionMainContent}
-                    onPress={() => router.push('/boss/pending-expenses' as any)}
-                  >
+                  <View style={styles.exceptionMainContent}>
                     <View style={styles.exceptionHeader}>
                       <View style={[styles.exceptionIcon, { backgroundColor: theme.primary + '20' }]}>
                         <ShoppingBag size={20} color={theme.primary} />
@@ -516,7 +590,13 @@ export default function BossDashboard() {
                         </Text>
                       </View>
                     </View>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.viewAllButton, { backgroundColor: theme.primary + '10' }]}
+                      onPress={() => router.push('/boss/pending-expenses' as any)}
+                    >
+                      <Text style={[styles.viewAllText, { color: theme.primary }]}>View All</Text>
+                    </TouchableOpacity>
+                  </View>
                   <View style={styles.exceptionButtonRow}>
                     <TouchableOpacity
                       style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
@@ -551,6 +631,12 @@ export default function BossDashboard() {
                         </Text>
                       </View>
                     </View>
+                    <TouchableOpacity
+                      style={[styles.viewAllButton, { backgroundColor: theme.primary + '10' }]}
+                      onPress={() => router.push('/boss/sales' as any)}
+                    >
+                      <Text style={[styles.viewAllText, { color: theme.primary }]}>View All</Text>
+                    </TouchableOpacity>
                   </View>
                   <View style={styles.exceptionButtonRow}>
                     <TouchableOpacity
@@ -953,12 +1039,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  exceptionDetail: {
+  exceptionDetailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
     paddingLeft: 52,
+    paddingRight: 8,
+    gap: 8,
+  },
+  exceptionDetail: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  deleteIconButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  viewAllButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    marginLeft: 52,
+    alignSelf: 'flex-start',
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   exceptionDetailText: {
     fontSize: 14,
