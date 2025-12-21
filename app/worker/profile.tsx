@@ -219,7 +219,7 @@ export default function WorkerProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true}>
               <View style={styles.instructionSection}>
                 <Text style={[styles.instructionTitle, { color: theme.text }]}>Starting Your Shift</Text>
                 <Text style={[styles.instructionText, { color: theme.textSecondary }]}>
@@ -260,8 +260,7 @@ export default function WorkerProfileScreen() {
                   1. Go to &ldquo;My Shift&rdquo; tab{`\n`}
                   2. Review your shift summary{`\n`}
                   3. Count cash in drawer{`\n`}
-                  4. Enter actual ending cash amount{`\n`}
-                  5. Tap &ldquo;End Shift&rdquo; to complete
+                  4. Tap &ldquo;End Shift&rdquo; to complete
                 </Text>
               </View>
 
@@ -377,6 +376,7 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '100%',
     maxWidth: 400,
+    maxHeight: '80%',
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -398,6 +398,7 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     padding: 20,
+    maxHeight: 400,
   },
   inputLabel: {
     fontSize: 14,
