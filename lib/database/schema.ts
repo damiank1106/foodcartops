@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const MIGRATIONS = [
   {
@@ -251,6 +251,39 @@ export const MIGRATIONS = [
       ALTER TABLE sale_items DROP COLUMN unit_price_cents;
       ALTER TABLE sale_items DROP COLUMN line_total_cents;
       ALTER TABLE products DROP COLUMN price_cents;
+    `,
+  },
+  {
+    version: 5,
+    up: `
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT NOT NULL,
+        cart_id TEXT NOT NULL,
+        submitted_by_user_id TEXT NOT NULL,
+        approved_by_user_id TEXT,
+        status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK(status IN ('SUBMITTED', 'APPROVED', 'REJECTED')),
+        category TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        paid_from TEXT NOT NULL CHECK(paid_from IN ('CASH_DRAWER', 'PERSONAL', 'COMPANY')),
+        notes TEXT,
+        receipt_image_uri TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        reviewed_at INTEGER,
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        FOREIGN KEY (submitted_by_user_id) REFERENCES users(id),
+        FOREIGN KEY (approved_by_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_expenses_shift_id ON expenses(shift_id);
+      CREATE INDEX idx_expenses_status ON expenses(status);
+      CREATE INDEX idx_expenses_submitted_by ON expenses(submitted_by_user_id);
+      CREATE INDEX idx_expenses_created_at ON expenses(created_at);
+    `,
+    down: `
+      DROP TABLE IF EXISTS expenses;
     `,
   },
 ];

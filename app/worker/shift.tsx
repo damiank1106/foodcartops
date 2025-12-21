@@ -14,7 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, MapPin, LogOut, Coins, CreditCard, Wallet, TrendingUp, Activity } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { CartRepository, ShiftRepository, SaleRepository } from '@/lib/repositories';
+import { CartRepository, ShiftRepository, SaleRepository, ExpenseRepository } from '@/lib/repositories';
 import { format } from 'date-fns';
 
 export default function WorkerShiftScreen() {
@@ -28,6 +28,7 @@ export default function WorkerShiftScreen() {
   const cartRepo = new CartRepository();
   const shiftRepo = new ShiftRepository();
   const saleRepo = new SaleRepository();
+  const expenseRepo = new ExpenseRepository();
 
   const { data: carts, isLoading: cartsLoading } = useQuery({
     queryKey: ['carts'],
@@ -52,6 +53,15 @@ export default function WorkerShiftScreen() {
       return sales.filter(sale => sale.created_at >= activeShift.clock_in);
     },
     enabled: !!activeShift && !!user,
+  });
+
+  const { data: shiftExpenses } = useQuery({
+    queryKey: ['shift-expenses', activeShiftId],
+    queryFn: async () => {
+      if (!activeShiftId) return [];
+      return expenseRepo.getApprovedExpensesForShift(activeShiftId);
+    },
+    enabled: !!activeShiftId,
   });
 
   const { data: timeline } = useQuery({
@@ -118,7 +128,7 @@ export default function WorkerShiftScreen() {
   }
 
   const calculateTotals = () => {
-    if (!shiftSales) return { cash: 0, card: 0, gcash: 0, total: 0, transactions: 0 };
+    if (!shiftSales) return { cash: 0, card: 0, gcash: 0, total: 0, transactions: 0, cashExpenses: 0 };
     
     let cash = 0;
     let card = 0;
@@ -132,6 +142,15 @@ export default function WorkerShiftScreen() {
         else if (payment.method === 'GCASH') gcash += amount;
       });
     });
+
+    let cashExpenses = 0;
+    if (shiftExpenses) {
+      shiftExpenses.forEach(expense => {
+        if (expense.paid_from === 'CASH_DRAWER') {
+          cashExpenses += expense.amount_cents / 100;
+        }
+      });
+    }
     
     return {
       cash,
@@ -139,6 +158,7 @@ export default function WorkerShiftScreen() {
       gcash,
       total: cash + card + gcash,
       transactions: shiftSales.length,
+      cashExpenses,
     };
   };
 
@@ -150,7 +170,7 @@ export default function WorkerShiftScreen() {
     const minutes = duration % 60;
     const totals = calculateTotals();
     const startingCashDollars = activeShift.starting_cash_cents / 100;
-    const expectedCashDollars = startingCashDollars + totals.cash;
+    const expectedCashDollars = startingCashDollars + totals.cash - totals.cashExpenses;
 
     return (
       <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -233,6 +253,12 @@ export default function WorkerShiftScreen() {
                 <Text style={[styles.cashLabel, { color: theme.textSecondary }]}>+ Cash Sales</Text>
                 <Text style={[styles.cashValue, { color: theme.success }]}>+₱{totals.cash.toFixed(2)}</Text>
               </View>
+              {totals.cashExpenses > 0 && (
+                <View style={styles.cashRow}>
+                  <Text style={[styles.cashLabel, { color: theme.textSecondary }]}>- Cash Expenses</Text>
+                  <Text style={[styles.cashValue, { color: theme.error }]}>-₱{totals.cashExpenses.toFixed(2)}</Text>
+                </View>
+              )}
               <View style={[styles.cashRow, styles.cashRowTotal]}>
                 <Text style={[styles.cashLabel, { color: theme.text }]}>Expected Cash</Text>
                 <Text style={[styles.cashValueTotal, { color: theme.primary }]}>₱{expectedCashDollars.toFixed(2)}</Text>

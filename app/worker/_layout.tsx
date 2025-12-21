@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { ShoppingCart, Clock, User } from 'lucide-react-native';
+import { ShoppingCart, Clock, User, Receipt } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
@@ -52,6 +52,13 @@ export default function WorkerLayout() {
         options={{
           title: 'My Shift',
           tabBarIcon: ({ color }) => <Clock size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="expenses"
+        options={{
+          title: 'Expenses',
+          tabBarIcon: ({ color }) => <Receipt size={24} color={color} />,
         }}
       />
       <Tabs.Screen

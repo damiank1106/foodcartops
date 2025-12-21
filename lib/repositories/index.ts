@@ -6,3 +6,4 @@ export { ShiftRepository } from './shift.repository';
 export { AuditRepository } from './audit.repository';
 export { SyncRepository } from './sync.repository';
 export { PaymentRepository } from './payment.repository';
+export { ExpenseRepository } from './expense.repository';

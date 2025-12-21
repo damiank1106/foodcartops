@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { LayoutDashboard, Users, FileText, Settings } from 'lucide-react-native';
+import { LayoutDashboard, Users, FileText, Settings, Receipt } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
@@ -55,6 +55,13 @@ export default function BossLayout() {
         }}
       />
       <Tabs.Screen
+        name="expenses"
+        options={{
+          title: 'Expenses',
+          tabBarIcon: ({ color }) => <Receipt size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="workers"
         options={{
           title: 'Workers',
@@ -70,6 +77,12 @@ export default function BossLayout() {
       />
       <Tabs.Screen
         name="debug"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sales"
         options={{
           href: null,
         }}

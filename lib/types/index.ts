@@ -6,6 +6,10 @@ export type SyncAction = 'create' | 'update' | 'delete';
 
 export type SyncStatus = 'pending' | 'syncing' | 'failed' | 'synced';
 
+export type ExpenseStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+
+export type PaidFrom = 'CASH_DRAWER' | 'PERSONAL' | 'COMPANY';
+
 export interface User {
   id: string;
   name: string;
@@ -146,4 +150,27 @@ export interface AppSetting {
   key: string;
   value_json: string;
   updated_at: number;
+}
+
+export interface Expense {
+  id: string;
+  shift_id: string;
+  cart_id: string;
+  submitted_by_user_id: string;
+  approved_by_user_id?: string;
+  status: ExpenseStatus;
+  category: string;
+  amount_cents: number;
+  paid_from: PaidFrom;
+  notes?: string;
+  receipt_image_uri?: string;
+  created_at: number;
+  updated_at: number;
+  reviewed_at?: number;
+}
+
+export interface ExpenseWithDetails extends Expense {
+  submitted_by_name: string;
+  approved_by_name?: string;
+  cart_name: string;
 }
