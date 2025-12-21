@@ -59,15 +59,29 @@ export interface SaleItem {
   created_at: number;
 }
 
+export type ShiftStatus = 'active' | 'ended';
+
 export interface WorkerShift {
   id: string;
   worker_id: string;
   cart_id: string;
   clock_in: number;
   clock_out?: number;
+  starting_cash_cents: number;
+  expected_cash_cents: number;
+  notes?: string;
+  status: ShiftStatus;
   created_at: number;
   updated_at: number;
   synced_at?: number;
+}
+
+export interface ShiftEvent {
+  id: string;
+  shift_id: string;
+  type: string;
+  payload_json?: string;
+  created_at: number;
 }
 
 export interface AuditLog {

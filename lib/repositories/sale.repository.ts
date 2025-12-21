@@ -1,5 +1,6 @@
 import { BaseRepository } from './base';
 import { Sale, SaleItem, SaleWithItems, PaymentMethod } from '../types';
+import { ShiftRepository } from './shift.repository';
 import { startOfDay, endOfDay } from 'date-fns';
 
 export class SaleRepository extends BaseRepository {
@@ -15,6 +16,7 @@ export class SaleRepository extends BaseRepository {
       quantity: number;
       unit_price: number;
     }[];
+    shift_id?: string;
   }): Promise<Sale> {
     const db = await this.getDb();
     const saleId = this.generateId();
@@ -46,6 +48,23 @@ export class SaleRepository extends BaseRepository {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [itemId, saleId, item.product_id, item.quantity, item.unit_price, totalPrice, now]
       );
+    }
+
+    if (data.shift_id) {
+      const shiftRepo = new ShiftRepository();
+      await shiftRepo.addShiftEvent(data.shift_id, 'sale_completed', {
+        sale_id: saleId,
+        total_amount: data.total_amount,
+        payment_method: data.payment_method,
+        items_count: data.items.length,
+      });
+
+      const totalCashSales = data.payment_method === 'cash' ? data.total_amount : 0;
+      const shift = await shiftRepo.getShiftById(data.shift_id);
+      if (shift) {
+        const newExpectedCash = shift.starting_cash_cents + (totalCashSales * 100);
+        await shiftRepo.updateExpectedCash(data.shift_id, newExpectedCash);
+      }
     }
 
     console.log('[SaleRepo] Created sale:', sale.id);

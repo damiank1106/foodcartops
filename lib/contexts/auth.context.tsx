@@ -108,7 +108,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const logout = async () => {
     try {
       if (state.user?.role === 'worker' && state.activeShiftId) {
-        await shiftRepo.clockOut(state.activeShiftId);
+        await shiftRepo.endShift(state.activeShiftId);
       }
 
       await SecureStore.deleteItemAsync(AUTH_KEY);
@@ -137,13 +137,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
-  const startShift = async (cartId: string) => {
+  const startShift = async (cartId: string, startingCashCents: number = 0) => {
     if (!state.user || state.user.role !== 'worker') {
       throw new Error('Only workers can start shifts');
     }
 
     try {
-      const shift = await shiftRepo.clockIn(state.user.id, cartId);
+      const shift = await shiftRepo.startShift(state.user.id, cartId, startingCashCents);
       setState((prev) => ({ ...prev, activeShiftId: shift.id, selectedCartId: cartId }));
       await SecureStore.setItemAsync(CART_KEY, cartId);
       console.log('[Auth] Shift started:', shift.id);
@@ -153,13 +153,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
-  const endShift = async () => {
+  const endShift = async (notes?: string) => {
     if (!state.activeShiftId) {
       throw new Error('No active shift');
     }
 
     try {
-      await shiftRepo.clockOut(state.activeShiftId);
+      await shiftRepo.endShift(state.activeShiftId, notes);
       setState((prev) => ({ ...prev, activeShiftId: null }));
       console.log('[Auth] Shift ended');
     } catch (error) {

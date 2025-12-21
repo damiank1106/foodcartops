@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const MIGRATIONS = [
   {
@@ -131,6 +131,34 @@ export const MIGRATIONS = [
     `,
     down: `
       DROP TABLE IF EXISTS app_settings;
+    `,
+  },
+  {
+    version: 3,
+    up: `
+      ALTER TABLE worker_shifts ADD COLUMN starting_cash_cents INTEGER DEFAULT 0;
+      ALTER TABLE worker_shifts ADD COLUMN expected_cash_cents INTEGER DEFAULT 0;
+      ALTER TABLE worker_shifts ADD COLUMN notes TEXT;
+      ALTER TABLE worker_shifts ADD COLUMN status TEXT DEFAULT 'active' CHECK(status IN ('active', 'ended'));
+
+      CREATE TABLE IF NOT EXISTS shift_events (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        payload_json TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id)
+      );
+
+      CREATE INDEX idx_shift_events_shift_id ON shift_events(shift_id);
+      CREATE INDEX idx_shift_events_created_at ON shift_events(created_at);
+    `,
+    down: `
+      DROP TABLE IF EXISTS shift_events;
+      ALTER TABLE worker_shifts DROP COLUMN starting_cash_cents;
+      ALTER TABLE worker_shifts DROP COLUMN expected_cash_cents;
+      ALTER TABLE worker_shifts DROP COLUMN notes;
+      ALTER TABLE worker_shifts DROP COLUMN status;
     `,
   },
 ];

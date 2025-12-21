@@ -43,6 +43,7 @@ export default function WorkerSaleScreen() {
       total: number;
     }) => {
       if (!user || !selectedCartId) throw new Error('Missing user or cart');
+      if (!activeShiftId) throw new Error('No active shift');
 
       return saleRepo.create({
         cart_id: selectedCartId,
@@ -50,10 +51,13 @@ export default function WorkerSaleScreen() {
         total_amount: data.total,
         payment_method: selectedPayment,
         items: data.items,
+        shift_id: activeShiftId,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['shift-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['shift-timeline'] });
       setCart(new Map());
       Alert.alert('Success', 'Sale completed successfully!');
     },

@@ -83,8 +83,8 @@ export async function seedDatabase(): Promise<void> {
       createdProducts.push(p);
     }
 
-    await shiftRepo.clockIn(worker1.id, cart1.id);
-    await shiftRepo.clockIn(worker2.id, cart2.id);
+    await shiftRepo.startShift(worker1.id, cart1.id, 10000);
+    await shiftRepo.startShift(worker2.id, cart2.id, 15000);
     const sales = [
       {
         cart_id: cart1.id,
