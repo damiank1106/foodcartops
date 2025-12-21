@@ -13,6 +13,10 @@ export class SettlementRepository extends BaseRepository {
     netDueToWorkerCents: number,
     netDueToBossCents: number,
     computedJson: string,
+    settlementDay: string,
+    dailyNetSalesCents: number,
+    managerShareCents: number,
+    ownerShareCents: number,
     notes?: string
   ): Promise<Settlement> {
     const db = await this.getDb();
@@ -24,8 +28,9 @@ export class SettlementRepository extends BaseRepository {
         id, shift_id, cart_id, worker_user_id, created_by_user_id,
         cash_expected_cents, cash_counted_cents, cash_difference_cents,
         net_due_to_worker_cents, net_due_to_boss_cents, computed_json,
+        settlement_day, daily_net_sales_cents, manager_share_cents, owner_share_cents,
         status, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?)`,
       [
         id,
         shiftId,
@@ -38,6 +43,10 @@ export class SettlementRepository extends BaseRepository {
         netDueToWorkerCents,
         netDueToBossCents,
         computedJson,
+        settlementDay,
+        dailyNetSalesCents,
+        managerShareCents,
+        ownerShareCents,
         notes || null,
         now,
         now,
@@ -49,6 +58,10 @@ export class SettlementRepository extends BaseRepository {
       cart_id: cartId,
       worker_user_id: workerUserId,
       status: 'DRAFT',
+      settlement_day: settlementDay,
+      daily_net_sales_cents: dailyNetSalesCents,
+      manager_share_cents: managerShareCents,
+      owner_share_cents: ownerShareCents,
     });
 
     return this.findById(id) as Promise<Settlement>;

@@ -203,6 +203,10 @@ export interface Settlement {
   net_due_to_boss_cents: number;
   status: SettlementStatus;
   notes?: string;
+  settlement_day?: string;
+  daily_net_sales_cents: number;
+  manager_share_cents: number;
+  owner_share_cents: number;
   created_at: number;
   updated_at: number;
   finalized_at?: number;

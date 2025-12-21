@@ -1,4 +1,6 @@
 import { WorkerShift, PayrollRule, SettlementComputation } from '../types';
+import { format } from 'date-fns';
+import { SaleRepository } from '../repositories/sale.repository';
 
 export class SettlementService {
   static async computeSettlement(
@@ -51,5 +53,46 @@ export class SettlementService {
 
   static computeCashDifference(cashExpectedCents: number, cashCountedCents: number): number {
     return cashCountedCents - cashExpectedCents;
+  }
+
+  static async computeDailyNetSales(cartId: string, settlementDay: string): Promise<number> {
+    const saleRepo = new SaleRepository();
+    const dayStart = new Date(settlementDay + 'T00:00:00');
+    const dayEnd = new Date(settlementDay + 'T23:59:59');
+
+    const sales = await saleRepo.findAll({
+      cart_id: cartId,
+      start_date: dayStart,
+      end_date: dayEnd,
+      include_voided: false,
+    });
+
+    const dailyNetSalesCents = sales.reduce((sum, sale) => {
+      return sum + sale.total_cents;
+    }, 0);
+
+    console.log(`[SettlementService] Daily net sales for cart ${cartId} on ${settlementDay}: ₱${(dailyNetSalesCents / 100).toFixed(2)}`);
+
+    return dailyNetSalesCents;
+  }
+
+  static computeNetSalesSplit(dailyNetSalesCents: number, managerBps: number = 7000, ownerBps: number = 3000): {
+    managerShareCents: number;
+    ownerShareCents: number;
+  } {
+    const managerShareCents = Math.floor((dailyNetSalesCents * managerBps) / 10000);
+    const ownerShareCents = dailyNetSalesCents - managerShareCents;
+
+    console.log(`[SettlementService] Split ${(dailyNetSalesCents / 100).toFixed(2)}: Manager ${(managerShareCents / 100).toFixed(2)} (${managerBps/100}%), Owner ${(ownerShareCents / 100).toFixed(2)} (${ownerBps/100}%)`);
+
+    return {
+      managerShareCents,
+      ownerShareCents,
+    };
+  }
+
+  static getSettlementDay(shift: WorkerShift): string {
+    const clockOut = shift.clock_out || Date.now();
+    return format(clockOut, 'yyyy-MM-dd');
   }
 }

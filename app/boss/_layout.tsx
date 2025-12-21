@@ -101,6 +101,12 @@ export default function BossLayout() {
         }}
       />
       <Tabs.Screen
+        name="settlements"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="workers"
         options={{
           href: null,

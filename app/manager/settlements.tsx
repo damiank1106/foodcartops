@@ -120,6 +120,15 @@ export default function ManagerSettlementsScreen() {
         data.cashCountedCents
       );
 
+      const settlementDay = SettlementService.getSettlementDay(shift);
+      const dailyNetSalesCents = await SettlementService.computeDailyNetSales(
+        shift.cart_id,
+        settlementDay
+      );
+      const { managerShareCents, ownerShareCents } = SettlementService.computeNetSalesSplit(
+        dailyNetSalesCents
+      );
+
       const settlement = await settlementRepo.create(
         data.shiftId,
         shift.cart_id,
@@ -131,6 +140,10 @@ export default function ManagerSettlementsScreen() {
         computation.net_due_to_worker_cents,
         computation.net_due_to_boss_cents,
         JSON.stringify(computation),
+        settlementDay,
+        dailyNetSalesCents,
+        managerShareCents,
+        ownerShareCents,
         data.notes
       );
 

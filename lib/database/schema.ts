@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const MIGRATIONS = [
   {
@@ -389,6 +389,28 @@ export const MIGRATIONS = [
       DROP TABLE IF EXISTS payroll_rules;
       DROP TABLE IF EXISTS settlements;
       DROP TABLE IF EXISTS user_cart_assignments;
+    `,
+  },
+  {
+    version: 7,
+    up: `
+      ALTER TABLE settlements ADD COLUMN settlement_day TEXT;
+      ALTER TABLE settlements ADD COLUMN daily_net_sales_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN manager_share_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN owner_share_cents INTEGER NOT NULL DEFAULT 0;
+
+      INSERT OR IGNORE INTO app_settings (key, value_json, updated_at)
+      VALUES (
+        'net_sales_split_bps',
+        '{"manager_bps": 7000, "owner_bps": 3000}',
+        ${Date.now()}
+      );
+    `,
+    down: `
+      ALTER TABLE settlements DROP COLUMN settlement_day;
+      ALTER TABLE settlements DROP COLUMN daily_net_sales_cents;
+      ALTER TABLE settlements DROP COLUMN manager_share_cents;
+      ALTER TABLE settlements DROP COLUMN owner_share_cents;
     `,
   },
 ];
