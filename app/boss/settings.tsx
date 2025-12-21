@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository } from '@/lib/repositories';
+import { resetDatabase } from '@/lib/database/init';
+import { seedDatabase } from '@/lib/utils/seed';
 
 export default function SettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
@@ -109,6 +111,34 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleResetDatabase = () => {
+    Alert.alert(
+      'Reset Database',
+      'This will delete ALL data and reset to factory defaults. Only the Boss account with PIN 1234 will remain. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('[Settings] Starting database reset...');
+              await logout();
+              await resetDatabase();
+              await seedDatabase();
+              Alert.alert('Success', 'Database reset complete. Please login with PIN 1234', [
+                { text: 'OK', onPress: () => router.replace('/' as any) },
+              ]);
+            } catch (error) {
+              console.error('[Settings] Reset failed:', error);
+              Alert.alert('Error', 'Failed to reset database. Please restart the app.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
@@ -164,6 +194,13 @@ export default function SettingsScreen() {
               <Text style={[styles.label, { color: theme.text }]}>Backup Data</Text>
             </View>
             <Text style={[styles.value, { color: theme.textSecondary }]}>Coming Soon</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.listItem} onPress={handleResetDatabase}>
+            <View style={styles.listItemLeft}>
+              <RotateCcw size={20} color={theme.error} />
+              <Text style={[styles.label, { color: theme.error }]}>Reset Database</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
 

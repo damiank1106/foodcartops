@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const MIGRATIONS = [
   {
@@ -438,6 +438,43 @@ export const MIGRATIONS = [
     `,
     down: `
       DROP TABLE IF EXISTS boss_saved_items;
+    `,
+  },
+  {
+    version: 9,
+    up: `
+      CREATE TABLE expenses_new (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT,
+        cart_id TEXT NOT NULL,
+        submitted_by_user_id TEXT NOT NULL,
+        approved_by_user_id TEXT,
+        status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK(status IN ('SUBMITTED', 'APPROVED', 'REJECTED', 'DRAFT')),
+        category TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        paid_from TEXT NOT NULL CHECK(paid_from IN ('CASH_DRAWER', 'PERSONAL', 'COMPANY')),
+        notes TEXT,
+        receipt_image_uri TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        reviewed_at INTEGER,
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        FOREIGN KEY (submitted_by_user_id) REFERENCES users(id),
+        FOREIGN KEY (approved_by_user_id) REFERENCES users(id)
+      );
+
+      INSERT INTO expenses_new SELECT * FROM expenses;
+      DROP TABLE expenses;
+      ALTER TABLE expenses_new RENAME TO expenses;
+
+      CREATE INDEX idx_expenses_shift_id ON expenses(shift_id);
+      CREATE INDEX idx_expenses_status ON expenses(status);
+      CREATE INDEX idx_expenses_submitted_by ON expenses(submitted_by_user_id);
+      CREATE INDEX idx_expenses_created_at ON expenses(created_at);
+    `,
+    down: `
+      DROP TABLE expenses;
     `,
   },
 ];

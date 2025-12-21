@@ -291,6 +291,13 @@ export default function SettlementEditorScreen() {
       <Stack.Screen
         options={{
           title: isFinalized ? 'Settlement (Finalized)' : 'Create Settlement',
+          headerStyle: {
+            backgroundColor: '#000',
+          },
+          headerTintColor: '#FFF',
+          headerTitleStyle: {
+            color: '#FFF',
+          },
         }}
       />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

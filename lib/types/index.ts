@@ -6,7 +6,7 @@ export type SyncAction = 'create' | 'update' | 'delete';
 
 export type SyncStatus = 'pending' | 'syncing' | 'failed' | 'synced';
 
-export type ExpenseStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+export type ExpenseStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'DRAFT';
 
 export type PaidFrom = 'CASH_DRAWER' | 'PERSONAL' | 'COMPANY';
 

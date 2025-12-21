@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle } from 'lucide-react-native';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
+import { useAuth } from '@/lib/contexts/auth.context';
 import { SaleRepository, ShiftRepository, CartRepository, ExpenseRepository, AuditRepository } from '@/lib/repositories';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
+import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
 import { startOfDay, endOfDay, format } from 'date-fns';
 
 export default function BossDashboard() {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const router = useRouter();
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity' | 'saved'>('overview');
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -19,6 +22,7 @@ export default function BossDashboard() {
   const expenseRepo = new ExpenseRepository();
   const settlementRepo = new SettlementRepository();
   const auditRepo = new AuditRepository();
+  const savedItemsRepo = new BossSavedItemsRepository();
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['boss-monitoring-stats'],
@@ -95,6 +99,16 @@ export default function BossDashboard() {
     refetchInterval: 30000,
   });
 
+  const { data: savedItems } = useQuery({
+    queryKey: ['saved-items', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      return savedItemsRepo.findAll({ created_by_user_id: user.id });
+    },
+    enabled: !!user?.id,
+    refetchInterval: 10000,
+  });
+
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -136,6 +150,19 @@ export default function BossDashboard() {
           <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
             Activity
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, selectedTab === 'saved' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+          onPress={() => setSelectedTab('saved')}
+        >
+          <Text style={[styles.tabText, { color: selectedTab === 'saved' ? theme.primary : theme.textSecondary }]}>
+            Saved
+          </Text>
+          {savedItems && savedItems.length > 0 && (
+            <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+              <Text style={styles.badgeText}>{savedItems.length}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -372,6 +399,51 @@ export default function BossDashboard() {
               )}
             </>
           )}
+
+          {selectedTab === 'saved' && (
+            <>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>Saved Items</Text>
+
+              {savedItems && savedItems.length > 0 ? (
+                savedItems.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.savedCard, { backgroundColor: theme.card }]}
+                    onPress={() => router.push('/boss/saved' as any)}
+                  >
+                    <View style={styles.savedHeader}>
+                      <View style={[styles.savedIcon, { backgroundColor: theme.primary + '20' }]}>
+                        <Bookmark size={20} color={theme.primary} />
+                      </View>
+                      <View style={styles.savedInfo}>
+                        <Text style={[styles.savedTitle, { color: theme.text }]}>
+                          {item.title}
+                        </Text>
+                        <Text style={[styles.savedType, { color: theme.textSecondary }]}>
+                          {item.type} • {item.status}
+                        </Text>
+                      </View>
+                    </View>
+                    {item.notes && (
+                      <Text style={[styles.savedNotes, { color: theme.textSecondary }]} numberOfLines={2}>
+                        {item.notes}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.emptyState}>
+                  <Bookmark size={64} color={theme.textSecondary} />
+                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                    No saved items
+                  </Text>
+                  <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                    Save exceptions and alerts for quick access
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -599,5 +671,49 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  savedCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  savedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  savedIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  savedInfo: {
+    flex: 1,
+  },
+  savedTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  savedType: {
+    fontSize: 12,
+    textTransform: 'capitalize',
+  },
+  savedNotes: {
+    fontSize: 14,
+    marginTop: 4,
   },
 });

@@ -7,6 +7,7 @@ import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
+import { Stack } from 'expo-router';
 
 export default function CashDifferencesScreen() {
   const { theme } = useTheme();
@@ -71,6 +72,7 @@ export default function CashDifferencesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <Stack.Screen options={{ title: 'Cash Differences' }} />
       <ScrollView style={styles.content}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]}>Cash Differences</Text>

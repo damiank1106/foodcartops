@@ -4,7 +4,7 @@ import { BaseRepository } from './base';
 
 export class ExpenseRepository extends BaseRepository {
   async create(data: {
-    shift_id: string;
+    shift_id: string | null;
     cart_id: string;
     submitted_by_user_id: string;
     category: string;
@@ -12,6 +12,7 @@ export class ExpenseRepository extends BaseRepository {
     paid_from: PaidFrom;
     notes?: string;
     receipt_image_uri?: string;
+    status?: ExpenseStatus;
   }): Promise<Expense> {
     const db = await getDatabase();
     const now = Date.now();
@@ -33,7 +34,7 @@ export class ExpenseRepository extends BaseRepository {
         data.paid_from,
         data.notes || null,
         data.receipt_image_uri || null,
-        'SUBMITTED',
+        data.status || 'SUBMITTED',
         now,
         now,
       ]

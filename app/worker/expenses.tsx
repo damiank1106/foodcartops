@@ -13,7 +13,7 @@ import {
   Image,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Camera, X, Receipt, FileText, AlertCircle } from 'lucide-react-native';
+import { Plus, Camera, X, Receipt, FileText, AlertCircle, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { ExpenseRepository, AuditRepository } from '@/lib/repositories';
@@ -47,14 +47,16 @@ export default function WorkerExpensesScreen() {
   const [notes, setNotes] = useState<string>('');
   const [receiptUri, setReceiptUri] = useState<string>('');
 
-  const expenseRepo = new ExpenseRepository();
-  const auditRepo = new AuditRepository();
+  const expenseRepo = React.useMemo(() => new ExpenseRepository(), []);
+  const auditRepo = React.useMemo(() => new AuditRepository(), []);
 
   const { data: expenses, isLoading } = useQuery({
-    queryKey: ['worker-expenses', user?.id, activeShiftId],
-    queryFn: () => {
+    queryKey: ['worker-expenses', user?.id],
+    queryFn: async () => {
       if (!user?.id) return [];
-      return expenseRepo.findWithDetails({ submitted_by_user_id: user.id });
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const allExpenses = await expenseRepo.findWithDetails({ submitted_by_user_id: user.id });
+      return allExpenses.filter(e => e.created_at >= sevenDaysAgo);
     },
     enabled: !!user?.id,
   });
@@ -67,12 +69,16 @@ export default function WorkerExpensesScreen() {
       notes?: string;
       receipt_image_uri?: string;
     }) => {
-      if (!user || !activeShiftId || !selectedCartId) {
-        throw new Error('No active shift');
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      if (!selectedCartId) {
+        throw new Error('No cart selected');
       }
 
       const expense = await expenseRepo.create({
-        shift_id: activeShiftId,
+        shift_id: activeShiftId ? activeShiftId : null,
         cart_id: selectedCartId,
         submitted_by_user_id: user.id,
         category: data.category,
@@ -80,6 +86,7 @@ export default function WorkerExpensesScreen() {
         paid_from: data.paid_from,
         notes: data.notes,
         receipt_image_uri: data.receipt_image_uri,
+        status: activeShiftId ? 'SUBMITTED' : 'DRAFT',
       });
 
       await auditRepo.log({
@@ -97,12 +104,71 @@ export default function WorkerExpensesScreen() {
       queryClient.invalidateQueries({ queryKey: ['shift-expenses'] });
       setShowAddModal(false);
       resetForm();
-      Alert.alert('Success', 'Expense submitted for approval');
+      Alert.alert('Success', activeShiftId ? 'Expense submitted for approval' : 'Expense saved as draft');
     },
     onError: () => {
       Alert.alert('Error', 'Failed to submit expense');
     },
   });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (expenseId: string) => {
+      await expenseRepo.delete(expenseId);
+      await auditRepo.log({
+        user_id: user?.id || '',
+        entity_type: 'expense',
+        entity_id: expenseId,
+        action: 'delete',
+        new_data: JSON.stringify({ reason: 'manual_delete' }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['worker-expenses'] });
+      Alert.alert('Success', 'Expense deleted');
+    },
+    onError: () => {
+      Alert.alert('Error', 'Failed to delete expense');
+    },
+  });
+
+  React.useEffect(() => {
+    const cleanupOldExpenses = async () => {
+      if (!user?.id) return;
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const allExpenses = await expenseRepo.findWithDetails({ submitted_by_user_id: user.id });
+      const oldDrafts = allExpenses.filter(e => 
+        e.created_at < sevenDaysAgo && (e.status === 'DRAFT' || e.status === 'SUBMITTED')
+      );
+      
+      for (const expense of oldDrafts) {
+        await expenseRepo.delete(expense.id);
+        await auditRepo.log({
+          user_id: user.id,
+          entity_type: 'expense',
+          entity_id: expense.id,
+          action: 'delete',
+          new_data: JSON.stringify({ reason: 'auto_cleanup_7_days' }),
+        });
+      }
+      
+      if (oldDrafts.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['worker-expenses'] });
+      }
+    };
+    
+    cleanupOldExpenses();
+  }, [user?.id, expenseRepo, auditRepo, queryClient]);
+
+  const handleDeleteExpense = (expenseId: string) => {
+    Alert.alert(
+      'Delete Expense',
+      'Are you sure you want to delete this expense?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteExpenseMutation.mutate(expenseId) },
+      ]
+    );
+  };
 
   const resetForm = () => {
     setCategory('Supplies');
@@ -159,11 +225,6 @@ export default function WorkerExpensesScreen() {
       return;
     }
 
-    if (!activeShiftId) {
-      Alert.alert('Error', 'You need an active shift to submit expenses');
-      return;
-    }
-
     const cents = Math.round(parseFloat(amount) * 100);
     createExpenseMutation.mutate({
       category,
@@ -200,13 +261,24 @@ export default function WorkerExpensesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {!activeShiftId && (
-        <View style={[styles.warningBanner, { backgroundColor: theme.warning + '20' }]}>
-          <AlertCircle size={20} color={theme.warning || '#F59E0B'} />
-          <Text style={[styles.warningText, { color: theme.warning || '#F59E0B' }]}>
-            Start a shift to submit expenses
-          </Text>
+        <View style={[styles.infoBanner, { backgroundColor: theme.primary + '20' }]}>
+          <AlertCircle size={20} color={theme.primary} />
+          <View style={styles.infoBannerText}>
+            <Text style={[styles.infoBannerTitle, { color: theme.primary }]}>
+              No active shift
+            </Text>
+            <Text style={[styles.infoBannerSubtitle, { color: theme.primary }]}>
+              Expenses will be saved as drafts until you start a shift
+            </Text>
+          </View>
         </View>
       )}
+      
+      <View style={[styles.retentionBanner, { backgroundColor: theme.warning + '15' }]}>
+        <Text style={[styles.retentionText, { color: theme.textSecondary }]}>
+          Expenses older than 7 days are automatically removed.
+        </Text>
+      </View>
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.content}>
@@ -216,10 +288,8 @@ export default function WorkerExpensesScreen() {
               style={[
                 styles.addButton,
                 { backgroundColor: theme.primary },
-                !activeShiftId && styles.addButtonDisabled,
               ]}
               onPress={() => setShowAddModal(true)}
-              disabled={!activeShiftId}
             >
               <Plus size={20} color="#FFF" />
               <Text style={styles.addButtonText}>Add Expense</Text>
@@ -241,15 +311,23 @@ export default function WorkerExpensesScreen() {
                       ₱{(expense.amount_cents / 100).toFixed(2)}
                     </Text>
                   </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusColor(expense.status) + '20' },
-                    ]}
-                  >
-                    <Text style={[styles.statusText, { color: getStatusColor(expense.status) }]}>
-                      {getStatusLabel(expense.status)}
-                    </Text>
+                  <View style={styles.expenseHeaderRight}>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: getStatusColor(expense.status) + '20' },
+                      ]}
+                    >
+                      <Text style={[styles.statusText, { color: getStatusColor(expense.status) }]}>
+                        {getStatusLabel(expense.status)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.deleteButton, { backgroundColor: theme.error + '20' }]}
+                      onPress={() => handleDeleteExpense(expense.id)}
+                    >
+                      <Trash2 size={16} color={theme.error} />
+                    </TouchableOpacity>
                   </View>
                 </View>
 
@@ -470,6 +548,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
   },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+  },
+  infoBannerText: {
+    flex: 1,
+  },
+  infoBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    marginBottom: 2,
+  },
+  infoBannerSubtitle: {
+    fontSize: 12,
+  },
+  retentionBanner: {
+    padding: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 8,
+  },
+  retentionText: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
   scrollView: {
     flex: 1,
   },
@@ -520,6 +626,18 @@ const styles = StyleSheet.create({
   },
   expenseLeft: {
     flex: 1,
+  },
+  expenseHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   categoryBadge: {
     flexDirection: 'row',
