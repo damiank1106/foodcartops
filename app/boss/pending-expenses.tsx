@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, Image } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ShoppingBag, Check, X, Bookmark } from 'lucide-react-native';
+import { ShoppingBag, Check, X, Bookmark, ImageIcon } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -14,6 +14,7 @@ export default function PendingExpensesScreen() {
   const queryClient = useQueryClient();
   const expenseRepo = new ExpenseRepository();
   const savedItemsRepo = new BossSavedItemsRepository();
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const { data: pendingExpenses, isLoading } = useQuery({
     queryKey: ['pending-expenses', assignedCartIds, isBoss],
@@ -142,6 +143,23 @@ export default function PendingExpensesScreen() {
                   <Text style={[styles.notes, { color: theme.textSecondary }]}>{expense.notes}</Text>
                 )}
 
+                {expense.receipt_image_uri && (
+                  <TouchableOpacity
+                    style={[styles.receiptContainer, { backgroundColor: theme.background }]}
+                    onPress={() => setSelectedImage(expense.receipt_image_uri || null)}
+                  >
+                    <Image
+                      source={{ uri: expense.receipt_image_uri }}
+                      style={styles.receiptPreview}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.receiptOverlay}>
+                      <ImageIcon size={20} color="#FFF" />
+                      <Text style={styles.receiptOverlayText}>Tap to view</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
                 <View style={styles.actions}>
                   <TouchableOpacity
                     style={[styles.saveIconButton, { backgroundColor: theme.primary + '20' }]}
@@ -185,6 +203,38 @@ export default function PendingExpensesScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={!!selectedImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedImage(null)}
+      >
+        <View style={styles.imageModalOverlay}>
+          <TouchableOpacity
+            style={styles.imageModalCloseArea}
+            activeOpacity={1}
+            onPress={() => setSelectedImage(null)}
+          >
+            <View style={styles.imageModalHeader}>
+              <Text style={styles.imageModalTitle}>Receipt Photo</Text>
+              <TouchableOpacity
+                style={[styles.imageModalCloseButton, { backgroundColor: theme.error }]}
+                onPress={() => setSelectedImage(null)}
+              >
+                <X size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+            {selectedImage && (
+              <Image
+                source={{ uri: selectedImage }}
+                style={styles.fullImage}
+                resizeMode="contain"
+              />
+            )}
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -322,5 +372,62 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  receiptContainer: {
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  receiptPreview: {
+    width: '100%',
+    height: 150,
+    borderRadius: 12,
+  },
+  receiptOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  receiptOverlayText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+  },
+  imageModalCloseArea: {
+    flex: 1,
+  },
+  imageModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 50,
+  },
+  imageModalTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  imageModalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullImage: {
+    flex: 1,
+    width: '100%',
   },
 });

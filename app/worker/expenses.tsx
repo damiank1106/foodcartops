@@ -16,7 +16,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Camera, X, Receipt, FileText, AlertCircle, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { ExpenseRepository, AuditRepository } from '@/lib/repositories';
+import { ExpenseRepository, AuditRepository, CartRepository } from '@/lib/repositories';
 import type { PaidFrom } from '@/lib/types';
 import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
@@ -38,8 +38,9 @@ const PAID_FROM_OPTIONS: { value: PaidFrom; label: string; description: string }
 
 export default function WorkerExpensesScreen() {
   const { theme } = useTheme();
-  const { user, selectedCartId, activeShiftId } = useAuth();
+  const { user, selectedCartId, activeShiftId, selectCart } = useAuth();
   const queryClient = useQueryClient();
+  const [availableCarts, setAvailableCarts] = React.useState<any[]>([]);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [category, setCategory] = useState<string>('Supplies');
   const [amount, setAmount] = useState<string>('');
@@ -49,6 +50,18 @@ export default function WorkerExpensesScreen() {
 
   const expenseRepo = React.useMemo(() => new ExpenseRepository(), []);
   const auditRepo = React.useMemo(() => new AuditRepository(), []);
+  const cartRepo = React.useMemo(() => new CartRepository(), []);
+
+  React.useEffect(() => {
+    const loadCarts = async () => {
+      const carts = await cartRepo.findAll();
+      setAvailableCarts(carts);
+      if (carts.length > 0 && !selectedCartId) {
+        selectCart(carts[0].id);
+      }
+    };
+    loadCarts();
+  }, [cartRepo, selectCart, selectedCartId]);
 
   const { data: expenses, isLoading } = useQuery({
     queryKey: ['worker-expenses', user?.id],
@@ -78,13 +91,21 @@ export default function WorkerExpensesScreen() {
         throw new Error('User not found');
       }
 
-      if (!selectedCartId) {
-        throw new Error('No cart selected');
+      let cartId = selectedCartId;
+      if (!cartId && availableCarts.length > 0) {
+        cartId = availableCarts[0].id;
+        if (cartId) {
+          selectCart(cartId);
+        }
+      }
+
+      if (!cartId) {
+        throw new Error('No cart available');
       }
 
       const expense = await expenseRepo.create({
         shift_id: activeShiftId || null,
-        cart_id: selectedCartId,
+        cart_id: cartId,
         submitted_by_user_id: user.id,
         category: data.category,
         amount_cents: data.amount_cents,
