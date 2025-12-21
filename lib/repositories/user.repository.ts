@@ -53,12 +53,20 @@ export class UserRepository extends BaseRepository {
       'SELECT * FROM users WHERE pin IS NOT NULL AND is_active = 1'
     );
 
+    console.log('[UserRepo] findByPin - checking', users.length, 'users for PIN:', pin);
+
     for (const user of users) {
-      if (user.pin && await verifyPin(pin, user.pin)) {
-        return user;
+      console.log('[UserRepo] Checking user:', user.name, 'has pin:', !!user.pin);
+      if (user.pin) {
+        const isValid = await verifyPin(pin, user.pin);
+        console.log('[UserRepo] PIN verification for', user.name, ':', isValid);
+        if (isValid) {
+          return user;
+        }
       }
     }
 
+    console.log('[UserRepo] No user found with PIN:', pin);
     return null;
   }
 

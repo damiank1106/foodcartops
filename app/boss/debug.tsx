@@ -6,10 +6,20 @@ import { useTheme } from '@/lib/contexts/theme.context';
 import { getDatabase, resetDatabase } from '@/lib/database/init';
 import { resetSeed } from '@/lib/utils/seed';
 import { useRouter } from 'expo-router';
+import { UserRepository } from '@/lib/repositories';
+import { hashPin } from '@/lib/utils/crypto';
 
 interface TableCount {
   name: string;
   count: number;
+}
+
+interface UserDebugInfo {
+  id: string;
+  name: string;
+  role: string;
+  has_pin: boolean;
+  pin_hash_preview: string;
 }
 
 export default function DebugScreen() {
@@ -45,6 +55,50 @@ export default function DebugScreen() {
       }
 
       return counts;
+    },
+  });
+
+  const { data: userDebug } = useQuery({
+    queryKey: ['debug-users'],
+    queryFn: async () => {
+      if (Platform.OS === 'web') {
+        return [];
+      }
+
+      const userRepo = new UserRepository();
+      const users = await userRepo.findAll();
+
+      const debugInfo: UserDebugInfo[] = users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        has_pin: !!user.pin,
+        pin_hash_preview: user.pin ? user.pin.substring(0, 16) + '...' : 'N/A',
+      }));
+
+      return debugInfo;
+    },
+  });
+
+  const { data: pinTests } = useQuery({
+    queryKey: ['debug-pin-tests'],
+    queryFn: async () => {
+      if (Platform.OS === 'web') {
+        return [];
+      }
+
+      const testPins = ['0000', '1111', '2222', '3333'];
+      const results = [];
+
+      for (const pin of testPins) {
+        const hash = await hashPin(pin);
+        results.push({
+          pin,
+          hash_preview: hash.substring(0, 16) + '...',
+        });
+      }
+
+      return results;
     },
   });
 
@@ -123,6 +177,36 @@ export default function DebugScreen() {
               </View>
             ))
           )}
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Users & PINs</Text>
+          {userDebug?.map((user) => (
+            <View key={user.id} style={styles.userRow}>
+              <View style={styles.userInfo}>
+                <Text style={[styles.userName, { color: theme.text }]}>{user.name}</Text>
+                <Text style={[styles.userRole, { color: theme.textSecondary }]}>{user.role}</Text>
+              </View>
+              <Text style={[styles.userPin, { color: theme.textSecondary }]}>
+                {user.pin_hash_preview}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>PIN Hash Tests</Text>
+          <Text style={[styles.helpText, { color: theme.textSecondary }]}>
+            Current hashes for demo PINs:
+          </Text>
+          {pinTests?.map((test) => (
+            <View key={test.pin} style={styles.pinTestRow}>
+              <Text style={[styles.pinTestLabel, { color: theme.text }]}>PIN {test.pin}:</Text>
+              <Text style={[styles.pinTestHash, { color: theme.textSecondary }]}>
+                {test.hash_preview}
+              </Text>
+            </View>
+          ))}
         </View>
 
         <TouchableOpacity
@@ -250,5 +334,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 16,
     textAlign: 'center',
+  },
+  userRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginBottom: 4,
+  },
+  userRole: {
+    fontSize: 12,
+    textTransform: 'uppercase' as const,
+  },
+  userPin: {
+    fontSize: 10,
+    fontFamily: 'monospace' as const,
+  },
+  helpText: {
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  pinTestRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  pinTestLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  pinTestHash: {
+    fontSize: 11,
+    fontFamily: 'monospace' as const,
   },
 });
