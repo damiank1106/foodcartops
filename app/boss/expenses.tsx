@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
   modalContent: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '85%',
+    maxHeight: '90%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
@@ -617,6 +617,7 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     padding: 20,
+    paddingBottom: 40,
   },
   detailRow: {
     flexDirection: 'row',

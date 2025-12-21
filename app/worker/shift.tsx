@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ export default function WorkerShiftScreen() {
   const [showStartModal, setShowStartModal] = useState<boolean>(false);
   const [selectedCart, setSelectedCart] = useState<string>('');
   const [startingCash, setStartingCash] = useState<string>('');
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const queryClient = useQueryClient();
 
   const cartRepo = new CartRepository();
@@ -75,6 +76,14 @@ export default function WorkerShiftScreen() {
     queryFn: () => (selectedCartId ? cartRepo.findById(selectedCartId) : null),
     enabled: !!selectedCartId,
   });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const openStartModal = (cartId: string) => {
     setSelectedCart(cartId);
@@ -163,7 +172,6 @@ export default function WorkerShiftScreen() {
   };
 
   if (activeShift) {
-    const currentTime = Date.now();
     const durationMs = Math.max(0, currentTime - activeShift.clock_in);
     const duration = Math.floor(durationMs / 1000 / 60);
     const hours = Math.floor(duration / 60);

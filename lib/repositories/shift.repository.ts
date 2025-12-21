@@ -188,4 +188,11 @@ export class ShiftRepository extends BaseRepository {
       data: event.payload_json ? JSON.parse(event.payload_json) : undefined,
     }));
   }
+
+  async deleteShift(shift_id: string): Promise<void> {
+    const db = await this.getDb();
+    await db.runAsync('DELETE FROM shift_events WHERE shift_id = ?', [shift_id]);
+    await db.runAsync('DELETE FROM worker_shifts WHERE id = ?', [shift_id]);
+    console.log('[ShiftRepo] Shift deleted:', shift_id);
+  }
 }
