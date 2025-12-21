@@ -7,8 +7,11 @@ import {
   ShiftRepository,
 } from '../repositories';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { resetDatabase } from '../database/init';
 
 const SEED_KEY = 'foodcartops_seeded';
+const FORCE_RESET = true;
 
 export async function seedDatabase(): Promise<void> {
   if (Platform.OS === 'web') {
@@ -17,10 +20,23 @@ export async function seedDatabase(): Promise<void> {
   }
 
   try {
-    const seeded = await AsyncStorage.getItem(SEED_KEY);
-    if (seeded) {
-      console.log('[Seed] Database already seeded');
-      return;
+    if (FORCE_RESET) {
+      console.log('[Seed] FORCE_RESET enabled - wiping all data');
+      await resetDatabase();
+      await AsyncStorage.clear();
+      try {
+        await SecureStore.deleteItemAsync('foodcartops_auth');
+        await SecureStore.deleteItemAsync('foodcartops_selected_cart');
+      } catch (e) {
+        console.log('[Seed] SecureStore clear (ignore if empty):', e);
+      }
+      console.log('[Seed] All data wiped, reseeding...');
+    } else {
+      const seeded = await AsyncStorage.getItem(SEED_KEY);
+      if (seeded) {
+        console.log('[Seed] Database already seeded');
+        return;
+      }
     }
 
     console.log('[Seed] Starting database seed...');
