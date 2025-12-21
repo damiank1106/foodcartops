@@ -305,7 +305,7 @@ export default function UsersScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
               {modalMode !== 'pin' && (
                 <>
                   <Text style={[styles.label, { color: theme.text }]}>Name *</Text>
@@ -502,7 +502,10 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     padding: 20,
-    maxHeight: 500,
+    flexGrow: 1,
+  },
+  modalBodyContent: {
+    paddingBottom: 40,
   },
   label: {
     fontSize: 14,
