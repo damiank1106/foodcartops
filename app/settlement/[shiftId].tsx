@@ -113,11 +113,10 @@ export default function SettlementEditorScreen() {
   const saveDraftMutation = useMutation({
     mutationFn: async () => {
       if (!user || !shiftData) throw new Error('Missing data');
-      if (!cashCounted || isNaN(parseFloat(cashCounted))) {
-        throw new Error('Please enter a valid cash amount');
-      }
 
-      const cashCountedCents = Math.round(parseFloat(cashCounted) * 100);
+      const cashCountedCents = cashCounted && !isNaN(parseFloat(cashCounted)) 
+        ? Math.round(parseFloat(cashCounted) * 100)
+        : 0;
       const cashDifferenceCents = SettlementService.computeCashDifference(
         shiftData.computation.cash_expected_cents,
         cashCountedCents
@@ -162,11 +161,10 @@ export default function SettlementEditorScreen() {
   const finalizeMutation = useMutation({
     mutationFn: async () => {
       if (!user || !shiftData) throw new Error('Missing data');
-      if (!cashCounted || isNaN(parseFloat(cashCounted))) {
-        throw new Error('Please enter a valid cash amount');
-      }
 
-      const cashCountedCents = Math.round(parseFloat(cashCounted) * 100);
+      const cashCountedCents = cashCounted && !isNaN(parseFloat(cashCounted)) 
+        ? Math.round(parseFloat(cashCounted) * 100)
+        : 0;
       const cashDifferenceCents = SettlementService.computeCashDifference(
         shiftData.computation.cash_expected_cents,
         cashCountedCents
@@ -441,7 +439,7 @@ export default function SettlementEditorScreen() {
           <>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>Cash Count</Text>
-              <Text style={[styles.inputLabel, { color: theme.text }]}>Cash Counted (₱)</Text>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Cash Counted (₱) - Optional</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
                 value={cashCounted}
