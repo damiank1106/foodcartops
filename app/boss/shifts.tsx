@@ -38,7 +38,10 @@ export default function BossShiftsScreen() {
 
   const { data: shifts, isLoading } = useQuery({
     queryKey: ['boss-shifts'],
-    queryFn: () => shiftRepo.getShifts(),
+    queryFn: async () => {
+      const allShifts = await shiftRepo.getShifts();
+      return allShifts.filter(shift => shift.status === 'active');
+    },
   });
 
   const { data: workers } = useQuery({

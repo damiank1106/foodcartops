@@ -431,19 +431,21 @@ export default function BossDashboard() {
                       </View>
                     ))}
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
-                    onPress={() => handleSaveException(
-                      'EXCEPTION',
-                      'Unsettled Shifts',
-                      `${stats.unsettled_shifts_count} shift(s) pending settlement`,
-                      'unsettled_shifts',
-                      'all'
-                    )}
-                  >
-                    <Bookmark size={16} color={theme.primary} />
-                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
-                  </TouchableOpacity>
+                  <View style={styles.exceptionButtonRow}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                      onPress={() => handleSaveException(
+                        'EXCEPTION',
+                        'Unsettled Shifts',
+                        `${stats.unsettled_shifts_count} shift(s) pending settlement`,
+                        'unsettled_shifts',
+                        'all'
+                      )}
+                    >
+                      <Bookmark size={16} color={theme.primary} />
+                      <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 
@@ -477,19 +479,21 @@ export default function BossDashboard() {
                       </View>
                     ))}
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
-                    onPress={() => handleSaveException(
-                      'ALERT',
-                      'Cash Differences',
-                      `${stats.cash_differences.length} settlement(s) with discrepancies`,
-                      'cash_differences',
-                      'all'
-                    )}
-                  >
-                    <Bookmark size={16} color={theme.primary} />
-                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
-                  </TouchableOpacity>
+                  <View style={styles.exceptionButtonRow}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                      onPress={() => handleSaveException(
+                        'ALERT',
+                        'Cash Differences',
+                        `${stats.cash_differences.length} settlement(s) with discrepancies`,
+                        'cash_differences',
+                        'all'
+                      )}
+                    >
+                      <Bookmark size={16} color={theme.primary} />
+                      <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 
@@ -513,19 +517,21 @@ export default function BossDashboard() {
                       </View>
                     </View>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
-                    onPress={() => handleSaveException(
-                      'EXCEPTION',
-                      'Pending Expenses',
-                      `${stats.pending_expenses_count} expense(s) awaiting approval`,
-                      'pending_expenses',
-                      'all'
-                    )}
-                  >
-                    <Bookmark size={16} color={theme.primary} />
-                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
-                  </TouchableOpacity>
+                  <View style={styles.exceptionButtonRow}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                      onPress={() => handleSaveException(
+                        'EXCEPTION',
+                        'Pending Expenses',
+                        `${stats.pending_expenses_count} expense(s) awaiting approval`,
+                        'pending_expenses',
+                        'all'
+                      )}
+                    >
+                      <Bookmark size={16} color={theme.primary} />
+                      <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 
@@ -546,19 +552,21 @@ export default function BossDashboard() {
                       </View>
                     </View>
                   </View>
-                  <TouchableOpacity
-                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
-                    onPress={() => handleSaveException(
-                      'ALERT',
-                      'Voided Sales',
-                      `${stats.voided_sales_count} sale(s) voided today`,
-                      'voided_sales',
-                      'today'
-                    )}
-                  >
-                    <Bookmark size={16} color={theme.primary} />
-                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
-                  </TouchableOpacity>
+                  <View style={styles.exceptionButtonRow}>
+                    <TouchableOpacity
+                      style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                      onPress={() => handleSaveException(
+                        'ALERT',
+                        'Voided Sales',
+                        `${stats.voided_sales_count} sale(s) voided today`,
+                        'voided_sales',
+                        'today'
+                      )}
+                    >
+                      <Bookmark size={16} color={theme.primary} />
+                      <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 
@@ -1024,15 +1032,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  exceptionButtonRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
   saveButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
     gap: 6,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   saveButtonText: {
     fontSize: 14,

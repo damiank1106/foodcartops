@@ -121,12 +121,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const logout = async () => {
     try {
-      const shiftRepo = new ShiftRepository();
-
-      if (state.user?.role === 'worker' && state.activeShiftId) {
-        await shiftRepo.endShift(state.activeShiftId);
-      }
-
       await SecureStore.deleteItemAsync(AUTH_KEY);
       await SecureStore.deleteItemAsync(CART_KEY);
 
