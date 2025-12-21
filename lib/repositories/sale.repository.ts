@@ -33,7 +33,6 @@ export class SaleRepository extends BaseRepository {
     const discount_cents = data.discount_cents || 0;
     const total_cents = subtotal_cents - discount_cents;
 
-    const payment_method = data.payments[0]?.method || 'CASH';
     const total_amount = total_cents / 100;
 
     const sale: Sale = {
@@ -45,15 +44,14 @@ export class SaleRepository extends BaseRepository {
       subtotal_cents,
       discount_cents,
       total_cents,
-      payment_method,
       notes: data.notes,
       receipt_photo: data.receipt_photo,
       created_at: now,
     };
 
     await db.runAsync(
-      `INSERT INTO sales (id, cart_id, worker_id, shift_id, total_amount, subtotal_cents, discount_cents, total_cents, payment_method, notes, receipt_photo, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sales (id, cart_id, worker_id, shift_id, total_amount, subtotal_cents, discount_cents, total_cents, notes, receipt_photo, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         sale.id,
         sale.cart_id,
@@ -63,7 +61,6 @@ export class SaleRepository extends BaseRepository {
         sale.subtotal_cents,
         sale.discount_cents,
         sale.total_cents,
-        sale.payment_method,
         sale.notes || null,
         sale.receipt_photo || null,
         sale.created_at,

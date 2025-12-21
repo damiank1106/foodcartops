@@ -47,7 +47,6 @@ export interface Sale {
   subtotal_cents: number;
   discount_cents: number;
   total_cents: number;
-  payment_method: PaymentMethod;
   notes?: string;
   receipt_photo?: string;
   voided_at?: number;
