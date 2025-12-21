@@ -42,8 +42,8 @@ export default function BossShiftsScreen() {
   });
 
   const { data: workers } = useQuery({
-    queryKey: ['workers'],
-    queryFn: () => userRepo.getActiveWorkers(),
+    queryKey: ['shift-eligible-workers'],
+    queryFn: () => userRepo.getShiftEligibleWorkers(),
   });
 
   const { data: carts } = useQuery({
@@ -52,9 +52,9 @@ export default function BossShiftsScreen() {
   });
 
   const { data: workerMap } = useQuery({
-    queryKey: ['worker-map'],
+    queryKey: ['shift-eligible-worker-map'],
     queryFn: async () => {
-      const allWorkers = await userRepo.getActiveWorkers();
+      const allWorkers = await userRepo.getShiftEligibleWorkers();
       return Object.fromEntries(allWorkers.map((w) => [w.id, w.name]));
     },
   });

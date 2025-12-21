@@ -16,6 +16,12 @@ export type CommissionType = 'NONE' | 'PERCENT_OF_SALES' | 'PERCENT_OF_PROFIT';
 
 export type LedgerEntryType = 'WAGE' | 'COMMISSION' | 'ADVANCE' | 'DEDUCTION' | 'BONUS' | 'ADJUSTMENT';
 
+export type BossSavedItemType = 'EXCEPTION' | 'ALERT' | 'DRAFT' | 'SETTLEMENT';
+
+export type BossSavedItemSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export type BossSavedItemStatus = 'OPEN' | 'RESOLVED';
+
 export interface User {
   id: string;
   name: string;
@@ -282,4 +288,22 @@ export interface MonitoringException {
   description: string;
   amount_cents?: number;
   created_at: number;
+}
+
+export interface BossSavedItem {
+  id: string;
+  type: BossSavedItemType;
+  title: string;
+  notes?: string;
+  severity: BossSavedItemSeverity;
+  status: BossSavedItemStatus;
+  linked_entity_type?: string;
+  linked_entity_id?: string;
+  created_by_user_id: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BossSavedItemWithDetails extends BossSavedItem {
+  created_by_name: string;
 }

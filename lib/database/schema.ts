@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const MIGRATIONS = [
   {
@@ -411,6 +411,33 @@ export const MIGRATIONS = [
       ALTER TABLE settlements DROP COLUMN daily_net_sales_cents;
       ALTER TABLE settlements DROP COLUMN manager_share_cents;
       ALTER TABLE settlements DROP COLUMN owner_share_cents;
+    `,
+  },
+  {
+    version: 8,
+    up: `
+      CREATE TABLE IF NOT EXISTS boss_saved_items (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK(type IN ('EXCEPTION', 'ALERT', 'DRAFT', 'SETTLEMENT')),
+        title TEXT NOT NULL,
+        notes TEXT,
+        severity TEXT NOT NULL DEFAULT 'MEDIUM' CHECK(severity IN ('LOW', 'MEDIUM', 'HIGH')),
+        status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'RESOLVED')),
+        linked_entity_type TEXT,
+        linked_entity_id TEXT,
+        created_by_user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_boss_saved_items_status ON boss_saved_items(status);
+      CREATE INDEX idx_boss_saved_items_type ON boss_saved_items(type);
+      CREATE INDEX idx_boss_saved_items_created_by ON boss_saved_items(created_by_user_id);
+      CREATE INDEX idx_boss_saved_items_linked ON boss_saved_items(linked_entity_type, linked_entity_id);
+    `,
+    down: `
+      DROP TABLE IF EXISTS boss_saved_items;
     `,
   },
 ];

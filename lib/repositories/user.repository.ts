@@ -97,6 +97,13 @@ export class UserRepository extends BaseRepository {
     );
   }
 
+  async getShiftEligibleWorkers(): Promise<User[]> {
+    const db = await this.getDb();
+    return await db.getAllAsync<User>(
+      "SELECT * FROM users WHERE is_active = 1 AND role IN ('worker', 'manager') ORDER BY name ASC"
+    );
+  }
+
   async update(id: string, data: Partial<Omit<User, 'id' | 'created_at'>>): Promise<void> {
     const db = await this.getDb();
     const updates: string[] = [];

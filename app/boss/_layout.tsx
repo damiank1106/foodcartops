@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { LayoutDashboard, Users, FileText, Settings, Receipt, Clock } from 'lucide-react-native';
+import { LayoutDashboard, Users, FileText, Settings, Receipt, Clock, Bookmark } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
@@ -73,6 +73,13 @@ export default function BossLayout() {
         options={{
           title: 'Users',
           tabBarIcon: ({ color }) => <Users size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="saved"
+        options={{
+          title: 'Saved',
+          tabBarIcon: ({ color }) => <Bookmark size={24} color={color} />,
         }}
       />
       <Tabs.Screen

@@ -70,7 +70,7 @@ export default function LoginScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <LogIn size={48} color={theme.primary} />
-            <Text style={[styles.title, { color: theme.text }]}>FoodCartOps</Text>
+            <Text style={[styles.title, { color: theme.text }]}>MY Food Cart</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
               This app requires a mobile device
             </Text>
@@ -103,7 +103,7 @@ export default function LoginScreen() {
       <View style={styles.content}>
         <View style={styles.header}>
           <LogIn size={48} color={theme.primary} />
-          <Text style={[styles.title, { color: theme.text }]}>FoodCartOps</Text>
+            <Text style={[styles.title, { color: theme.text }]}>MY Food Cart</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             Enter your PIN to continue
           </Text>
