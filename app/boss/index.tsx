@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2 } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -16,6 +16,11 @@ export default function BossDashboard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity' | 'saved'>('overview');
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editStatus, setEditStatus] = useState<'OPEN' | 'RESOLVED'>('OPEN');
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -147,6 +152,107 @@ export default function BossDashboard() {
     enabled: !!user?.id,
     refetchInterval: 10000,
   });
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { type: any; title: string; notes?: string; linkedType?: string; linkedId?: string }) => {
+      if (!user?.id) throw new Error('No user');
+      return savedItemsRepo.create({
+        type: data.type,
+        title: data.title,
+        notes: data.notes,
+        severity: 'MEDIUM',
+        status: 'OPEN',
+        linked_entity_type: data.linkedType,
+        linked_entity_id: data.linkedId,
+        created_by_user_id: user.id,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-items'] });
+      Alert.alert('Success', 'Exception saved for later review');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to save: ${error}`);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      if (!user?.id) throw new Error('No user');
+      return savedItemsRepo.update(id, data, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-items'] });
+      setEditModalVisible(false);
+      Alert.alert('Success', 'Changes saved');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to update: ${error}`);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (!user?.id) throw new Error('No user');
+      return savedItemsRepo.delete(id, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-items'] });
+      Alert.alert('Success', 'Item deleted');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to delete: ${error}`);
+    },
+  });
+
+  const handleSaveException = (type: any, title: string, notes?: string, linkedType?: string, linkedId?: string) => {
+    Alert.alert(
+      'Save Exception',
+      'Save this exception for later review?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: () => saveMutation.mutate({ type, title, notes, linkedType, linkedId }),
+        },
+      ]
+    );
+  };
+
+  const handleEditItem = (item: any) => {
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditNotes(item.notes || '');
+    setEditStatus(item.status);
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingItem) return;
+    updateMutation.mutate({
+      id: editingItem.id,
+      data: {
+        title: editTitle,
+        notes: editNotes,
+        status: editStatus,
+      },
+    });
+  };
+
+  const handleDeleteItem = (id: string) => {
+    Alert.alert(
+      'Delete Item',
+      'Are you sure you want to delete this saved item?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteMutation.mutate(id),
+        },
+      ]
+    );
+  };
 
   if (isLoading) {
     return (
@@ -296,103 +402,163 @@ export default function BossDashboard() {
               <Text style={[styles.pageTitle, { color: theme.text }]}>Exceptions & Alerts</Text>
 
               {stats && stats.unsettled_shifts_count > 0 && (
-                <TouchableOpacity
-                  style={[styles.exceptionCard, { backgroundColor: theme.card }]}
-                  onPress={() => router.push('/boss/unsettled-shifts' as any)}
-                >
-                  <View style={styles.exceptionHeader}>
-                    <View style={[styles.exceptionIcon, { backgroundColor: theme.warning + '20' }]}>
-                      <Clock size={20} color={theme.warning} />
+                <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
+                  <TouchableOpacity
+                    style={styles.exceptionMainContent}
+                    onPress={() => router.push('/boss/unsettled-shifts' as any)}
+                  >
+                    <View style={styles.exceptionHeader}>
+                      <View style={[styles.exceptionIcon, { backgroundColor: theme.warning + '20' }]}>
+                        <Clock size={20} color={theme.warning} />
+                      </View>
+                      <View style={styles.exceptionInfo}>
+                        <Text style={[styles.exceptionTitle, { color: theme.text }]}>
+                          Unsettled Shifts
+                        </Text>
+                        <Text style={[styles.exceptionCount, { color: theme.warning }]}>
+                          {stats.unsettled_shifts_count} shift{stats.unsettled_shifts_count !== 1 ? 's' : ''} pending settlement
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.exceptionInfo}>
-                      <Text style={[styles.exceptionTitle, { color: theme.text }]}>
-                        Unsettled Shifts
-                      </Text>
-                      <Text style={[styles.exceptionCount, { color: theme.warning }]}>
-                        {stats.unsettled_shifts_count} shift{stats.unsettled_shifts_count !== 1 ? 's' : ''} pending settlement
-                      </Text>
-                    </View>
-                  </View>
-                  {stats.unsettled_shifts.slice(0, 3).map((shift) => (
-                    <View key={shift.shift_id} style={styles.exceptionDetail}>
-                      <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
-                        {shift.worker_name} at {shift.cart_name}
-                      </Text>
-                      <Text style={[styles.exceptionDetailTime, { color: theme.textSecondary }]}>
-                        {format(shift.clock_out, 'MMM d, h:mm a')}
-                      </Text>
-                    </View>
-                  ))}
-                </TouchableOpacity>
+                    {stats.unsettled_shifts.slice(0, 3).map((shift) => (
+                      <View key={shift.shift_id} style={styles.exceptionDetail}>
+                        <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
+                          {shift.worker_name} at {shift.cart_name}
+                        </Text>
+                        <Text style={[styles.exceptionDetailTime, { color: theme.textSecondary }]}>
+                          {format(shift.clock_out, 'MMM d, h:mm a')}
+                        </Text>
+                      </View>
+                    ))}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                    onPress={() => handleSaveException(
+                      'EXCEPTION',
+                      'Unsettled Shifts',
+                      `${stats.unsettled_shifts_count} shift(s) pending settlement`,
+                      'unsettled_shifts',
+                      'all'
+                    )}
+                  >
+                    <Bookmark size={16} color={theme.primary} />
+                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                  </TouchableOpacity>
+                </View>
               )}
 
               {stats && stats.cash_differences.length > 0 && (
-                <TouchableOpacity
-                  style={[styles.exceptionCard, { backgroundColor: theme.card }]}
-                  onPress={() => router.push('/boss/cash-differences' as any)}
-                >
-                  <View style={styles.exceptionHeader}>
-                    <View style={[styles.exceptionIcon, { backgroundColor: theme.error + '20' }]}>
-                      <AlertTriangle size={20} color={theme.error} />
+                <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
+                  <TouchableOpacity
+                    style={styles.exceptionMainContent}
+                    onPress={() => router.push('/boss/cash-differences' as any)}
+                  >
+                    <View style={styles.exceptionHeader}>
+                      <View style={[styles.exceptionIcon, { backgroundColor: theme.error + '20' }]}>
+                        <AlertTriangle size={20} color={theme.error} />
+                      </View>
+                      <View style={styles.exceptionInfo}>
+                        <Text style={[styles.exceptionTitle, { color: theme.text }]}>
+                          Cash Differences
+                        </Text>
+                        <Text style={[styles.exceptionCount, { color: theme.error }]}>
+                          {stats.cash_differences.length} settlement{stats.cash_differences.length !== 1 ? 's' : ''} with discrepancies
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.exceptionInfo}>
-                      <Text style={[styles.exceptionTitle, { color: theme.text }]}>
-                        Cash Differences
-                      </Text>
-                      <Text style={[styles.exceptionCount, { color: theme.error }]}>
-                        {stats.cash_differences.length} settlement{stats.cash_differences.length !== 1 ? 's' : ''} with discrepancies
-                      </Text>
-                    </View>
-                  </View>
-                  {stats.cash_differences.slice(0, 3).map((diff) => (
-                    <View key={diff.settlement_id} style={styles.exceptionDetail}>
-                      <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
-                        {diff.worker_name}
-                      </Text>
-                      <Text style={[styles.exceptionDetailAmount, { color: diff.cash_difference_cents > 0 ? theme.success : theme.error }]}>
-                        {diff.cash_difference_cents > 0 ? '+' : ''}₱{(diff.cash_difference_cents / 100).toFixed(2)}
-                      </Text>
-                    </View>
-                  ))}
-                </TouchableOpacity>
+                    {stats.cash_differences.slice(0, 3).map((diff) => (
+                      <View key={diff.settlement_id} style={styles.exceptionDetail}>
+                        <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
+                          {diff.worker_name}
+                        </Text>
+                        <Text style={[styles.exceptionDetailAmount, { color: diff.cash_difference_cents > 0 ? theme.success : theme.error }]}>
+                          {diff.cash_difference_cents > 0 ? '+' : ''}₱{(diff.cash_difference_cents / 100).toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                    onPress={() => handleSaveException(
+                      'ALERT',
+                      'Cash Differences',
+                      `${stats.cash_differences.length} settlement(s) with discrepancies`,
+                      'cash_differences',
+                      'all'
+                    )}
+                  >
+                    <Bookmark size={16} color={theme.primary} />
+                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                  </TouchableOpacity>
+                </View>
               )}
 
               {stats && stats.pending_expenses_count > 0 && (
-                <TouchableOpacity
-                  style={[styles.exceptionCard, { backgroundColor: theme.card }]}
-                  onPress={() => router.push('/boss/pending-expenses' as any)}
-                >
-                  <View style={styles.exceptionHeader}>
-                    <View style={[styles.exceptionIcon, { backgroundColor: theme.primary + '20' }]}>
-                      <ShoppingBag size={20} color={theme.primary} />
+                <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
+                  <TouchableOpacity
+                    style={styles.exceptionMainContent}
+                    onPress={() => router.push('/boss/pending-expenses' as any)}
+                  >
+                    <View style={styles.exceptionHeader}>
+                      <View style={[styles.exceptionIcon, { backgroundColor: theme.primary + '20' }]}>
+                        <ShoppingBag size={20} color={theme.primary} />
+                      </View>
+                      <View style={styles.exceptionInfo}>
+                        <Text style={[styles.exceptionTitle, { color: theme.text }]}>
+                          Pending Expenses
+                        </Text>
+                        <Text style={[styles.exceptionCount, { color: theme.primary }]}>
+                          {stats.pending_expenses_count} expense{stats.pending_expenses_count !== 1 ? 's' : ''} awaiting approval
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.exceptionInfo}>
-                      <Text style={[styles.exceptionTitle, { color: theme.text }]}>
-                        Pending Expenses
-                      </Text>
-                      <Text style={[styles.exceptionCount, { color: theme.primary }]}>
-                        {stats.pending_expenses_count} expense{stats.pending_expenses_count !== 1 ? 's' : ''} awaiting approval
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                    onPress={() => handleSaveException(
+                      'EXCEPTION',
+                      'Pending Expenses',
+                      `${stats.pending_expenses_count} expense(s) awaiting approval`,
+                      'pending_expenses',
+                      'all'
+                    )}
+                  >
+                    <Bookmark size={16} color={theme.primary} />
+                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                  </TouchableOpacity>
+                </View>
               )}
 
               {stats && stats.voided_sales_count > 0 && (
                 <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
-                  <View style={styles.exceptionHeader}>
-                    <View style={[styles.exceptionIcon, { backgroundColor: theme.error + '20' }]}>
-                      <XCircle size={20} color={theme.error} />
-                    </View>
-                    <View style={styles.exceptionInfo}>
-                      <Text style={[styles.exceptionTitle, { color: theme.text }]}>
-                        Voided Sales Today
-                      </Text>
-                      <Text style={[styles.exceptionCount, { color: theme.error }]}>
-                        {stats.voided_sales_count} sale{stats.voided_sales_count !== 1 ? 's' : ''} voided
-                      </Text>
+                  <View style={styles.exceptionMainContent}>
+                    <View style={styles.exceptionHeader}>
+                      <View style={[styles.exceptionIcon, { backgroundColor: theme.error + '20' }]}>
+                        <XCircle size={20} color={theme.error} />
+                      </View>
+                      <View style={styles.exceptionInfo}>
+                        <Text style={[styles.exceptionTitle, { color: theme.text }]}>
+                          Voided Sales Today
+                        </Text>
+                        <Text style={[styles.exceptionCount, { color: theme.error }]}>
+                          {stats.voided_sales_count} sale{stats.voided_sales_count !== 1 ? 's' : ''} voided
+                        </Text>
+                      </View>
                     </View>
                   </View>
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
+                    onPress={() => handleSaveException(
+                      'ALERT',
+                      'Voided Sales',
+                      `${stats.voided_sales_count} sale(s) voided today`,
+                      'voided_sales',
+                      'today'
+                    )}
+                  >
+                    <Bookmark size={16} color={theme.primary} />
+                    <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -464,10 +630,9 @@ export default function BossDashboard() {
 
               {savedItems && savedItems.length > 0 ? (
                 savedItems.map((item) => (
-                  <TouchableOpacity
+                  <View
                     key={item.id}
                     style={[styles.savedCard, { backgroundColor: theme.card }]}
-                    onPress={() => router.push('/boss/saved' as any)}
                   >
                     <View style={styles.savedHeader}>
                       <View style={[styles.savedIcon, { backgroundColor: theme.primary + '20' }]}>
@@ -481,13 +646,27 @@ export default function BossDashboard() {
                           {item.type} • {item.status}
                         </Text>
                       </View>
+                      <View style={styles.savedActions}>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: theme.primary + '15' }]}
+                          onPress={() => handleEditItem(item)}
+                        >
+                          <Edit2 size={16} color={theme.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: theme.error + '15' }]}
+                          onPress={() => handleDeleteItem(item.id)}
+                        >
+                          <Trash2 size={16} color={theme.error} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                     {item.notes && (
                       <Text style={[styles.savedNotes, { color: theme.textSecondary }]} numberOfLines={2}>
                         {item.notes}
                       </Text>
                     )}
-                  </TouchableOpacity>
+                  </View>
                 ))
               ) : (
                 <View style={styles.emptyState}>
@@ -504,6 +683,90 @@ export default function BossDashboard() {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Saved Item</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <XCircle size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Title</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholder="Enter title"
+                placeholderTextColor={theme.textSecondary}
+              />
+
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Notes</Text>
+              <TextInput
+                style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={editNotes}
+                onChangeText={setEditNotes}
+                placeholder="Add notes..."
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                numberOfLines={4}
+              />
+
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Status</Text>
+              <View style={styles.statusButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.statusButton,
+                    { borderColor: theme.primary },
+                    editStatus === 'OPEN' && { backgroundColor: theme.primary }
+                  ]}
+                  onPress={() => setEditStatus('OPEN')}
+                >
+                  <Text style={[styles.statusButtonText, { color: editStatus === 'OPEN' ? '#fff' : theme.primary }]}>
+                    Open
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.statusButton,
+                    { borderColor: theme.success },
+                    editStatus === 'RESOLVED' && { backgroundColor: theme.success }
+                  ]}
+                  onPress={() => setEditStatus('RESOLVED')}
+                >
+                  <Text style={[styles.statusButtonText, { color: editStatus === 'RESOLVED' ? '#fff' : theme.success }]}>
+                    Resolved
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.background }]}
+                onPress={() => setEditModalVisible(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handleSaveEdit}
+              >
+                <Save size={18} color="#fff" />
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -645,7 +908,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   exceptionCard: {
-    padding: 16,
     borderRadius: 12,
     marginBottom: 12,
     shadowColor: '#000',
@@ -653,6 +915,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    overflow: 'hidden',
+  },
+  exceptionMainContent: {
+    padding: 16,
   },
   exceptionHeader: {
     flexDirection: 'row',
@@ -758,6 +1024,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   savedCard: {
     padding: 16,
     borderRadius: 12,
@@ -796,5 +1076,101 @@ const styles = StyleSheet.create({
   savedNotes: {
     fontSize: 14,
     marginTop: 4,
+  },
+  savedActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 500,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  textArea: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  statusButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statusButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  statusButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  modalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 6,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
