@@ -212,14 +212,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const canAccessCart = (cartId: string): boolean => {
     if (!state.user) return false;
-    if (state.user.role === 'boss') return true;
+    if (state.user.role === 'boss' || state.user.role === 'boss2') return true;
     if (state.user.role === 'worker') return true;
     return false;
   };
 
   const hasPermission = (permission: 'approve_expenses' | 'create_settlements' | 'view_all_data' | 'manage_users'): boolean => {
     if (!state.user) return false;
-    if (state.user.role === 'boss') return true;
+    if (state.user.role === 'boss' || state.user.role === 'boss2') return true;
     return false;
   };
 
@@ -234,7 +234,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     canAccessCart,
     hasPermission,
     isAuthenticated: !!state.user,
-    isBoss: state.user?.role === 'boss',
+    isBoss: state.user?.role === 'boss' || state.user?.role === 'boss2',
     isWorker: state.user?.role === 'worker',
     canDoWorkerTasks: state.user?.role === 'worker',
   };
