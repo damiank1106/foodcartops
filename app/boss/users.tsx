@@ -242,7 +242,7 @@ export default function UsersScreen() {
                 <View style={styles.badges}>
                   <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user.role) + '20' }]}>
                     <Text style={[styles.roleBadgeText, { color: getRoleBadgeColor(user.role) }]}>
-                      {user.role.toUpperCase()}
+                      {user.role === 'inventory_clerk' ? 'INVENTORY' : user.role.toUpperCase()}
                     </Text>
                   </View>
 

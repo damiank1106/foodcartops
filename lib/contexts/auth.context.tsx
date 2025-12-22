@@ -58,6 +58,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
               selectedCart = activeShift.cart_id;
               await SecureStore.setItemAsync(CART_KEY, activeShift.cart_id);
             }
+          } else if (user.role === 'inventory_clerk') {
+            activeShiftId = null;
           }
 
           setState({
@@ -101,6 +103,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (user.role === 'worker') {
         const activeShift = await shiftRepo.getActiveShift(user.id);
         activeShiftId = activeShift?.id || null;
+      } else if (user.role === 'inventory_clerk') {
+        activeShiftId = null;
       }
 
       setState((prev) => ({
@@ -230,6 +234,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     if (!state.user) return false;
     if (state.user.role === 'boss' || state.user.role === 'boss2') return true;
     if (state.user.role === 'worker') return true;
+    if (state.user.role === 'inventory_clerk') return true;
     return false;
   };
 
@@ -252,6 +257,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     isAuthenticated: !!state.user,
     isBoss: state.user?.role === 'boss' || state.user?.role === 'boss2',
     isWorker: state.user?.role === 'worker',
+    isInventoryClerk: state.user?.role === 'inventory_clerk',
     canDoWorkerTasks: state.user?.role === 'worker',
+    canAccessInventory: state.user?.role === 'boss' || state.user?.role === 'boss2' || state.user?.role === 'inventory_clerk',
   };
 });

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export const MIGRATIONS = [
   {
@@ -549,6 +549,43 @@ export const MIGRATIONS = [
     down: `
       DROP TABLE IF EXISTS product_categories;
       DROP INDEX IF EXISTS idx_products_category_id;
+    `,
+  },
+  {
+    version: 14,
+    up: `
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker', 'inventory_clerk')),
+        pin TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1
+      );
+
+      INSERT INTO users_new SELECT * FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `,
+    down: `
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker')),
+        pin TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1
+      );
+
+      INSERT INTO users_new SELECT * FROM users WHERE role IN ('boss', 'boss2', 'worker');
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
     `,
   },
 ];
