@@ -100,7 +100,7 @@ export class UserRepository extends BaseRepository {
   async getShiftEligibleWorkers(): Promise<User[]> {
     const db = await this.getDb();
     return await db.getAllAsync<User>(
-      "SELECT * FROM users WHERE is_active = 1 AND role IN ('worker', 'manager') ORDER BY name ASC"
+      "SELECT * FROM users WHERE is_active = 1 AND role = 'worker' ORDER BY name ASC"
     );
   }
 

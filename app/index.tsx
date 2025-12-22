@@ -23,7 +23,7 @@ export default function LoginScreen() {
 
   React.useEffect(() => {
     if (!isLoading && user) {
-      if (user.role === 'boss') {
+      if (user.role === 'boss' || user.role === 'boss2') {
         router.replace('/boss' as any);
       } else {
         router.replace('/worker' as any);

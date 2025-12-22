@@ -2,13 +2,111 @@ import { BaseRepository } from './base';
 import { WorkerShift, ShiftEvent } from '../types';
 
 export class ShiftRepository extends BaseRepository {
-  async startShift(
+  async createAssignedShift(
     worker_id: string,
     cart_id: string,
     starting_cash_cents: number,
     notes?: string
   ): Promise<WorkerShift> {
     const db = await this.getDb();
+    
+    const id = this.generateId();
+    const now = this.now();
+
+    const shift: WorkerShift = {
+      id,
+      worker_id,
+      cart_id,
+      clock_in: now,
+      starting_cash_cents,
+      expected_cash_cents: starting_cash_cents,
+      notes,
+      status: 'assigned',
+      created_at: now,
+      updated_at: now,
+    };
+
+    await db.runAsync(
+      `INSERT INTO worker_shifts (
+        id, worker_id, cart_id, clock_in, starting_cash_cents, 
+        expected_cash_cents, notes, status, created_at, updated_at
+      )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        shift.id,
+        shift.worker_id,
+        shift.cart_id,
+        shift.clock_in,
+        shift.starting_cash_cents,
+        shift.expected_cash_cents,
+        shift.notes || null,
+        shift.status,
+        shift.created_at,
+        shift.updated_at,
+      ]
+    );
+
+    await this.addShiftEvent(shift.id, 'shift_assigned', {
+      cart_id,
+      starting_cash_cents,
+      notes,
+    });
+
+    console.log('[ShiftRepo] Shift assigned:', shift.id);
+    return shift;
+  }
+
+  async startShift(
+    worker_id: string,
+    cart_id: string,
+    starting_cash_cents: number,
+    notes?: string
+  ): Promise<WorkerShift>;
+  async startShift(shift_id: string, starting_cash_cents: number): Promise<void>;
+  async startShift(
+    worker_or_shift_id: string,
+    cart_id_or_cash: string | number,
+    starting_cash_cents?: number,
+    notes?: string
+  ): Promise<WorkerShift | void> {
+    const db = await this.getDb();
+    
+    if (typeof cart_id_or_cash === 'number') {
+      const shift_id = worker_or_shift_id;
+      const cash = cart_id_or_cash;
+      const now = this.now();
+
+      const shift = await db.getFirstAsync<WorkerShift>(
+        'SELECT * FROM worker_shifts WHERE id = ?',
+        [shift_id]
+      );
+
+      if (!shift) {
+        throw new Error('Shift not found');
+      }
+
+      if (shift.status === 'active') {
+        throw new Error('Shift is already active');
+      }
+
+      await db.runAsync(
+        `UPDATE worker_shifts 
+         SET status = 'active', clock_in = ?, starting_cash_cents = ?, expected_cash_cents = ?, updated_at = ? 
+         WHERE id = ?`,
+        [now, cash, cash, now, shift_id]
+      );
+
+      await this.addShiftEvent(shift_id, 'shift_started', {
+        starting_cash_cents: cash,
+      });
+
+      console.log('[ShiftRepo] Shift started:', shift_id);
+      return;
+    }
+    
+    const worker_id = worker_or_shift_id;
+    const cart_id = cart_id_or_cash as string;
+    const cash = starting_cash_cents!;
     
     const existingActive = await this.getActiveShift(worker_id);
     if (existingActive) {
@@ -24,8 +122,8 @@ export class ShiftRepository extends BaseRepository {
       worker_id,
       cart_id,
       clock_in: now,
-      starting_cash_cents,
-      expected_cash_cents: starting_cash_cents,
+      starting_cash_cents: cash,
+      expected_cash_cents: cash,
       notes,
       status: 'active',
       created_at: now,
@@ -54,7 +152,7 @@ export class ShiftRepository extends BaseRepository {
 
     await this.addShiftEvent(shift.id, 'shift_started', {
       cart_id,
-      starting_cash_cents,
+      starting_cash_cents: cash,
       notes,
     });
 

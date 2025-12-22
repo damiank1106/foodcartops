@@ -205,7 +205,7 @@ export default function UsersScreen() {
 
 
   const getRoleBadgeColor = (role: UserRole) => {
-    if (role === 'boss') return theme.error;
+    if (role === 'boss' || role === 'boss2') return theme.error;
     return theme.success;
   };
 
@@ -317,8 +317,45 @@ export default function UsersScreen() {
                     placeholderTextColor={theme.textSecondary}
                   />
 
-                  <Text style={[styles.label, { color: theme.text }]}>Role: Worker</Text>
-                  <Text style={[styles.roleInfo, { color: theme.textSecondary }]}>All users are created as Workers</Text>
+                  <Text style={[styles.label, { color: theme.text }]}>Role</Text>
+                  <View style={styles.roleButtons}>
+                    <TouchableOpacity
+                      style={[
+                        styles.roleButton,
+                        { borderColor: theme.border },
+                        formData.role === 'boss2' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
+                      ]}
+                      onPress={() => setFormData((prev) => ({ ...prev, role: 'boss2' }))}
+                    >
+                      <Text
+                        style={[
+                          styles.roleButtonText,
+                          { color: theme.text },
+                          formData.role === 'boss2' && { color: theme.primary, fontWeight: '700' as const },
+                        ]}
+                      >
+                        Boss2
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.roleButton,
+                        { borderColor: theme.border },
+                        formData.role === 'worker' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
+                      ]}
+                      onPress={() => setFormData((prev) => ({ ...prev, role: 'worker' }))}
+                    >
+                      <Text
+                        style={[
+                          styles.roleButtonText,
+                          { color: theme.text },
+                          formData.role === 'worker' && { color: theme.primary, fontWeight: '700' as const },
+                        ]}
+                      >
+                        Worker
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </>
               )}
 

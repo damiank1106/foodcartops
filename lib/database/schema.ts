@@ -7,7 +7,7 @@ export const MIGRATIONS = [
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('boss', 'worker')),
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker')),
         pin TEXT,
         password_hash TEXT,
         email TEXT,
@@ -139,7 +139,7 @@ export const MIGRATIONS = [
       ALTER TABLE worker_shifts ADD COLUMN starting_cash_cents INTEGER DEFAULT 0;
       ALTER TABLE worker_shifts ADD COLUMN expected_cash_cents INTEGER DEFAULT 0;
       ALTER TABLE worker_shifts ADD COLUMN notes TEXT;
-      ALTER TABLE worker_shifts ADD COLUMN status TEXT DEFAULT 'active' CHECK(status IN ('active', 'ended'));
+      ALTER TABLE worker_shifts ADD COLUMN status TEXT DEFAULT 'active' CHECK(status IN ('assigned', 'active', 'ended'));
 
       CREATE TABLE IF NOT EXISTS shift_events (
         id TEXT PRIMARY KEY,
@@ -295,7 +295,7 @@ export const MIGRATIONS = [
       CREATE TABLE users_new (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('boss', 'worker', 'manager')),
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker')),
         pin TEXT,
         password_hash TEXT,
         email TEXT,

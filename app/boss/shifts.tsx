@@ -40,7 +40,7 @@ export default function BossShiftsScreen() {
     queryKey: ['boss-shifts'],
     queryFn: async () => {
       const allShifts = await shiftRepo.getShifts();
-      return allShifts.filter(shift => shift.status === 'active');
+      return allShifts.filter(shift => shift.status === 'assigned' || shift.status === 'active');
     },
   });
 
@@ -72,7 +72,7 @@ export default function BossShiftsScreen() {
 
   const createShiftMutation = useMutation({
     mutationFn: async (data: { worker_id: string; cart_id: string; starting_cash_cents: number; notes?: string }) => {
-      const shift = await shiftRepo.startShift(
+      const shift = await shiftRepo.createAssignedShift(
         data.worker_id,
         data.cart_id,
         data.starting_cash_cents,
@@ -97,7 +97,7 @@ export default function BossShiftsScreen() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setShowModal(false);
       resetForm();
-      Alert.alert('Success', 'Shift created successfully');
+      Alert.alert('Success', 'Shift assigned successfully');
     },
     onError: () => {
       Alert.alert('Error', 'Failed to create shift');
@@ -294,17 +294,27 @@ export default function BossShiftsScreen() {
                         styles.statusBadge,
                         {
                           backgroundColor:
-                            shift.status === 'active' ? theme.success + '20' : theme.textSecondary + '20',
+                            shift.status === 'active' 
+                              ? theme.success + '20' 
+                              : shift.status === 'assigned'
+                              ? theme.primary + '20'
+                              : theme.textSecondary + '20',
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.statusText,
-                          { color: shift.status === 'active' ? theme.success : theme.textSecondary },
+                          { 
+                            color: shift.status === 'active' 
+                              ? theme.success 
+                              : shift.status === 'assigned'
+                              ? theme.primary
+                              : theme.textSecondary 
+                          },
                         ]}
                       >
-                        {shift.status === 'active' ? 'Active' : 'Ended'}
+                        {shift.status === 'active' ? 'Active' : shift.status === 'assigned' ? 'Assigned' : 'Ended'}
                       </Text>
                     </View>
                   </View>

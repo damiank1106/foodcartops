@@ -1,4 +1,4 @@
-export type UserRole = 'boss' | 'worker';
+export type UserRole = 'boss' | 'boss2' | 'worker';
 
 export type PaymentMethod = 'CASH' | 'GCASH' | 'CARD' | 'OTHER';
 
@@ -92,7 +92,7 @@ export interface Payment {
   created_at: number;
 }
 
-export type ShiftStatus = 'active' | 'ended';
+export type ShiftStatus = 'assigned' | 'active' | 'ended';
 
 export interface WorkerShift {
   id: string;
