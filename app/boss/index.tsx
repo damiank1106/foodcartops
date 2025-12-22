@@ -428,18 +428,19 @@ export default function BossDashboard() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScrollView}>
-        <View style={styles.tabs}>
+      <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
           <TouchableOpacity
-            style={[styles.tab, selectedTab === 'overview' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            style={styles.tab}
             onPress={() => setSelectedTab('overview')}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'overview' ? theme.primary : theme.textSecondary }]}>
               Overview
             </Text>
+            {selectedTab === 'overview' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, selectedTab === 'exceptions' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            style={styles.tab}
             onPress={() => setSelectedTab('exceptions')}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'exceptions' ? theme.primary : theme.textSecondary }]}>
@@ -452,17 +453,19 @@ export default function BossDashboard() {
                 </Text>
               </View>
             )}
+            {selectedTab === 'exceptions' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, selectedTab === 'activity' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            style={styles.tab}
             onPress={() => setSelectedTab('activity')}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
               Activity
             </Text>
+            {selectedTab === 'activity' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, selectedTab === 'saved' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            style={styles.tab}
             onPress={() => setSelectedTab('saved')}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'saved' ? theme.primary : theme.textSecondary }]}>
@@ -473,17 +476,19 @@ export default function BossDashboard() {
                 <Text style={styles.badgeText}>{savedItems.length}</Text>
               </View>
             )}
+            {selectedTab === 'saved' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, selectedTab === 'carts' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            style={styles.tab}
             onPress={() => setSelectedTab('carts')}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'carts' ? theme.primary : theme.textSecondary }]}>
               Carts
             </Text>
+            {selectedTab === 'carts' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.content}>
@@ -1145,26 +1150,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  tabsScrollView: {
+  tabsContainer: {
+    height: 44,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
-  tabs: {
+  tabsScrollContent: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
   },
   tab: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    marginHorizontal: 2,
+    height: 44,
+    paddingHorizontal: 14,
     gap: 6,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
+  },
+  tabUnderline: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
   },
   badge: {
     minWidth: 20,
