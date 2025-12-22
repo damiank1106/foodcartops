@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const MIGRATIONS = [
   {
@@ -486,6 +486,14 @@ export const MIGRATIONS = [
     down: `
       DROP INDEX IF EXISTS idx_audit_logs_deleted_at;
       ALTER TABLE audit_logs DROP COLUMN deleted_at;
+    `,
+  },
+  {
+    version: 11,
+    up: `
+      UPDATE users SET role = 'worker' WHERE role = 'manager';
+    `,
+    down: `
     `,
   },
 ];
