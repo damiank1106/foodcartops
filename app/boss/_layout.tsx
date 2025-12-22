@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { LayoutDashboard, Users, FileText, Settings, Receipt, Clock } from 'lucide-react-native';
+import { LayoutDashboard, Users, FileText, Settings, Receipt, Package } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
@@ -55,10 +55,10 @@ export default function BossLayout() {
         }}
       />
       <Tabs.Screen
-        name="shifts"
+        name="products"
         options={{
-          title: 'Shifts',
-          tabBarIcon: ({ color }) => <Clock size={24} color={color} />,
+          title: 'Products',
+          tabBarIcon: ({ color }) => <Package size={24} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -87,6 +87,12 @@ export default function BossLayout() {
         options={{
           href: null,
           headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="shifts"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen

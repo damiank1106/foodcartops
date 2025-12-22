@@ -44,11 +44,25 @@ export interface Cart {
   updated_at: number;
 }
 
-export interface Product {
+export interface ProductCategory {
   id: string;
   name: string;
+  sort_order: number;
+  is_active: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface Product {
+  id: string;
+  category_id?: string;
+  name: string;
+  description?: string;
   price: number;
   price_cents: number;
+  cost_cents?: number;
+  sku?: string;
+  icon_image_uri?: string;
   category?: string;
   is_active: number;
   created_at: number;

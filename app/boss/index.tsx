@@ -428,60 +428,62 @@ export default function BossDashboard() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'overview' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-          onPress={() => setSelectedTab('overview')}
-        >
-          <Text style={[styles.tabText, { color: selectedTab === 'overview' ? theme.primary : theme.textSecondary }]}>
-            Overview
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'exceptions' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-          onPress={() => setSelectedTab('exceptions')}
-        >
-          <Text style={[styles.tabText, { color: selectedTab === 'exceptions' ? theme.primary : theme.textSecondary }]}>
-            Exceptions
-          </Text>
-          {(stats && (stats.unsettled_shifts_count > 0 || stats.pending_expenses_count > 0 || stats.cash_differences.length > 0)) && (
-            <View style={[styles.badge, { backgroundColor: theme.error }]}>
-              <Text style={styles.badgeText}>
-                {stats.unsettled_shifts_count + stats.pending_expenses_count + stats.cash_differences.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'activity' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-          onPress={() => setSelectedTab('activity')}
-        >
-          <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
-            Activity
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'saved' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-          onPress={() => setSelectedTab('saved')}
-        >
-          <Text style={[styles.tabText, { color: selectedTab === 'saved' ? theme.primary : theme.textSecondary }]}>
-            Saved
-          </Text>
-          {savedItems && savedItems.length > 0 && (
-            <View style={[styles.badge, { backgroundColor: theme.primary }]}>
-              <Text style={styles.badgeText}>{savedItems.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, selectedTab === 'carts' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
-          onPress={() => setSelectedTab('carts')}
-        >
-          <Text style={[styles.tabText, { color: selectedTab === 'carts' ? theme.primary : theme.textSecondary }]}>
-            Carts
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScrollView}>
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'overview' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            onPress={() => setSelectedTab('overview')}
+          >
+            <Text style={[styles.tabText, { color: selectedTab === 'overview' ? theme.primary : theme.textSecondary }]}>
+              Overview
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'exceptions' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            onPress={() => setSelectedTab('exceptions')}
+          >
+            <Text style={[styles.tabText, { color: selectedTab === 'exceptions' ? theme.primary : theme.textSecondary }]}>
+              Exceptions
+            </Text>
+            {(stats && (stats.unsettled_shifts_count > 0 || stats.pending_expenses_count > 0 || stats.cash_differences.length > 0)) && (
+              <View style={[styles.badge, { backgroundColor: theme.error }]}>
+                <Text style={styles.badgeText}>
+                  {stats.unsettled_shifts_count + stats.pending_expenses_count + stats.cash_differences.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'activity' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            onPress={() => setSelectedTab('activity')}
+          >
+            <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
+              Activity
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'saved' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            onPress={() => setSelectedTab('saved')}
+          >
+            <Text style={[styles.tabText, { color: selectedTab === 'saved' ? theme.primary : theme.textSecondary }]}>
+              Saved
+            </Text>
+            {savedItems && savedItems.length > 0 && (
+              <View style={[styles.badge, { backgroundColor: theme.primary }]}>
+                <Text style={styles.badgeText}>{savedItems.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'carts' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+            onPress={() => setSelectedTab('carts')}
+          >
+            <Text style={[styles.tabText, { color: selectedTab === 'carts' ? theme.primary : theme.textSecondary }]}>
+              Carts
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
 
       <ScrollView style={styles.scrollView}>
         <View style={styles.content}>
@@ -1143,21 +1145,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  tabs: {
-    flexDirection: 'row',
+  tabsScrollView: {
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.1)',
   },
+  tabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+  },
   tab: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    marginHorizontal: 2,
     gap: 6,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   badge: {

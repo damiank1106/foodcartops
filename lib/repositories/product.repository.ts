@@ -1,8 +1,19 @@
 import { BaseRepository } from './base';
 import { Product } from '../types';
+import { AuditRepository } from './audit.repository';
 
 export class ProductRepository extends BaseRepository {
-  async create(data: { name: string; price: number; category?: string }): Promise<Product> {
+  private auditRepo = new AuditRepository();
+  async create(data: {
+    name: string;
+    category_id?: string;
+    description?: string;
+    price: number;
+    cost_cents?: number;
+    sku?: string;
+    icon_image_uri?: string;
+    category?: string;
+  }, userId?: string): Promise<Product> {
     const db = await this.getDb();
     const id = this.generateId();
     const now = this.now();
@@ -11,9 +22,14 @@ export class ProductRepository extends BaseRepository {
 
     const product: Product = {
       id,
+      category_id: data.category_id,
       name: data.name,
+      description: data.description,
       price: data.price,
       price_cents,
+      cost_cents: data.cost_cents,
+      sku: data.sku,
+      icon_image_uri: data.icon_image_uri,
       category: data.category,
       is_active: 1,
       created_at: now,
@@ -21,10 +37,20 @@ export class ProductRepository extends BaseRepository {
     };
 
     await db.runAsync(
-      `INSERT INTO products (id, name, price, price_cents, category, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [product.id, product.name, product.price, product.price_cents, product.category || null, product.is_active, product.created_at, product.updated_at]
+      `INSERT INTO products (id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [product.id, product.category_id || null, product.name, product.description || null, product.price, product.price_cents, product.cost_cents || null, product.sku || null, product.icon_image_uri || null, product.category || null, product.is_active, product.created_at, product.updated_at]
     );
+
+    if (userId) {
+      await this.auditRepo.log({
+        user_id: userId,
+        entity_type: 'product',
+        entity_id: product.id,
+        action: 'create',
+        new_data: JSON.stringify(product),
+      });
+    }
 
     console.log('[ProductRepo] Created product:', product.id);
     return product;
@@ -54,15 +80,36 @@ export class ProductRepository extends BaseRepository {
     );
   }
 
-  async update(id: string, data: Partial<Omit<Product, 'id' | 'created_at'>>): Promise<void> {
+  async findByCategoryId(categoryId: string): Promise<Product[]> {
     const db = await this.getDb();
+    return await db.getAllAsync<Product>(
+      'SELECT * FROM products WHERE category_id = ? AND is_active = 1 ORDER BY name ASC',
+      [categoryId]
+    );
+  }
+
+  async listAll(): Promise<Product[]> {
+    const db = await this.getDb();
+    return await db.getAllAsync<Product>(
+      'SELECT * FROM products ORDER BY name ASC'
+    );
+  }
+
+  async update(id: string, data: Partial<Omit<Product, 'id' | 'created_at'>>, userId?: string): Promise<void> {
+    const db = await this.getDb();
+    
+    const oldData = await this.findById(id);
+    if (!oldData) {
+      throw new Error('Product not found');
+    }
+
     const updates: string[] = [];
     const values: any[] = [];
 
     Object.entries(data).forEach(([key, value]) => {
       if (key !== 'id' && key !== 'created_at') {
         updates.push(`${key} = ?`);
-        values.push(value);
+        values.push(value === undefined ? null : value);
       }
     });
 
@@ -75,6 +122,44 @@ export class ProductRepository extends BaseRepository {
       values
     );
 
+    if (userId) {
+      const newData = await this.findById(id);
+      await this.auditRepo.log({
+        user_id: userId,
+        entity_type: 'product',
+        entity_id: id,
+        action: 'update',
+        old_data: JSON.stringify(oldData),
+        new_data: JSON.stringify(newData),
+      });
+    }
+
     console.log('[ProductRepo] Updated product:', id);
+  }
+
+  async softDelete(id: string, userId?: string): Promise<void> {
+    const oldData = await this.findById(id);
+    if (!oldData) {
+      throw new Error('Product not found');
+    }
+
+    await this.update(id, { is_active: 0 }, userId);
+
+    if (userId) {
+      await this.auditRepo.log({
+        user_id: userId,
+        entity_type: 'product',
+        entity_id: id,
+        action: 'delete',
+        old_data: JSON.stringify(oldData),
+      });
+    }
+
+    console.log('[ProductRepo] Soft deleted product:', id);
+  }
+
+  async restore(id: string, userId?: string): Promise<void> {
+    await this.update(id, { is_active: 1 }, userId);
+    console.log('[ProductRepo] Restored product:', id);
   }
 }

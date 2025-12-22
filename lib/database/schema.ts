@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export const MIGRATIONS = [
   {
@@ -503,6 +503,52 @@ export const MIGRATIONS = [
     `,
     down: `
       ALTER TABLE carts DROP COLUMN notes;
+    `,
+  },
+  {
+    version: 13,
+    up: `
+      CREATE TABLE IF NOT EXISTS product_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX idx_product_categories_sort_order ON product_categories(sort_order);
+      CREATE INDEX idx_product_categories_is_active ON product_categories(is_active);
+
+      CREATE TABLE products_new (
+        id TEXT PRIMARY KEY,
+        category_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT,
+        price REAL NOT NULL,
+        price_cents INTEGER NOT NULL DEFAULT 0,
+        cost_cents INTEGER,
+        sku TEXT,
+        icon_image_uri TEXT,
+        category TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (category_id) REFERENCES product_categories(id)
+      );
+
+      INSERT INTO products_new (id, name, price, price_cents, category, is_active, created_at, updated_at)
+      SELECT id, name, price, price_cents, category, is_active, created_at, updated_at FROM products;
+
+      DROP TABLE products;
+      ALTER TABLE products_new RENAME TO products;
+
+      CREATE INDEX idx_products_category_id ON products(category_id);
+      CREATE INDEX idx_products_is_active ON products(is_active);
+    `,
+    down: `
+      DROP TABLE IF EXISTS product_categories;
+      DROP INDEX IF EXISTS idx_products_category_id;
     `,
   },
 ];
