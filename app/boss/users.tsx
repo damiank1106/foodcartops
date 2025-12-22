@@ -355,6 +355,24 @@ export default function UsersScreen() {
                         Worker
                       </Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.roleButton,
+                        { borderColor: theme.border },
+                        formData.role === 'inventory_clerk' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
+                      ]}
+                      onPress={() => setFormData((prev) => ({ ...prev, role: 'inventory_clerk' }))}
+                    >
+                      <Text
+                        style={[
+                          styles.roleButtonText,
+                          { color: theme.text },
+                          formData.role === 'inventory_clerk' && { color: theme.primary, fontWeight: '700' as const },
+                        ]}
+                      >
+                        Inventory Clerk
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </>
               )}

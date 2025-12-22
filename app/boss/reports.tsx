@@ -1,48 +1,31 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
-import { Archive } from 'lucide-react-native';
+import { useAuth } from '@/lib/contexts/auth.context';
 
-export default function InventoryScreen() {
+export default function InventoryRedirectScreen() {
   const { theme } = useTheme();
+  const { user, canAccessInventory } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && canAccessInventory) {
+      router.replace('/inventory');
+    }
+  }, [user, canAccessInventory, router]);
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.content}>
-        <View style={[styles.placeholder, { backgroundColor: theme.card }]}>
-          <Archive size={48} color={theme.primary} />
-          <Text style={[styles.placeholderTitle, { color: theme.text }]}>
-            Inventory Management
-          </Text>
-          <Text style={[styles.placeholderText, { color: theme.textSecondary }]}>
-            Inventory features coming in Phase 7
-          </Text>
-        </View>
-      </View>
-    </ScrollView>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <ActivityIndicator size="large" color={theme.primary} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  placeholder: {
-    padding: 48,
-    borderRadius: 16,
-    alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-  },
-  placeholderTitle: {
-    fontSize: 20,
-    fontWeight: '600' as const,
-  },
-  placeholderText: {
-    fontSize: 16,
-    textAlign: 'center',
+    alignItems: 'center',
   },
 });
