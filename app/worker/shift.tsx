@@ -214,6 +214,15 @@ export default function WorkerShiftScreen() {
               </View>
             )}
 
+            {cartInfo?.notes && (
+              <View style={[styles.notesBox, { backgroundColor: theme.background }]}>
+                <Text style={[styles.notesLabel, { color: theme.textSecondary }]}>Boss Notes:</Text>
+                <Text style={[styles.notesText, { color: theme.text }]}>
+                  {cartInfo.notes}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.timeRow}>
               <View style={styles.timeInfo}>
                 <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Clock In</Text>
@@ -747,5 +756,20 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  notesBox: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  notesLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

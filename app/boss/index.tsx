@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X } from 'lucide-react-native';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -15,12 +15,17 @@ export default function BossDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity' | 'saved'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity' | 'saved' | 'carts'>('overview');
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editStatus, setEditStatus] = useState<'OPEN' | 'RESOLVED'>('OPEN');
+  const [cartModalVisible, setCartModalVisible] = useState(false);
+  const [editingCart, setEditingCart] = useState<any>(null);
+  const [cartName, setCartName] = useState('');
+  const [cartNotes, setCartNotes] = useState('');
+  const [showInactiveCarts, setShowInactiveCarts] = useState(false);
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -29,6 +34,12 @@ export default function BossDashboard() {
   const settlementRepo = new SettlementRepository();
   const auditRepo = new AuditRepository();
   const savedItemsRepo = new BossSavedItemsRepository();
+
+  const { data: carts } = useQuery({
+    queryKey: ['boss-carts', showInactiveCarts],
+    queryFn: () => showInactiveCarts ? cartRepo.findAllIncludingInactive() : cartRepo.findAll(),
+    refetchInterval: 10000,
+  });
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['boss-monitoring-stats'],
@@ -313,6 +324,123 @@ export default function BossDashboard() {
     );
   };
 
+  const createCartMutation = useMutation({
+    mutationFn: async (data: { name: string; notes?: string }) => {
+      return cartRepo.create(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-carts'] });
+      setCartModalVisible(false);
+      setCartName('');
+      setCartNotes('');
+      Alert.alert('Success', 'Cart created successfully');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to create cart: ${error}`);
+    },
+  });
+
+  const updateCartMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      return cartRepo.update(id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-carts'] });
+      setCartModalVisible(false);
+      setEditingCart(null);
+      setCartName('');
+      setCartNotes('');
+      Alert.alert('Success', 'Cart updated successfully');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to update cart: ${error}`);
+    },
+  });
+
+  const deleteCartMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return cartRepo.deleteCart(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-carts'] });
+      Alert.alert('Success', 'Cart deleted successfully');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to delete cart: ${error}`);
+    },
+  });
+
+  const restoreCartMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return cartRepo.restoreCart(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-carts'] });
+      Alert.alert('Success', 'Cart restored successfully');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to restore cart: ${error}`);
+    },
+  });
+
+  const handleOpenCartModal = (cart?: any) => {
+    if (cart) {
+      setEditingCart(cart);
+      setCartName(cart.name);
+      setCartNotes(cart.notes || '');
+    } else {
+      setEditingCart(null);
+      setCartName('');
+      setCartNotes('');
+    }
+    setCartModalVisible(true);
+  };
+
+  const handleSaveCart = () => {
+    if (!cartName.trim()) {
+      Alert.alert('Error', 'Cart name is required');
+      return;
+    }
+
+    if (editingCart) {
+      updateCartMutation.mutate({
+        id: editingCart.id,
+        data: { name: cartName, notes: cartNotes },
+      });
+    } else {
+      createCartMutation.mutate({ name: cartName, notes: cartNotes });
+    }
+  };
+
+  const handleDeleteCart = (cartId: string, cartName: string) => {
+    Alert.alert(
+      'Delete Cart',
+      `Are you sure you want to delete "${cartName}"? This will mark it as inactive.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteCartMutation.mutate(cartId),
+        },
+      ]
+    );
+  };
+
+  const handleRestoreCart = (cartId: string, cartName: string) => {
+    Alert.alert(
+      'Restore Cart',
+      `Restore "${cartName}" to active status?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          onPress: () => restoreCartMutation.mutate(cartId),
+        },
+      ]
+    );
+  };
+
 
 
   if (isLoading) {
@@ -369,6 +497,14 @@ export default function BossDashboard() {
               <Text style={styles.badgeText}>{savedItems.length}</Text>
             </View>
           )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, selectedTab === 'carts' && { borderBottomColor: theme.primary, borderBottomWidth: 2 }]}
+          onPress={() => setSelectedTab('carts')}
+        >
+          <Text style={[styles.tabText, { color: selectedTab === 'carts' ? theme.primary : theme.textSecondary }]}>
+            Carts
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -775,6 +911,92 @@ export default function BossDashboard() {
               )}
             </>
           )}
+
+          {selectedTab === 'carts' && (
+            <>
+              <View style={styles.activityHeader}>
+                <Text style={[styles.pageTitle, { color: theme.text }]}>Carts</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.filterButton, { backgroundColor: showInactiveCarts ? theme.primary : theme.card }]}
+                    onPress={() => setShowInactiveCarts(!showInactiveCarts)}
+                  >
+                    <Text style={[styles.filterButtonText, { color: showInactiveCarts ? '#fff' : theme.textSecondary }]}>
+                      {showInactiveCarts ? 'All' : 'Active'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: theme.primary }]}
+                    onPress={() => handleOpenCartModal()}
+                  >
+                    <Plus size={20} color="#fff" />
+                    <Text style={[styles.addButtonText, { color: '#fff' }]}>Add Cart</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {carts && carts.length > 0 ? (
+                carts.map((cart) => (
+                  <View
+                    key={cart.id}
+                    style={[styles.cartCard, { backgroundColor: theme.card, opacity: cart.is_active ? 1 : 0.6 }]}
+                  >
+                    <View style={styles.cartHeader}>
+                      <View style={styles.cartInfo}>
+                        <Text style={[styles.cartName, { color: theme.text }]}>
+                          {cart.name}
+                        </Text>
+                        <Text style={[styles.cartStatus, { color: cart.is_active ? theme.success : theme.textSecondary }]}>
+                          {cart.is_active ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                      <View style={styles.cartActions}>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: theme.primary + '15' }]}
+                          onPress={() => handleOpenCartModal(cart)}
+                        >
+                          <Edit2 size={16} color={theme.primary} />
+                        </TouchableOpacity>
+                        {cart.is_active ? (
+                          <TouchableOpacity
+                            style={[styles.actionButton, { backgroundColor: theme.error + '15' }]}
+                            onPress={() => handleDeleteCart(cart.id, cart.name)}
+                          >
+                            <Trash2 size={16} color={theme.error} />
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.actionButton, { backgroundColor: theme.success + '15' }]}
+                            onPress={() => handleRestoreCart(cart.id, cart.name)}
+                          >
+                            <Plus size={16} color={theme.success} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                    {cart.notes && (
+                      <View style={[styles.notesBox, { backgroundColor: theme.background }]}>
+                        <Text style={[styles.notesLabel, { color: theme.textSecondary }]}>Boss Notes:</Text>
+                        <Text style={[styles.notesText, { color: theme.text }]}>
+                          {cart.notes}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))
+              ) : (
+                <View style={styles.emptyState}>
+                  <ShoppingBag size={64} color={theme.textSecondary} />
+                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                    No carts
+                  </Text>
+                  <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
+                    Add carts to manage your food cart operations
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -856,6 +1078,66 @@ export default function BossDashboard() {
               >
                 <Save size={18} color="#fff" />
                 <Text style={[styles.modalButtonText, { color: '#fff' }]}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={cartModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCartModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                {editingCart ? 'Edit Cart' : 'Add Cart'}
+              </Text>
+              <TouchableOpacity onPress={() => setCartModalVisible(false)}>
+                <XCircle size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Cart Name *</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={cartName}
+                onChangeText={setCartName}
+                placeholder="Enter cart name"
+                placeholderTextColor={theme.textSecondary}
+              />
+
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Boss Notes (Optional)</Text>
+              <TextInput
+                style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={cartNotes}
+                onChangeText={setCartNotes}
+                placeholder="Add notes for workers..."
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                numberOfLines={4}
+              />
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.background }]}
+                onPress={() => setCartModalVisible(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handleSaveCart}
+              >
+                <Save size={18} color="#fff" />
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>
+                  {editingCart ? 'Update' : 'Create'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1296,5 +1578,72 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cartCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cartInfo: {
+    flex: 1,
+  },
+  cartName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  cartStatus: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cartActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  notesBox: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  notesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

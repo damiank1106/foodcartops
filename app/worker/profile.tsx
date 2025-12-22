@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { LogOut, Moon, Sun, User as UserIcon, Key, ChevronRight, X, Info, ExternalLink } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import { ShiftRepository } from '@/lib/repositories';
 
 export default function WorkerProfileScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
@@ -16,7 +17,21 @@ export default function WorkerProfileScreen() {
   const [isChanging, setIsChanging] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (!user) return;
+
+    const shiftRepo = new ShiftRepository();
+    const activeShift = await shiftRepo.getActiveShift(user.id);
+
+    if (activeShift) {
+      Alert.alert(
+        'Active Shift',
+        'Please End the Shift before logging out',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
       {
