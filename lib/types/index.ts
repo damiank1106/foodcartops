@@ -38,7 +38,6 @@ export interface Cart {
   id: string;
   name: string;
   location?: string;
-  notes?: string;
   is_active: number;
   created_at: number;
   updated_at: number;
