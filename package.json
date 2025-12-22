@@ -6,6 +6,8 @@
     "start": "bunx rork start -p g1idrm6aqkg4mjqr0xr82 --tunnel",
     "start-web": "bunx rork start -p g1idrm6aqkg4mjqr0xr82 --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p g1idrm6aqkg4mjqr0xr82 --web --tunnel",
+    "expo-start": "expo start",
+    "android": "expo run:android",
     "lint": "expo lint"
   },
   "dependencies": {
