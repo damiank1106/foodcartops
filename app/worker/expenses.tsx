@@ -112,7 +112,7 @@ export default function WorkerExpensesScreen() {
         paid_from: data.paid_from,
         notes: data.notes || undefined,
         receipt_image_uri: data.receipt_image_uri || undefined,
-        status: activeShiftId ? 'SUBMITTED' : 'DRAFT',
+        status: 'SUBMITTED',
       });
 
       console.log('[Expense] Created expense:', expense.id);
