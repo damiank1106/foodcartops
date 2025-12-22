@@ -3,6 +3,7 @@ import { UserRepository } from '../repositories';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { resetDatabase } from '../database/init';
+import { StockLocationRepository } from '../repositories/stock-location.repository';
 
 const SEED_KEY = 'foodcartops_seeded';
 
@@ -32,6 +33,12 @@ export async function seedDatabase(): Promise<void> {
     });
 
     console.log('[Seed] Boss user created with PIN 1234');
+
+    const locationRepo = new StockLocationRepository();
+    await locationRepo.ensureWarehouse();
+    await locationRepo.ensureCartLocationsForActiveCarts();
+    console.log('[Seed] Inventory locations initialized');
+
     console.log('[Seed] Database initialized successfully');
   } catch (error) {
     console.error('[Seed] Failed to seed database:', error);

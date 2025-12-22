@@ -22,6 +22,18 @@ export type BossSavedItemSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type BossSavedItemStatus = 'OPEN' | 'RESOLVED';
 
+export type InventoryUnit = 'pcs' | 'kg' | 'g' | 'L' | 'mL';
+
+export type StockLocationType = 'WAREHOUSE' | 'CART';
+
+export type StockMovementReason = 
+  | 'PURCHASE' 
+  | 'ISSUE_TO_CART' 
+  | 'RETURN_TO_WAREHOUSE' 
+  | 'WASTE' 
+  | 'ADJUSTMENT' 
+  | 'TRANSFER';
+
 export interface User {
   id: string;
   name: string;
@@ -321,4 +333,63 @@ export interface BossSavedItem {
 
 export interface BossSavedItemWithDetails extends BossSavedItem {
   created_by_name: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  unit: InventoryUnit;
+  reorder_level_qty: number;
+  is_active: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface StockLocation {
+  id: string;
+  name: string;
+  type: StockLocationType;
+  cart_id?: string;
+  is_active: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface StockMovement {
+  id: string;
+  inventory_item_id: string;
+  from_location_id?: string;
+  to_location_id?: string;
+  qty: number;
+  reason: StockMovementReason;
+  cost_cents?: number;
+  shift_id?: string;
+  actor_user_id: string;
+  notes?: string;
+  created_at: number;
+}
+
+export interface StockBalanceCache {
+  inventory_item_id: string;
+  stock_location_id: string;
+  qty: number;
+  updated_at: number;
+}
+
+export interface StockMovementWithDetails extends StockMovement {
+  inventory_item_name: string;
+  from_location_name?: string;
+  to_location_name?: string;
+  actor_name: string;
+}
+
+export interface StockBalance {
+  inventory_item_id: string;
+  inventory_item_name: string;
+  unit: InventoryUnit;
+  stock_location_id: string;
+  stock_location_name: string;
+  qty: number;
+  reorder_level_qty: number;
+  is_low_stock: boolean;
 }

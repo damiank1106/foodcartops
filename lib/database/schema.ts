@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const MIGRATIONS = [
   {
@@ -586,6 +586,83 @@ export const MIGRATIONS = [
       INSERT INTO users_new SELECT * FROM users WHERE role IN ('boss', 'boss2', 'worker');
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
+    `,
+  },
+  {
+    version: 15,
+    up: `
+      CREATE TABLE IF NOT EXISTS inventory_items (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL CHECK(unit IN ('pcs', 'kg', 'g', 'L', 'mL')),
+        reorder_level_qty REAL NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX idx_inventory_items_is_active ON inventory_items(is_active);
+      CREATE INDEX idx_inventory_items_name ON inventory_items(name);
+
+      CREATE TABLE IF NOT EXISTS stock_locations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('WAREHOUSE', 'CART')),
+        cart_id TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (cart_id) REFERENCES carts(id)
+      );
+
+      CREATE INDEX idx_stock_locations_type ON stock_locations(type);
+      CREATE INDEX idx_stock_locations_cart_id ON stock_locations(cart_id);
+      CREATE INDEX idx_stock_locations_is_active ON stock_locations(is_active);
+
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        id TEXT PRIMARY KEY,
+        inventory_item_id TEXT NOT NULL,
+        from_location_id TEXT,
+        to_location_id TEXT,
+        qty REAL NOT NULL,
+        reason TEXT NOT NULL CHECK(reason IN ('PURCHASE', 'ISSUE_TO_CART', 'RETURN_TO_WAREHOUSE', 'WASTE', 'ADJUSTMENT', 'TRANSFER')),
+        cost_cents INTEGER,
+        shift_id TEXT,
+        actor_user_id TEXT NOT NULL,
+        notes TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id),
+        FOREIGN KEY (from_location_id) REFERENCES stock_locations(id),
+        FOREIGN KEY (to_location_id) REFERENCES stock_locations(id),
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (actor_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_stock_movements_inventory_item_id ON stock_movements(inventory_item_id);
+      CREATE INDEX idx_stock_movements_from_location_id ON stock_movements(from_location_id);
+      CREATE INDEX idx_stock_movements_to_location_id ON stock_movements(to_location_id);
+      CREATE INDEX idx_stock_movements_reason ON stock_movements(reason);
+      CREATE INDEX idx_stock_movements_created_at ON stock_movements(created_at);
+      CREATE INDEX idx_stock_movements_actor_user_id ON stock_movements(actor_user_id);
+
+      CREATE TABLE IF NOT EXISTS stock_balances_cache (
+        inventory_item_id TEXT NOT NULL,
+        stock_location_id TEXT NOT NULL,
+        qty REAL NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (inventory_item_id, stock_location_id),
+        FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id),
+        FOREIGN KEY (stock_location_id) REFERENCES stock_locations(id)
+      );
+
+      CREATE INDEX idx_stock_balances_cache_stock_location_id ON stock_balances_cache(stock_location_id);
+      CREATE INDEX idx_stock_balances_cache_inventory_item_id ON stock_balances_cache(inventory_item_id);
+    `,
+    down: `
+      DROP TABLE IF EXISTS stock_balances_cache;
+      DROP TABLE IF EXISTS stock_movements;
+      DROP TABLE IF EXISTS stock_locations;
+      DROP TABLE IF EXISTS inventory_items;
     `,
   },
 ];
