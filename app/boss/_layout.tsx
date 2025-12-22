@@ -48,7 +48,7 @@ export default function BossLayout() {
         }}
       />
       <Tabs.Screen
-        name="reports"
+        name="inventory"
         options={{
           title: 'Inventory',
           tabBarIcon: ({ color }) => <Archive size={24} color={color} />,
