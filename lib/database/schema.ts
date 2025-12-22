@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const MIGRATIONS = [
   {
@@ -663,6 +663,20 @@ export const MIGRATIONS = [
       DROP TABLE IF EXISTS stock_movements;
       DROP TABLE IF EXISTS stock_locations;
       DROP TABLE IF EXISTS inventory_items;
+    `,
+  },
+  {
+    version: 16,
+    up: `
+      ALTER TABLE products ADD COLUMN inventory_item_id TEXT;
+      ALTER TABLE products ADD COLUMN units_per_sale REAL NOT NULL DEFAULT 1;
+
+      CREATE INDEX idx_products_inventory_item_id ON products(inventory_item_id);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_products_inventory_item_id;
+      ALTER TABLE products DROP COLUMN units_per_sale;
+      ALTER TABLE products DROP COLUMN inventory_item_id;
     `,
   },
 ];

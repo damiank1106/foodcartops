@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Package, Plus, Edit2, Trash2, X, Save, FolderOpen } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { ProductRepository, ProductCategoryRepository } from '@/lib/repositories';
+import { ProductRepository, ProductCategoryRepository, InventoryItemRepository } from '@/lib/repositories';
 
 export default function ProductsScreen() {
   const { theme } = useTheme();
@@ -24,10 +24,13 @@ export default function ProductsScreen() {
   const [productPrice, setProductPrice] = useState('');
   const [productCost, setProductCost] = useState('');
   const [productSku, setProductSku] = useState('');
+  const [productInventoryItemId, setProductInventoryItemId] = useState('');
+  const [productUnitsPerSale, setProductUnitsPerSale] = useState('1');
   const [productCategoryId, setProductCategoryId] = useState('');
 
   const categoryRepo = new ProductCategoryRepository();
   const productRepo = new ProductRepository();
+  const inventoryItemRepo = new InventoryItemRepository();
 
   const { data: categories } = useQuery({
     queryKey: ['product-categories'],
@@ -37,6 +40,11 @@ export default function ProductsScreen() {
   const { data: products } = useQuery({
     queryKey: ['products'],
     queryFn: async () => productRepo.findAll(),
+  });
+
+  const { data: inventoryItems } = useQuery({
+    queryKey: ['inventory-items'],
+    queryFn: async () => inventoryItemRepo.listActive(),
   });
 
   const saveCategoryMutation = useMutation({
@@ -78,6 +86,8 @@ export default function ProductsScreen() {
       price: number;
       cost_cents?: number;
       sku?: string;
+      inventory_item_id?: string;
+      units_per_sale?: number;
     }) => {
       if (editingProduct) {
         await productRepo.update(editingProduct.id, { ...data, price_cents: Math.round(data.price * 100) }, user?.id);
@@ -130,6 +140,8 @@ export default function ProductsScreen() {
       setProductCost(product.cost_cents ? (product.cost_cents / 100).toString() : '');
       setProductSku(product.sku || '');
       setProductCategoryId(product.category_id || '');
+      setProductInventoryItemId(product.inventory_item_id || '');
+      setProductUnitsPerSale((product.units_per_sale || 1).toString());
     } else {
       setEditingProduct(null);
       setProductName('');
@@ -138,6 +150,8 @@ export default function ProductsScreen() {
       setProductCost('');
       setProductSku('');
       setProductCategoryId('');
+      setProductInventoryItemId('');
+      setProductUnitsPerSale('1');
     }
     setProductModalVisible(true);
   };
@@ -171,6 +185,12 @@ export default function ProductsScreen() {
     }
 
     const costCents = productCost.trim() ? Math.round(parseFloat(productCost) * 100) : undefined;
+    const unitsPerSale = parseFloat(productUnitsPerSale);
+
+    if (isNaN(unitsPerSale) || unitsPerSale <= 0) {
+      Alert.alert('Error', 'Units per sale must be greater than 0');
+      return;
+    }
 
     saveProductMutation.mutate({
       name: productName,
@@ -179,6 +199,8 @@ export default function ProductsScreen() {
       price,
       cost_cents: costCents,
       sku: productSku || undefined,
+      inventory_item_id: productInventoryItemId || undefined,
+      units_per_sale: unitsPerSale,
     });
   };
 
@@ -478,6 +500,49 @@ export default function ProductsScreen() {
                 placeholderTextColor={theme.textSecondary}
                 multiline
                 numberOfLines={3}
+              />
+
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Linked Inventory Item (optional)</Text>
+              <View style={[styles.picker, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPicker}>
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryChip,
+                      !productInventoryItemId && { backgroundColor: theme.primary },
+                      productInventoryItemId && { borderColor: theme.border, borderWidth: 1 }
+                    ]}
+                    onPress={() => setProductInventoryItemId('')}
+                  >
+                    <Text style={[styles.categoryChipText, { color: !productInventoryItemId ? '#fff' : theme.text }]}>
+                      None
+                    </Text>
+                  </TouchableOpacity>
+                  {inventoryItems?.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.categoryChip,
+                        productInventoryItemId === item.id && { backgroundColor: theme.primary },
+                        productInventoryItemId !== item.id && { borderColor: theme.border, borderWidth: 1 }
+                      ]}
+                      onPress={() => setProductInventoryItemId(item.id)}
+                    >
+                      <Text style={[styles.categoryChipText, { color: productInventoryItemId === item.id ? '#fff' : theme.text }]}>
+                        {item.name} ({item.unit})
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <Text style={[styles.inputLabel, { color: theme.text }]}>Units per Sale</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={productUnitsPerSale}
+                onChangeText={setProductUnitsPerSale}
+                placeholder="1"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="decimal-pad"
               />
             </ScrollView>
 

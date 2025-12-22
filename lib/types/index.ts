@@ -76,6 +76,8 @@ export interface Product {
   sku?: string;
   icon_image_uri?: string;
   category?: string;
+  inventory_item_id?: string;
+  units_per_sale: number;
   is_active: number;
   created_at: number;
   updated_at: number;

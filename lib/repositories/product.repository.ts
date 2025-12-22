@@ -13,12 +13,20 @@ export class ProductRepository extends BaseRepository {
     sku?: string;
     icon_image_uri?: string;
     category?: string;
+    inventory_item_id?: string;
+    units_per_sale?: number;
   }, userId?: string): Promise<Product> {
     const db = await this.getDb();
     const id = this.generateId();
     const now = this.now();
 
     const price_cents = Math.round(data.price * 100);
+
+    const units_per_sale = data.units_per_sale !== undefined ? data.units_per_sale : 1;
+
+    if (units_per_sale <= 0) {
+      throw new Error('units_per_sale must be greater than 0');
+    }
 
     const product: Product = {
       id,
@@ -31,15 +39,17 @@ export class ProductRepository extends BaseRepository {
       sku: data.sku,
       icon_image_uri: data.icon_image_uri,
       category: data.category,
+      inventory_item_id: data.inventory_item_id,
+      units_per_sale,
       is_active: 1,
       created_at: now,
       updated_at: now,
     };
 
     await db.runAsync(
-      `INSERT INTO products (id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [product.id, product.category_id || null, product.name, product.description || null, product.price, product.price_cents, product.cost_cents || null, product.sku || null, product.icon_image_uri || null, product.category || null, product.is_active, product.created_at, product.updated_at]
+      `INSERT INTO products (id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, inventory_item_id, units_per_sale, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [product.id, product.category_id || null, product.name, product.description || null, product.price, product.price_cents, product.cost_cents || null, product.sku || null, product.icon_image_uri || null, product.category || null, product.inventory_item_id || null, product.units_per_sale, product.is_active, product.created_at, product.updated_at]
     );
 
     if (userId) {

@@ -12,7 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Minus, ShoppingCart, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { ProductRepository, SaleRepository, CartRepository } from '@/lib/repositories';
+import { ProductRepository, SaleRepository, CartRepository, StockLocationRepository, StockBalanceRepository } from '@/lib/repositories';
 import { Product, PaymentMethod } from '@/lib/types';
 
 export default function WorkerSaleScreen() {
@@ -25,6 +25,8 @@ export default function WorkerSaleScreen() {
   const productRepo = new ProductRepository();
   const saleRepo = new SaleRepository();
   const cartRepo = new CartRepository();
+  const stockLocationRepo = new StockLocationRepository();
+  const stockBalanceRepo = new StockBalanceRepository();
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['products'],
@@ -35,6 +37,25 @@ export default function WorkerSaleScreen() {
     queryKey: ['cart', selectedCartId],
     queryFn: () => (selectedCartId ? cartRepo.findById(selectedCartId) : null),
     enabled: !!selectedCartId,
+  });
+
+  const { data: cartStockLocation } = useQuery({
+    queryKey: ['cart-stock-location', selectedCartId],
+    queryFn: async () => {
+      if (!selectedCartId) return null;
+      const locations = await stockLocationRepo.listActive();
+      return locations.find(loc => loc.type === 'CART' && loc.cart_id === selectedCartId) || null;
+    },
+    enabled: !!selectedCartId,
+  });
+
+  const { data: stockBalances } = useQuery({
+    queryKey: ['stock-balances', cartStockLocation?.id, cartStockLocation],
+    queryFn: async () => {
+      if (!cartStockLocation) return [];
+      return stockBalanceRepo.getBalancesForLocation(cartStockLocation.id);
+    },
+    enabled: !!cartStockLocation,
   });
 
   const createSaleMutation = useMutation({
@@ -135,6 +156,28 @@ export default function WorkerSaleScreen() {
     );
   }
 
+  const getAvailability = (product: Product) => {
+    if (!product.inventory_item_id) {
+      return null;
+    }
+
+    if (!stockBalances) {
+      return { qty: 0, unit: '', isAvailable: false };
+    }
+
+    const balance = stockBalances.find(b => b.inventory_item_id === product.inventory_item_id);
+    if (!balance) {
+      return { qty: 0, unit: '', isAvailable: false };
+    }
+
+    const availableQty = balance.qty / (product.units_per_sale || 1);
+    return {
+      qty: availableQty,
+      unit: balance.unit,
+      isAvailable: availableQty > 0,
+    };
+  };
+
   const categories = Array.from(new Set(products?.map((p) => p.category).filter(Boolean)));
 
   return (
@@ -147,14 +190,24 @@ export default function WorkerSaleScreen() {
       </View>
 
       <ScrollView style={styles.content}>
+        {!selectedCartId && (
+          <View style={[styles.banner, { backgroundColor: theme.error + '15' }]}>
+            <AlertCircle size={16} color={theme.error} />
+            <Text style={[styles.bannerText, { color: theme.error }]}>
+              No active cart — availability unavailable
+            </Text>
+          </View>
+        )}
+
         {categories.map((category) => (
           <View key={category} style={styles.categorySection}>
             <Text style={[styles.categoryTitle, { color: theme.text }]}>{category}</Text>
             <View style={styles.productsGrid}>
               {products
                 ?.filter((p) => p.category === category)
-                .map((product) => {
+                  .map((product) => {
                   const inCart = cart.get(product.id);
+                  const availability = getAvailability(product);
                   return (
                     <TouchableOpacity
                       key={product.id}
@@ -171,6 +224,19 @@ export default function WorkerSaleScreen() {
                       <Text style={[styles.productPrice, { color: theme.primary }]}>
                         ₱{product.price.toFixed(2)}
                       </Text>
+                      {availability && (
+                        <View style={styles.availabilityContainer}>
+                          {availability.isAvailable ? (
+                            <Text style={[styles.availabilityText, { color: theme.success }]}>
+                              Available: {Math.floor(availability.qty)} {availability.unit}
+                            </Text>
+                          ) : (
+                            <View style={[styles.outOfStockBadge, { backgroundColor: theme.error }]}>
+                              <Text style={styles.outOfStockText}>Out of stock</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
                       {inCart && (
                         <View style={[styles.quantityBadge, { backgroundColor: theme.primary }]}>
                           <Text style={styles.quantityText}>{inCart.quantity}</Text>
@@ -427,5 +493,35 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  bannerText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  availabilityContainer: {
+    marginTop: 6,
+  },
+  availabilityText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+  outOfStockBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  outOfStockText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700' as const,
   },
 });
