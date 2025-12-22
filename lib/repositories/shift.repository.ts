@@ -5,7 +5,7 @@ export class ShiftRepository extends BaseRepository {
   async createAssignedShift(
     worker_id: string,
     cart_id: string,
-    starting_cash_cents: number,
+    starting_cash_cents: number | null,
     notes?: string
   ): Promise<WorkerShift> {
     const db = await this.getDb();
@@ -17,9 +17,9 @@ export class ShiftRepository extends BaseRepository {
       id,
       worker_id,
       cart_id,
-      clock_in: now,
-      starting_cash_cents,
-      expected_cash_cents: starting_cash_cents,
+      clock_in: null as any,
+      starting_cash_cents: starting_cash_cents || 0,
+      expected_cash_cents: starting_cash_cents || 0,
       notes,
       status: 'assigned',
       created_at: now,
@@ -36,7 +36,7 @@ export class ShiftRepository extends BaseRepository {
         shift.id,
         shift.worker_id,
         shift.cart_id,
-        shift.clock_in,
+        null,
         shift.starting_cash_cents,
         shift.expected_cash_cents,
         shift.notes || null,
@@ -52,7 +52,7 @@ export class ShiftRepository extends BaseRepository {
       notes,
     });
 
-    console.log('[ShiftRepo] Shift assigned:', shift.id);
+    console.log('[ShiftRepo] Shift assigned (inactive):', shift.id);
     return shift;
   }
 
@@ -191,10 +191,18 @@ export class ShiftRepository extends BaseRepository {
   async getActiveShift(worker_id: string): Promise<WorkerShift | null> {
     const db = await this.getDb();
     const shift = await db.getFirstAsync<WorkerShift>(
-      "SELECT DISTINCT * FROM worker_shifts WHERE worker_id = ? AND status = 'active' ORDER BY clock_in DESC LIMIT 1",
+      "SELECT * FROM worker_shifts WHERE worker_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
       [worker_id]
     );
     return shift || null;
+  }
+
+  async getAssignedShifts(worker_id: string): Promise<WorkerShift[]> {
+    const db = await this.getDb();
+    return await db.getAllAsync<WorkerShift>(
+      "SELECT * FROM worker_shifts WHERE worker_id = ? AND status = 'assigned' ORDER BY created_at DESC",
+      [worker_id]
+    );
   }
 
   async getShiftById(shift_id: string): Promise<WorkerShift | null> {
@@ -222,7 +230,7 @@ export class ShiftRepository extends BaseRepository {
     }
 
     return await db.getAllAsync<WorkerShift>(
-      `SELECT DISTINCT * FROM worker_shifts WHERE ${conditions.join(' AND ')} ORDER BY clock_in DESC`,
+      `SELECT * FROM worker_shifts WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`,
       params
     );
   }

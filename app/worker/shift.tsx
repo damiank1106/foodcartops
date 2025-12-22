@@ -36,6 +36,15 @@ export default function WorkerShiftScreen() {
     queryFn: () => cartRepo.findAll(),
   });
 
+  const { data: assignedShifts } = useQuery({
+    queryKey: ['assigned-shifts', user?.id, user],
+    queryFn: () => {
+      if (!user) return [];
+      return shiftRepo.getAssignedShifts(user.id);
+    },
+    enabled: !!user,
+  });
+
   const { data: activeShift } = useQuery({
     queryKey: ['active-shift', activeShiftId, user?.id, user],
     queryFn: () => {
@@ -85,8 +94,8 @@ export default function WorkerShiftScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const openStartModal = (cartId: string) => {
-    setSelectedCart(cartId);
+  const openStartModal = (cartIdOrShiftId: string) => {
+    setSelectedCart(cartIdOrShiftId);
     setStartingCash('');
     setShowStartModal(true);
   };
@@ -107,6 +116,7 @@ export default function WorkerShiftScreen() {
       await startShift(selectedCart, cents);
       setShowStartModal(false);
       queryClient.invalidateQueries({ queryKey: ['active-shift'] });
+      queryClient.invalidateQueries({ queryKey: ['assigned-shifts'] });
       Alert.alert('Success', 'Shift started successfully!');
     } catch {
       Alert.alert('Error', 'Failed to start shift');
@@ -321,7 +331,42 @@ export default function WorkerShiftScreen() {
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
         <Text style={[styles.title, { color: theme.text }]}>Start Your Shift</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Select a cart to begin</Text>
+        
+        {assignedShifts && assignedShifts.length > 0 && (
+          <>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Assigned Shifts</Text>
+            {assignedShifts.map((shift) => {
+              const cart = carts?.find(c => c.id === shift.cart_id);
+              return (
+                <TouchableOpacity
+                  key={shift.id}
+                  style={[styles.cartCard, { backgroundColor: theme.card, borderColor: theme.primary, borderWidth: 2 }]}
+                  onPress={() => openStartModal(shift.id)}
+                >
+                  <View style={styles.cartInfo}>
+                    <Text style={[styles.cartCardName, { color: theme.text }]}>{cart?.name || 'Unknown Cart'}</Text>
+                    {cart?.location && (
+                      <View style={styles.locationRow}>
+                        <MapPin size={16} color={theme.textSecondary} />
+                        <Text style={[styles.location, { color: theme.textSecondary }]}>
+                          {cart.location}
+                        </Text>
+                      </View>
+                    )}
+                    {shift.starting_cash_cents !== null && shift.starting_cash_cents > 0 && (
+                      <Text style={[styles.assignedCash, { color: theme.primary }]}>
+                        Starting Cash: ₱{(shift.starting_cash_cents / 100).toFixed(2)}
+                      </Text>
+                    )}
+                  </View>
+                  <Clock size={24} color={theme.primary} />
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        )}
+        
+        <Text style={[styles.subtitle, { color: theme.textSecondary, marginTop: assignedShifts && assignedShifts.length > 0 ? 24 : 0 }]}>All Carts</Text>
 
         {carts?.map((cart) => (
           <TouchableOpacity
@@ -503,6 +548,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     marginBottom: 24,
+  },
+  assignedCash: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    marginTop: 6,
   },
   timeRow: {
     flexDirection: 'row',

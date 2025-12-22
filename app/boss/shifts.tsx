@@ -71,7 +71,7 @@ export default function BossShiftsScreen() {
   });
 
   const createShiftMutation = useMutation({
-    mutationFn: async (data: { worker_id: string; cart_id: string; starting_cash_cents: number; notes?: string }) => {
+    mutationFn: async (data: { worker_id: string; cart_id: string; starting_cash_cents: number | null; notes?: string }) => {
       const shift = await shiftRepo.createAssignedShift(
         data.worker_id,
         data.cart_id,
@@ -194,7 +194,7 @@ export default function BossShiftsScreen() {
       return;
     }
 
-    let cents = 0;
+    let cents: number | null = null;
     if (startingCash && startingCash.trim() !== '') {
       if (isNaN(parseFloat(startingCash))) {
         Alert.alert('Error', 'Please enter a valid starting cash amount');
@@ -266,9 +266,12 @@ export default function BossShiftsScreen() {
         <View style={styles.content}>
           {shifts && shifts.length > 0 ? (
             shifts.map((shift) => {
+              const clockIn = shift.clock_in || shift.created_at;
               const duration = shift.clock_out
-                ? Math.floor((shift.clock_out - shift.clock_in) / 1000 / 60)
-                : Math.floor((Date.now() - shift.clock_in) / 1000 / 60);
+                ? Math.floor((shift.clock_out - clockIn) / 1000 / 60)
+                : shift.status === 'assigned'
+                ? 0
+                : Math.floor((Date.now() - clockIn) / 1000 / 60);
               const hours = Math.floor(duration / 60);
               const minutes = duration % 60;
 
@@ -320,12 +323,21 @@ export default function BossShiftsScreen() {
                   </View>
 
                   <View style={styles.shiftDetails}>
-                    <View style={styles.detailRow}>
-                      <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Clock In:</Text>
-                      <Text style={[styles.detailValue, { color: theme.text }]}>
-                        {format(new Date(shift.clock_in), 'MMM d, h:mm a')}
-                      </Text>
-                    </View>
+                    {shift.status === 'assigned' ? (
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Assigned:</Text>
+                        <Text style={[styles.detailValue, { color: theme.text }]}>
+                          {format(new Date(shift.created_at), 'MMM d, h:mm a')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Clock In:</Text>
+                        <Text style={[styles.detailValue, { color: theme.text }]}>
+                          {format(new Date(clockIn), 'MMM d, h:mm a')}
+                        </Text>
+                      </View>
+                    )}
                     {shift.clock_out && (
                       <View style={styles.detailRow}>
                         <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Clock Out:</Text>
@@ -334,12 +346,14 @@ export default function BossShiftsScreen() {
                         </Text>
                       </View>
                     )}
-                    <View style={styles.detailRow}>
-                      <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Duration:</Text>
-                      <Text style={[styles.detailValue, { color: theme.primary }]}>
-                        {hours}h {minutes}m
-                      </Text>
-                    </View>
+                    {shift.status !== 'assigned' && (
+                      <View style={styles.detailRow}>
+                        <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Duration:</Text>
+                        <Text style={[styles.detailValue, { color: theme.primary }]}>
+                          {hours}h {minutes}m
+                        </Text>
+                      </View>
+                    )}
                     <View style={styles.detailRow}>
                       <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Starting Cash:</Text>
                       <Text style={[styles.detailValue, { color: theme.text }]}>

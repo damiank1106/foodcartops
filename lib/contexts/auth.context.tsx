@@ -148,17 +148,28 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
-  const startShift = async (cartId: string, startingCashCents: number = 0) => {
+  const startShift = async (shiftIdOrCartId: string, startingCashCents: number = 0) => {
     if (!state.user || state.user.role !== 'worker') {
       throw new Error('Only workers can start shifts');
     }
 
     try {
       const shiftRepo = new ShiftRepository();
-      const shift = await shiftRepo.startShift(state.user.id, cartId, startingCashCents);
-      setState((prev) => ({ ...prev, activeShiftId: shift.id, selectedCartId: cartId }));
-      await SecureStore.setItemAsync(CART_KEY, cartId);
-      console.log('[Auth] Shift started:', shift.id);
+      
+      const assignedShifts = await shiftRepo.getAssignedShifts(state.user.id);
+      const assignedShift = assignedShifts.find(s => s.id === shiftIdOrCartId || s.cart_id === shiftIdOrCartId);
+      
+      if (assignedShift) {
+        await shiftRepo.startShift(assignedShift.id, startingCashCents);
+        setState((prev) => ({ ...prev, activeShiftId: assignedShift.id, selectedCartId: assignedShift.cart_id }));
+        await SecureStore.setItemAsync(CART_KEY, assignedShift.cart_id);
+        console.log('[Auth] Assigned shift started:', assignedShift.id);
+      } else {
+        const shift = await shiftRepo.startShift(state.user.id, shiftIdOrCartId, startingCashCents);
+        setState((prev) => ({ ...prev, activeShiftId: shift.id, selectedCartId: shiftIdOrCartId }));
+        await SecureStore.setItemAsync(CART_KEY, shiftIdOrCartId);
+        console.log('[Auth] New shift started:', shift.id);
+      }
     } catch (error) {
       console.error('[Auth] Failed to start shift:', error);
       throw error;

@@ -166,7 +166,7 @@ export default function WorkerExpensesScreen() {
       const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
       const allExpenses = await expenseRepo.findWithDetails({ submitted_by_user_id: user.id });
       const oldDrafts = allExpenses.filter(e => 
-        e.created_at < sevenDaysAgo && (e.status === 'DRAFT' || e.status === 'SUBMITTED')
+        e.created_at < sevenDaysAgo && e.status === 'DRAFT'
       );
       
       for (const expense of oldDrafts) {
@@ -176,7 +176,7 @@ export default function WorkerExpensesScreen() {
           entity_type: 'expense',
           entity_id: expense.id,
           action: 'delete',
-          new_data: JSON.stringify({ reason: 'auto_cleanup_7_days' }),
+          new_data: JSON.stringify({ reason: 'auto_cleanup_7_days_draft' }),
         });
       }
       
@@ -318,7 +318,7 @@ export default function WorkerExpensesScreen() {
       
       <View style={[styles.retentionBanner, { backgroundColor: theme.warning + '15' }]}>
         <Text style={[styles.retentionText, { color: theme.textSecondary }]}>
-          Expenses older than 7 days are automatically removed.
+          Draft expenses older than 7 days are automatically removed.
         </Text>
       </View>
 
