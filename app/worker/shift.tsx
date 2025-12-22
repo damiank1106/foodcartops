@@ -213,6 +213,12 @@ export default function WorkerShiftScreen() {
                 </Text>
               </View>
             )}
+            {cartInfo?.notes && (
+              <View style={[styles.notesCard, { backgroundColor: theme.background }]}>
+                <Text style={[styles.notesLabel, { color: theme.textSecondary }]}>Boss Notes:</Text>
+                <Text style={[styles.notesText, { color: theme.text }]}>{cartInfo.notes}</Text>
+              </View>
+            )}
 
             <View style={styles.timeRow}>
               <View style={styles.timeInfo}>
@@ -353,6 +359,13 @@ export default function WorkerShiftScreen() {
                         </Text>
                       </View>
                     )}
+                    {cart?.notes && (
+                      <View style={[styles.notesPreview, { backgroundColor: theme.background }]}>
+                        <Text style={[styles.notesPreviewText, { color: theme.textSecondary }]} numberOfLines={2}>
+                          Boss Notes: {cart.notes}
+                        </Text>
+                      </View>
+                    )}
                     {shift.starting_cash_cents !== null && shift.starting_cash_cents > 0 && (
                       <Text style={[styles.assignedCash, { color: theme.primary }]}>
                         Starting Cash: ₱{(shift.starting_cash_cents / 100).toFixed(2)}
@@ -381,6 +394,13 @@ export default function WorkerShiftScreen() {
                   <MapPin size={16} color={theme.textSecondary} />
                   <Text style={[styles.location, { color: theme.textSecondary }]}>
                     {cart.location}
+                  </Text>
+                </View>
+              )}
+              {cart.notes && (
+                <View style={[styles.notesPreview, { backgroundColor: theme.background }]}>
+                  <Text style={[styles.notesPreviewText, { color: theme.textSecondary }]} numberOfLines={2}>
+                    Boss Notes: {cart.notes}
                   </Text>
                 </View>
               )}
@@ -747,5 +767,28 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  notesCard: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  notesLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  notesPreview: {
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  notesPreviewText: {
+    fontSize: 12,
+    fontStyle: 'italic' as const,
   },
 });

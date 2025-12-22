@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import createContextHook from '@nkzw/create-context-hook';
 import { User } from '../types';
@@ -121,6 +121,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const logout = async () => {
     try {
+      if (state.user?.role === 'worker') {
+        const shiftRepo = new ShiftRepository();
+        const activeShift = await shiftRepo.getActiveShift(state.user.id);
+        
+        if (activeShift) {
+          if (Platform.OS !== 'web') {
+            Alert.alert(
+              'Active Shift',
+              'Please End the Shift before logging out',
+              [{ text: 'OK' }]
+            );
+          }
+          return;
+        }
+      }
+
       await SecureStore.deleteItemAsync(AUTH_KEY);
       await SecureStore.deleteItemAsync(CART_KEY);
 

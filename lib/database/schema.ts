@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const MIGRATIONS = [
   {
@@ -494,6 +494,15 @@ export const MIGRATIONS = [
       UPDATE users SET role = 'worker' WHERE role = 'manager';
     `,
     down: `
+    `,
+  },
+  {
+    version: 12,
+    up: `
+      ALTER TABLE carts ADD COLUMN notes TEXT;
+    `,
+    down: `
+      ALTER TABLE carts DROP COLUMN notes;
     `,
   },
 ];
