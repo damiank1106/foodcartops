@@ -24,7 +24,7 @@ export default function WorkerProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           await logout();
-          router.replace('/' as any);
+          router.replace('/');
         },
       },
     ]);

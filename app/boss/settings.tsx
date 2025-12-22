@@ -29,7 +29,7 @@ export default function SettingsScreen() {
         style: 'destructive',
         onPress: async () => {
           await logout();
-          router.replace('/' as any);
+          router.replace('/');
         },
       },
     ]);
@@ -100,7 +100,7 @@ export default function SettingsScreen() {
         setNewName('');
         setTimeout(() => {
           logout();
-          router.replace('/' as any);
+          router.replace('/');
         }, 1500);
       }
     } catch (error) {
@@ -127,7 +127,7 @@ export default function SettingsScreen() {
               await resetDatabase();
               await seedDatabase();
               Alert.alert('Success', 'Database reset complete. Please login with PIN 1234', [
-                { text: 'OK', onPress: () => router.replace('/' as any) },
+                { text: 'OK', onPress: () => router.replace('/') },
               ]);
             } catch (error) {
               console.error('[Settings] Reset failed:', error);

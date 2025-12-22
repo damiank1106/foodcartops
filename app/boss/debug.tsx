@@ -119,7 +119,7 @@ export default function DebugScreen() {
                 {
                   text: 'OK',
                   onPress: () => {
-                    router.replace('/' as any);
+                    router.replace('/');
                   },
                 },
               ]);

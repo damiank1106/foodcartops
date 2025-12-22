@@ -12,7 +12,7 @@ export default function WorkerLayout() {
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== 'worker')) {
-      router.replace('/' as any);
+      router.replace('/');
     }
   }, [isLoading, user, router]);
 

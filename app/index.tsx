@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,13 +20,17 @@ export default function LoginScreen() {
   const { loginWithPin, isLoading, user } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
+  const didRedirect = useRef(false);
 
   React.useEffect(() => {
+    if (didRedirect.current) return;
+    
     if (!isLoading && user) {
+      didRedirect.current = true;
       if (user.role === 'boss' || user.role === 'boss2') {
-        router.replace('/boss' as any);
+        router.replace('/boss');
       } else {
-        router.replace('/worker' as any);
+        router.replace('/worker');
       }
     }
   }, [isLoading, user, router]);

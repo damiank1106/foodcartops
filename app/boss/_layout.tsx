@@ -11,12 +11,12 @@ export default function BossLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== 'boss')) {
-      router.replace('/' as any);
+    if (!isLoading && (!user || (user.role !== 'boss' && user.role !== 'boss2'))) {
+      router.replace('/');
     }
   }, [isLoading, user, router]);
 
-  if (isLoading || !user || user.role !== 'boss') {
+  if (isLoading || !user || (user.role !== 'boss' && user.role !== 'boss2')) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
