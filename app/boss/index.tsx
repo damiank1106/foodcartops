@@ -27,6 +27,8 @@ export default function BossDashboard() {
   const [cartName, setCartName] = useState('');
   const [cartLocation, setCartLocation] = useState('');
   const [cartNotes, setCartNotes] = useState('');
+  const [settlementDetailModalVisible, setSettlementDetailModalVisible] = useState(false);
+  const [selectedSettlement, setSelectedSettlement] = useState<any>(null);
   const [showInactive, setShowInactive] = useState(false);
   
   const saleRepo = new SaleRepository();
@@ -883,9 +885,13 @@ export default function BossDashboard() {
                 <>
                   <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 12 }]}>Settlements</Text>
                   {savedRecords.map((record) => (
-                    <View
+                    <TouchableOpacity
                       key={record.id}
                       style={[styles.savedCard, { backgroundColor: theme.card }]}
+                      onPress={() => {
+                        setSelectedSettlement(record);
+                        setSettlementDetailModalVisible(true);
+                      }}
                     >
                       <View style={styles.savedHeader}>
                         <View style={[styles.savedIcon, { backgroundColor: theme.success + '20' }]}>
@@ -899,7 +905,10 @@ export default function BossDashboard() {
                         </View>
                         <TouchableOpacity
                           style={[styles.actionButton, { backgroundColor: theme.error + '15' }]}
-                          onPress={() => handleDeleteRecord(record.id)}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleDeleteRecord(record.id);
+                          }}
                         >
                           <Trash2 size={16} color={theme.error} />
                         </TouchableOpacity>
@@ -909,7 +918,7 @@ export default function BossDashboard() {
                           {record.notes}
                         </Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </>
               )}
@@ -1219,6 +1228,141 @@ export default function BossDashboard() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={settlementDetailModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSettlementDetailModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            style={styles.settlementDetailScrollView}
+            contentContainerStyle={styles.settlementDetailScrollContent}
+          >
+            <View style={[styles.settlementDetailContent, { backgroundColor: theme.card }]}>
+              <View style={styles.settlementDetailHeader}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>Settlement Details</Text>
+                <TouchableOpacity onPress={() => setSettlementDetailModalVisible(false)}>
+                  <X size={24} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {selectedSettlement && (() => {
+                let payload: any = {};
+                try {
+                  payload = JSON.parse(selectedSettlement.payload_json);
+                } catch {
+                  payload = {};
+                }
+
+                return (
+                  <View style={styles.settlementDetailBody}>
+                    <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
+                      <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Shift Information</Text>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Shift ID</Text>
+                        <Text style={[styles.settlementValue, { color: theme.text }]}>
+                          {payload.shift_id || payload.shiftId || '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Cart</Text>
+                        <Text style={[styles.settlementValue, { color: theme.text }]}>
+                          {payload.cart_name || payload.cartName || '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Worker</Text>
+                        <Text style={[styles.settlementValue, { color: theme.text }]}>
+                          {payload.worker_name || payload.workerName || '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Date</Text>
+                        <Text style={[styles.settlementValue, { color: theme.text }]}>
+                          {payload.settlement_day || payload.settlementDay || (payload.clock_in ? format(new Date(payload.clock_in), 'MMM d, yyyy') : '—')}
+                        </Text>
+                      </View>
+                      {payload.clock_in && (
+                        <View style={styles.settlementRow}>
+                          <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Clock In</Text>
+                          <Text style={[styles.settlementValue, { color: theme.text }]}>
+                            {format(new Date(payload.clock_in), 'h:mm a')}
+                          </Text>
+                        </View>
+                      )}
+                      {payload.clock_out && (
+                        <View style={styles.settlementRow}>
+                          <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Clock Out</Text>
+                          <Text style={[styles.settlementValue, { color: theme.text }]}>
+                            {format(new Date(payload.clock_out), 'h:mm a')}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
+                      <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Sales Summary</Text>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Gross Sales</Text>
+                        <Text style={[styles.settlementValue, { color: theme.text }]}>
+                          {payload.total_sales_cents !== undefined ? `₱${(payload.total_sales_cents / 100).toFixed(2)}` : '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Expenses</Text>
+                        <Text style={[styles.settlementValue, { color: theme.error }]}>
+                          {payload.approved_expenses_cash_drawer_cents !== undefined || payload.expenses_cents !== undefined
+                            ? `₱${((payload.approved_expenses_cash_drawer_cents || payload.expenses_cents || 0) / 100).toFixed(2)}`
+                            : '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.text, fontWeight: '600' }]}>Daily Net Sales</Text>
+                        <Text style={[styles.settlementValue, { color: theme.primary, fontWeight: '700' }]}>
+                          {payload.daily_net_sales_cents !== undefined || payload.dailyNetSalesCents !== undefined
+                            ? `₱${((payload.daily_net_sales_cents || payload.dailyNetSalesCents || 0) / 100).toFixed(2)}`
+                            : '—'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
+                      <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Daily Net Sales Split (70/30)</Text>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Operation Manager (70%)</Text>
+                        <Text style={[styles.settlementValue, { color: theme.success, fontWeight: '600' }]}>
+                          {payload.manager_share_cents !== undefined || payload.managerShareCents !== undefined
+                            ? `₱${((payload.manager_share_cents || payload.managerShareCents || 0) / 100).toFixed(2)}`
+                            : '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Owner (30%)</Text>
+                        <Text style={[styles.settlementValue, { color: theme.primary, fontWeight: '600' }]}>
+                          {payload.owner_share_cents !== undefined || payload.ownerShareCents !== undefined
+                            ? `₱${((payload.owner_share_cents || payload.ownerShareCents || 0) / 100).toFixed(2)}`
+                            : '—'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {payload.notes && (
+                      <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
+                        <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Notes</Text>
+                        <Text style={[styles.settlementNotesText, { color: theme.text }]}>
+                          {payload.notes}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+            </View>
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -1750,5 +1894,55 @@ const styles = StyleSheet.create({
   cartListActions: {
     flexDirection: 'row',
     gap: 8,
+  },
+  settlementDetailScrollView: {
+    flex: 1,
+  },
+  settlementDetailScrollContent: {
+    padding: 20,
+    paddingBottom: 120,
+  },
+  settlementDetailContent: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  settlementDetailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  settlementDetailBody: {
+    padding: 20,
+  },
+  settlementSection: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  settlementSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  settlementRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  settlementLabel: {
+    fontSize: 14,
+    flex: 1,
+  },
+  settlementValue: {
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  settlementNotesText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

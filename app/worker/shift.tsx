@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  TextInput,
   Modal,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +21,6 @@ export default function WorkerShiftScreen() {
   const { user, selectedCartId, activeShiftId, startShift, endShift } = useAuth();
   const [showStartModal, setShowStartModal] = useState<boolean>(false);
   const [selectedCart, setSelectedCart] = useState<string>('');
-  const [startingCash, setStartingCash] = useState<string>('');
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const queryClient = useQueryClient();
 
@@ -96,24 +94,12 @@ export default function WorkerShiftScreen() {
 
   const openStartModal = (cartIdOrShiftId: string) => {
     setSelectedCart(cartIdOrShiftId);
-    setStartingCash('');
     setShowStartModal(true);
   };
 
   const handleStartShift = async () => {
-    if (startingCash !== '' && isNaN(parseFloat(startingCash))) {
-      Alert.alert('Error', 'Please enter a valid starting cash amount');
-      return;
-    }
-
-    if (startingCash !== '' && parseFloat(startingCash) < 0) {
-      Alert.alert('Error', 'Starting cash cannot be negative');
-      return;
-    }
-
     try {
-      const cents = startingCash === '' ? 0 : Math.round(parseFloat(startingCash) * 100);
-      await startShift(selectedCart, cents);
+      await startShift(selectedCart, 0);
       setShowStartModal(false);
       queryClient.invalidateQueries({ queryKey: ['active-shift'] });
       queryClient.invalidateQueries({ queryKey: ['assigned-shifts'] });
@@ -418,23 +404,10 @@ export default function WorkerShiftScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Start Shift</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Welcome</Text>
             <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
-              Enter the starting cash amount (optional, defaults to 0)
+              Ready to start your shift?
             </Text>
-
-            <View style={[styles.inputContainer, { backgroundColor: theme.background }]}>
-              <Coins size={20} color={theme.textSecondary} />
-              <TextInput
-                style={[styles.input, { color: theme.text }]}
-                value={startingCash}
-                onChangeText={setStartingCash}
-                placeholder="0.00"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="decimal-pad"
-                autoFocus
-              />
-            </View>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -731,21 +704,7 @@ const styles = StyleSheet.create({
   },
   modalSubtitle: {
     fontSize: 14,
-    marginBottom: 24,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginBottom: 24,
-    gap: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '600' as const,
+    marginBottom: 32,
   },
   modalButtons: {
     flexDirection: 'row',
