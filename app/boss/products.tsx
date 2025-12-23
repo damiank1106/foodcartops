@@ -57,6 +57,7 @@ export default function ProductsScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       setCategoryModalVisible(false);
       Alert.alert('Success', editingCategory ? 'Category updated' : 'Category created');
     },
@@ -71,6 +72,7 @@ export default function ProductsScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       Alert.alert('Success', 'Category deleted');
     },
     onError: (error) => {
@@ -97,6 +99,7 @@ export default function ProductsScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['product-categories'] });
       setProductModalVisible(false);
       Alert.alert('Success', editingProduct ? 'Product updated' : 'Product created');
     },
@@ -111,6 +114,7 @@ export default function ProductsScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['product-categories'] });
       Alert.alert('Success', 'Product deleted');
     },
     onError: (error) => {

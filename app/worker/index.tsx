@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Minus, ShoppingCart, AlertCircle } from 'lucide-react-native';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { ProductRepository, SaleRepository, CartRepository, StockLocationRepository, StockBalanceRepository } from '@/lib/repositories';
+import { ProductRepository, ProductCategoryRepository, SaleRepository, CartRepository, StockLocationRepository, StockBalanceRepository } from '@/lib/repositories';
 import { Product, PaymentMethod } from '@/lib/types';
 
 export default function WorkerSaleScreen() {
@@ -23,15 +24,28 @@ export default function WorkerSaleScreen() {
 
   const queryClient = useQueryClient();
   const productRepo = new ProductRepository();
+  const categoryRepo = new ProductCategoryRepository();
   const saleRepo = new SaleRepository();
   const cartRepo = new CartRepository();
   const stockLocationRepo = new StockLocationRepository();
   const stockBalanceRepo = new StockBalanceRepository();
 
-  const { data: products, isLoading } = useQuery({
+  const { data: categories, isLoading: categoriesLoading, refetch: refetchCategories } = useQuery({
+    queryKey: ['product-categories'],
+    queryFn: () => categoryRepo.listActive(),
+  });
+
+  const { data: products, isLoading: productsLoading, refetch: refetchProducts } = useQuery({
     queryKey: ['products'],
     queryFn: () => productRepo.findAll(),
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchCategories();
+      refetchProducts();
+    }, [refetchCategories, refetchProducts])
+  );
 
   const { data: cartInfo } = useQuery({
     queryKey: ['cart', selectedCartId],
@@ -148,7 +162,7 @@ export default function WorkerSaleScreen() {
     });
   };
 
-  if (isLoading) {
+  if (categoriesLoading || productsLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
@@ -178,7 +192,12 @@ export default function WorkerSaleScreen() {
     };
   };
 
-  const categories = Array.from(new Set(products?.map((p) => p.category).filter(Boolean)));
+  const sortedCategories = categories?.sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+    return a.name.localeCompare(b.name);
+  }) || [];
+
+  const uncategorizedProducts = products?.filter((p) => !p.category_id) || [];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -199,12 +218,12 @@ export default function WorkerSaleScreen() {
           </View>
         )}
 
-        {categories.map((category) => (
-          <View key={category} style={styles.categorySection}>
-            <Text style={[styles.categoryTitle, { color: theme.text }]}>{category}</Text>
+        {sortedCategories.map((category) => (
+          <View key={category.id} style={styles.categorySection}>
+            <Text style={[styles.categoryTitle, { color: theme.text }]}>{category.name}</Text>
             <View style={styles.productsGrid}>
               {products
-                ?.filter((p) => p.category === category)
+                ?.filter((p) => p.category_id === category.id)
                   .map((product) => {
                   const inCart = cart.get(product.id);
                   const availability = getAvailability(product);
@@ -248,6 +267,54 @@ export default function WorkerSaleScreen() {
             </View>
           </View>
         ))}
+
+        {uncategorizedProducts.length > 0 && (
+          <View style={styles.categorySection}>
+            <Text style={[styles.categoryTitle, { color: theme.text }]}>Uncategorized</Text>
+            <View style={styles.productsGrid}>
+              {uncategorizedProducts.map((product) => {
+                const inCart = cart.get(product.id);
+                const availability = getAvailability(product);
+                return (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={[
+                      styles.productCard,
+                      { backgroundColor: theme.card },
+                      inCart && { borderColor: theme.primary, borderWidth: 2 },
+                    ]}
+                    onPress={() => addToCart(product)}
+                  >
+                    <Text style={[styles.productName, { color: theme.text }]}>
+                      {product.name}
+                    </Text>
+                    <Text style={[styles.productPrice, { color: theme.primary }]}>
+                      ₱{product.price.toFixed(2)}
+                    </Text>
+                    {availability && (
+                      <View style={styles.availabilityContainer}>
+                        {availability.isAvailable ? (
+                          <Text style={[styles.availabilityText, { color: theme.success }]}>
+                            Available: {Math.floor(availability.qty)} {availability.unit}
+                          </Text>
+                        ) : (
+                          <View style={[styles.outOfStockBadge, { backgroundColor: theme.error }]}>
+                            <Text style={styles.outOfStockText}>Out of stock</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    {inCart && (
+                      <View style={[styles.quantityBadge, { backgroundColor: theme.primary }]}>
+                        <Text style={styles.quantityText}>{inCart.quantity}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {cart.size > 0 && (
