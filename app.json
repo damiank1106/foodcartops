@@ -91,7 +91,9 @@
           "photosPermission": "The app accesses your photos to let you share them with your friends."
         }
       ],
-      "expo-mail-composer"
+      "expo-mail-composer",
+      "expo-print",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true
