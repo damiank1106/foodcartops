@@ -7,6 +7,7 @@ import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SaleRepository, ShiftRepository, CartRepository, ExpenseRepository, AuditRepository } from '@/lib/repositories';
 import DatabaseScreen from './database';
+import CalendarScreen from './calendar';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
 import { SavedRecordRepository } from '@/lib/repositories/saved-record.repository';
@@ -17,7 +18,7 @@ export default function BossDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'settlements' | 'activity' | 'saved' | 'carts' | 'database'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'calendar' | 'settlements' | 'activity' | 'saved' | 'carts' | 'database'>('overview');
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -483,6 +484,17 @@ export default function BossDashboard() {
             </Text>
             {selectedTab === 'overview' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
+          {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && (
+            <TouchableOpacity
+              style={styles.tab}
+              onPress={() => setSelectedTab('calendar')}
+            >
+              <Text style={[styles.tabText, { color: selectedTab === 'calendar' ? theme.primary : theme.textSecondary }]}>
+                Calendar
+              </Text>
+              {selectedTab === 'calendar' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.tab}
             onPress={() => setSelectedTab('carts')}
@@ -995,6 +1007,10 @@ export default function BossDashboard() {
                 </View>
               )}
             </>
+          )}
+
+          {selectedTab === 'calendar' && (user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && (
+            <CalendarScreen />
           )}
 
           {selectedTab === 'database' && user?.role === 'developer' && (

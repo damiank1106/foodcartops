@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export const MIGRATIONS = [
   {
@@ -807,6 +807,33 @@ export const MIGRATIONS = [
       INSERT INTO users_new SELECT * FROM users WHERE role IN ('boss', 'boss2', 'worker', 'inventory_clerk');
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
+    `,
+  },
+  {
+    version: 21,
+    up: `
+      CREATE TABLE IF NOT EXISTS other_expenses (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        name TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        notes TEXT,
+        created_by_user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_other_expenses_date ON other_expenses(date);
+      CREATE INDEX idx_other_expenses_is_deleted ON other_expenses(is_deleted);
+      CREATE INDEX idx_other_expenses_created_by ON other_expenses(created_by_user_id);
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Created other_expenses table for calendar analytics', ${Date.now()});
+    `,
+    down: `
+      DROP TABLE IF EXISTS other_expenses;
     `,
   },
 ];
