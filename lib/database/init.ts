@@ -81,6 +81,18 @@ async function runMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
   } else {
     console.log(`[DB] Database is up to date`);
   }
+
+  await trackSchemaChanges(db);
+}
+
+async function trackSchemaChanges(db: SQLite.SQLiteDatabase): Promise<void> {
+  try {
+    const { DatabaseRepository } = await import('../repositories/database.repository');
+    const dbRepo = new DatabaseRepository();
+    await dbRepo.trackSchemaChangesOnInit();
+  } catch (error) {
+    console.log('[DB] Schema tracking skipped:', error);
+  }
 }
 
 export async function resetDatabase(): Promise<void> {

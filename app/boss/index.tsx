@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle } from 'lucide-react-native';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SaleRepository, ShiftRepository, CartRepository, ExpenseRepository, AuditRepository } from '@/lib/repositories';
+import DatabaseScreen from './database';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
 import { SavedRecordRepository } from '@/lib/repositories/saved-record.repository';
@@ -16,7 +17,7 @@ export default function BossDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'settlements' | 'activity' | 'saved' | 'carts'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'settlements' | 'activity' | 'saved' | 'carts' | 'database'>('overview');
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -522,15 +523,27 @@ export default function BossDashboard() {
             {selectedTab === 'saved' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
           {user?.role === 'developer' && (
-            <TouchableOpacity
-              style={styles.tab}
-              onPress={() => setSelectedTab('activity')}
-            >
-              <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
-                Activity
-              </Text>
-              {selectedTab === 'activity' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={styles.tab}
+                onPress={() => setSelectedTab('activity')}
+              >
+                <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
+                  Activity
+                </Text>
+                {selectedTab === 'activity' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.tab}
+                onPress={() => setSelectedTab('database')}
+              >
+                <Database size={16} color={selectedTab === 'database' ? theme.primary : theme.textSecondary} />
+                <Text style={[styles.tabText, { color: selectedTab === 'database' ? theme.primary : theme.textSecondary }]}>
+                  Database
+                </Text>
+                {selectedTab === 'database' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+              </TouchableOpacity>
+            </>
           )}
         </ScrollView>
       </View>
@@ -982,6 +995,10 @@ export default function BossDashboard() {
                 </View>
               )}
             </>
+          )}
+
+          {selectedTab === 'database' && user?.role === 'developer' && (
+            <DatabaseScreen />
           )}
 
           {selectedTab === 'carts' && (
