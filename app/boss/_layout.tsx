@@ -137,6 +137,12 @@ export default function BossLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="database"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
