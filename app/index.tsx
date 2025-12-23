@@ -43,7 +43,7 @@ export default function LoginScreen() {
     }, 100);
     
     return () => clearTimeout(redirectTimeout);
-  }, [isLoading, user, router]);
+  }, [isLoading, user]);
 
   const addDigit = (digit: string) => {
     if (pin.length < 8) {
