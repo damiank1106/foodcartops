@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export const MIGRATIONS = [
   {
@@ -755,6 +755,58 @@ export const MIGRATIONS = [
       ALTER TABLE carts DROP COLUMN created_by_user_id;
       DROP INDEX IF EXISTS idx_expenses_is_deleted;
       ALTER TABLE expenses DROP COLUMN is_deleted;
+    `,
+  },
+  {
+    version: 20,
+    up: `
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker', 'inventory_clerk', 'developer')),
+        pin TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1
+      );
+
+      INSERT INTO users_new SELECT * FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      CREATE TABLE IF NOT EXISTS db_change_log (
+        id TEXT PRIMARY KEY,
+        message TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX idx_db_change_log_is_deleted ON db_change_log(is_deleted);
+      CREATE INDEX idx_db_change_log_created_at ON db_change_log(created_at);
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added developer role to users table', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Created db_change_log table for tracking schema changes', ${Date.now()});
+    `,
+    down: `
+      DROP TABLE IF EXISTS db_change_log;
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker', 'inventory_clerk')),
+        pin TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1
+      );
+
+      INSERT INTO users_new SELECT * FROM users WHERE role IN ('boss', 'boss2', 'worker', 'inventory_clerk');
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
     `,
   },
 ];

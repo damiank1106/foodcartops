@@ -341,6 +341,24 @@ export default function UsersScreen() {
                       style={[
                         styles.roleButton,
                         { borderColor: theme.border },
+                        formData.role === 'developer' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
+                      ]}
+                      onPress={() => setFormData((prev) => ({ ...prev, role: 'developer' }))}
+                    >
+                      <Text
+                        style={[
+                          styles.roleButtonText,
+                          { color: theme.text },
+                          formData.role === 'developer' && { color: theme.primary, fontWeight: '700' as const },
+                        ]}
+                      >
+                        Developer
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.roleButton,
+                        { borderColor: theme.border },
                         formData.role === 'worker' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
                       ]}
                       onPress={() => setFormData((prev) => ({ ...prev, role: 'worker' }))}
@@ -576,15 +594,16 @@ const styles = StyleSheet.create({
   },
   roleButtons: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   roleButton: {
-    flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 2,
     alignItems: 'center',
+    minWidth: 100,
   },
   roleButtonText: {
     fontSize: 14,

@@ -521,15 +521,17 @@ export default function BossDashboard() {
             )}
             {selectedTab === 'saved' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tab}
-            onPress={() => setSelectedTab('activity')}
-          >
-            <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
-              Activity
-            </Text>
-            {selectedTab === 'activity' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
-          </TouchableOpacity>
+          {user?.role === 'developer' && (
+            <TouchableOpacity
+              style={styles.tab}
+              onPress={() => setSelectedTab('activity')}
+            >
+              <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
+                Activity
+              </Text>
+              {selectedTab === 'activity' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
 

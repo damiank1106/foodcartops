@@ -289,21 +289,37 @@ export default function SettingsScreen() {
             </View>
             <Text style={[styles.value, { color: theme.textSecondary }]}>Coming Soon</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.listItem} onPress={handleWipeWorkersAndShifts}>
-            <View style={styles.listItemLeft}>
-              <Trash2 size={20} color={theme.warning || '#F59E0B'} />
-              <Text style={[styles.label, { color: theme.warning || '#F59E0B' }]}>Wipe Workers & Shifts</Text>
-            </View>
-            <ChevronRight size={20} color={theme.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.listItem} onPress={handleResetDatabase}>
-            <View style={styles.listItemLeft}>
-              <RotateCcw size={20} color={theme.error} />
-              <Text style={[styles.label, { color: theme.error }]}>Reset Database</Text>
-            </View>
-            <ChevronRight size={20} color={theme.textSecondary} />
-          </TouchableOpacity>
         </View>
+
+        {user?.role === 'developer' && (
+          <View style={[styles.section, { backgroundColor: theme.card }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Developer Actions</Text>
+            <TouchableOpacity style={styles.listItem} onPress={handleWipeWorkersAndShifts}>
+              <View style={styles.listItemLeft}>
+                <Trash2 size={20} color={theme.warning || '#F59E0B'} />
+                <Text style={[styles.label, { color: theme.warning || '#F59E0B' }]}>Wipe Workers & Shifts</Text>
+              </View>
+              <ChevronRight size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.listItem} onPress={handleResetDatabase}>
+              <View style={styles.listItemLeft}>
+                <RotateCcw size={20} color={theme.error} />
+                <Text style={[styles.label, { color: theme.error }]}>Reset Database</Text>
+              </View>
+              <ChevronRight size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.listItem}
+              onPress={() => router.push('/boss/debug' as any)}
+            >
+              <View style={styles.listItemLeft}>
+                <Database size={20} color={theme.text} />
+                <Text style={[styles.label, { color: theme.text }]}>Database Debug</Text>
+              </View>
+              <ChevronRight size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>About</Text>
@@ -314,20 +330,6 @@ export default function SettingsScreen() {
             </View>
             <Text style={[styles.value, { color: theme.textSecondary }]}>1.0.0</Text>
           </View>
-        </View>
-
-        <View style={[styles.section, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Developer</Text>
-          <TouchableOpacity
-            style={styles.listItem}
-            onPress={() => router.push('/boss/debug' as any)}
-          >
-            <View style={styles.listItemLeft}>
-              <Database size={20} color={theme.text} />
-              <Text style={[styles.label, { color: theme.text }]}>Database Debug</Text>
-            </View>
-            <ChevronRight size={20} color={theme.textSecondary} />
-          </TouchableOpacity>
         </View>
 
         <TouchableOpacity

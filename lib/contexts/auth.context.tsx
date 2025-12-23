@@ -240,7 +240,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const hasPermission = (permission: 'approve_expenses' | 'create_settlements' | 'view_all_data' | 'manage_users'): boolean => {
     if (!state.user) return false;
-    if (state.user.role === 'boss' || state.user.role === 'boss2') return true;
+    if (state.user.role === 'boss' || state.user.role === 'boss2' || state.user.role === 'developer') return true;
     return false;
   };
 
@@ -256,9 +256,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     hasPermission,
     isAuthenticated: !!state.user,
     isBoss: state.user?.role === 'boss' || state.user?.role === 'boss2',
+    isDeveloper: state.user?.role === 'developer',
     isWorker: state.user?.role === 'worker',
     isInventoryClerk: state.user?.role === 'inventory_clerk',
     canDoWorkerTasks: state.user?.role === 'worker',
-    canAccessInventory: state.user?.role === 'boss' || state.user?.role === 'boss2' || state.user?.role === 'inventory_clerk',
+    canAccessInventory: state.user?.role === 'boss' || state.user?.role === 'boss2' || state.user?.role === 'inventory_clerk' || state.user?.role === 'developer',
   };
 });

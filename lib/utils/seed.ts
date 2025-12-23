@@ -18,20 +18,32 @@ export async function seedDatabase(): Promise<void> {
     const userRepo = new UserRepository();
     
     const existingBoss = await userRepo.findByRole('boss');
-    if (existingBoss.length > 0) {
-      console.log('[Seed] Database already initialized (Boss user exists)');
-      return;
+    const existingDeveloper = await userRepo.findByRole('developer');
+    
+    if (existingBoss.length === 0) {
+      console.log('[Seed] Creating Boss user...');
+      await userRepo.create({
+        name: 'Boss',
+        role: 'boss',
+        pin: '1234',
+      });
+      console.log('[Seed] Boss user created with PIN 1234');
+    } else {
+      console.log('[Seed] Boss user already exists');
     }
 
-    console.log('[Seed] No Boss user found, initializing database...');
+    if (existingDeveloper.length === 0) {
+      console.log('[Seed] Creating Developer user...');
+      await userRepo.create({
+        name: 'Developer',
+        role: 'developer',
+        pin: '2345',
+      });
+      console.log('[Seed] Developer user created with PIN 2345');
+    } else {
+      console.log('[Seed] Developer user already exists');
+    }
 
-    await userRepo.create({
-      name: 'Boss',
-      role: 'boss',
-      pin: '1234',
-    });
-
-    console.log('[Seed] Boss user created with PIN 1234');
     console.log('[Seed] Database initialized successfully');
   } catch (error) {
     console.error('[Seed] Failed to seed database:', error);

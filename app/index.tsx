@@ -27,7 +27,7 @@ export default function LoginScreen() {
     
     if (!isLoading && user) {
       didRedirect.current = true;
-      if (user.role === 'boss' || user.role === 'boss2') {
+      if (user.role === 'boss' || user.role === 'boss2' || user.role === 'developer') {
         router.replace('/boss');
       } else if (user.role === 'inventory_clerk') {
         router.replace('/inventory');
