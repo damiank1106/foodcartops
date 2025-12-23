@@ -10,6 +10,3 @@ export { PaymentRepository } from './payment.repository';
 export { ExpenseRepository } from './expense.repository';
 export { BossSavedItemsRepository } from './boss-saved-items.repository';
 export { InventoryItemRepository } from './inventory-item.repository';
-export { StockLocationRepository } from './stock-location.repository';
-export { StockMovementRepository } from './stock-movement.repository';
-export { StockBalanceRepository } from './stock-balance.repository';
