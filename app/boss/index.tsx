@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/contexts/auth.context';
 import { SaleRepository, ShiftRepository, CartRepository, ExpenseRepository, AuditRepository } from '@/lib/repositories';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
+import { SavedRecordRepository } from '@/lib/repositories/saved-record.repository';
 import { startOfDay, endOfDay, format } from 'date-fns';
 
 export default function BossDashboard() {
@@ -15,7 +16,7 @@ export default function BossDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'exceptions' | 'activity' | 'saved' | 'carts'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'settlements' | 'activity' | 'saved' | 'carts'>('overview');
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -35,6 +36,7 @@ export default function BossDashboard() {
   const settlementRepo = new SettlementRepository();
   const auditRepo = new AuditRepository();
   const savedItemsRepo = new BossSavedItemsRepository();
+  const savedRecordRepo = new SavedRecordRepository();
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['boss-monitoring-stats'],
@@ -159,6 +161,16 @@ export default function BossDashboard() {
     refetchInterval: 10000,
   });
 
+  const { data: savedRecords } = useQuery({
+    queryKey: ['saved-records', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      return savedRecordRepo.listAll();
+    },
+    enabled: !!user?.id,
+    refetchInterval: 10000,
+  });
+
   const { data: allCarts } = useQuery({
     queryKey: ['all-carts', showInactive],
     queryFn: async () => {
@@ -216,6 +228,20 @@ export default function BossDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['saved-items'] });
       Alert.alert('Success', 'Item deleted');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to delete: ${error}`);
+    },
+  });
+
+  const deleteRecordMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (!user?.id) throw new Error('No user');
+      return savedRecordRepo.softDelete(id, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-records'] });
+      Alert.alert('Success', 'Settlement deleted');
     },
     onError: (error) => {
       Alert.alert('Error', `Failed to delete: ${error}`);
@@ -295,6 +321,21 @@ export default function BossDashboard() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => deleteMutation.mutate(id),
+        },
+      ]
+    );
+  };
+
+  const handleDeleteRecord = (id: string) => {
+    Alert.alert(
+      'Delete Settlement',
+      'Are you sure you want to delete this settlement?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteRecordMutation.mutate(id),
         },
       ]
     );
@@ -450,10 +491,10 @@ export default function BossDashboard() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tab}
-            onPress={() => setSelectedTab('exceptions')}
+            onPress={() => setSelectedTab('settlements')}
           >
-            <Text style={[styles.tabText, { color: selectedTab === 'exceptions' ? theme.primary : theme.textSecondary }]}>
-              Exceptions
+            <Text style={[styles.tabText, { color: selectedTab === 'settlements' ? theme.primary : theme.textSecondary }]}>
+              Settlements
             </Text>
             {(stats && (stats.unsettled_shifts_count > 0 || stats.pending_expenses_count > 0 || stats.cash_differences.length > 0)) && (
               <View style={[styles.badge, { backgroundColor: theme.error }]}>
@@ -462,7 +503,7 @@ export default function BossDashboard() {
                 </Text>
               </View>
             )}
-            {selectedTab === 'exceptions' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+            {selectedTab === 'settlements' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tab}
@@ -471,9 +512,9 @@ export default function BossDashboard() {
             <Text style={[styles.tabText, { color: selectedTab === 'saved' ? theme.primary : theme.textSecondary }]}>
               Saved
             </Text>
-            {savedItems && savedItems.length > 0 && (
+            {(savedItems && savedItems.length > 0 || savedRecords && savedRecords.length > 0) && (
               <View style={[styles.badge, { backgroundColor: theme.primary }]}>
-                <Text style={styles.badgeText}>{savedItems.length}</Text>
+                <Text style={styles.badgeText}>{(savedItems?.length || 0) + (savedRecords?.length || 0)}</Text>
               </View>
             )}
             {selectedTab === 'saved' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
@@ -576,9 +617,9 @@ export default function BossDashboard() {
             </>
           )}
 
-          {selectedTab === 'exceptions' && (
+          {selectedTab === 'settlements' && (
             <>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>Exceptions & Alerts</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>Settlements & Exceptions</Text>
 
               {stats && stats.unsettled_shifts_count > 0 && (
                 <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
@@ -838,10 +879,45 @@ export default function BossDashboard() {
 
           {selectedTab === 'saved' && (
             <>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>Saved Items</Text>
+              {savedRecords && savedRecords.length > 0 && (
+                <>
+                  <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 12 }]}>Settlements</Text>
+                  {savedRecords.map((record) => (
+                    <View
+                      key={record.id}
+                      style={[styles.savedCard, { backgroundColor: theme.card }]}
+                    >
+                      <View style={styles.savedHeader}>
+                        <View style={[styles.savedIcon, { backgroundColor: theme.success + '20' }]}>
+                          <CheckCircle size={20} color={theme.success} />
+                        </View>
+                        <View style={styles.savedInfo}>
+                          <Text style={[styles.savedTitle, { color: theme.text }]}>Settlement</Text>
+                          <Text style={[styles.savedType, { color: theme.textSecondary }]}>
+                            {format(record.created_at, 'MMM d, yyyy • h:mm a')}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: theme.error + '15' }]}
+                          onPress={() => handleDeleteRecord(record.id)}
+                        >
+                          <Trash2 size={16} color={theme.error} />
+                        </TouchableOpacity>
+                      </View>
+                      {record.notes && (
+                        <Text style={[styles.savedNotes, { color: theme.textSecondary }]} numberOfLines={2}>
+                          {record.notes}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                </>
+              )}
 
-              {savedItems && savedItems.length > 0 ? (
-                savedItems.map((item) => (
+              {savedItems && savedItems.length > 0 && (
+                <>
+                  <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 16, marginBottom: 12 }]}>Exceptions</Text>
+                  {savedItems.map((item) => (
                   <View
                     key={item.id}
                     style={[styles.savedCard, { backgroundColor: theme.card }]}
@@ -879,8 +955,11 @@ export default function BossDashboard() {
                       </Text>
                     )}
                   </View>
-                ))
-              ) : (
+                ))}
+                </>
+              )}
+
+              {(!savedItems || savedItems.length === 0) && (!savedRecords || savedRecords.length === 0) && (
                 <View style={styles.emptyState}>
                   <Bookmark size={64} color={theme.textSecondary} />
                   <Text style={[styles.emptyText, { color: theme.textSecondary }]}>

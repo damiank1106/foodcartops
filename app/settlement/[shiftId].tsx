@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -293,7 +295,16 @@ export default function SettlementEditorScreen() {
           },
         }}
       />
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={100}
+      >
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
+        >
         <View style={[styles.card, { backgroundColor: theme.card }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Shift Information</Text>
           <View style={styles.infoRow}>
@@ -486,7 +497,8 @@ export default function SettlementEditorScreen() {
         )}
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -497,7 +509,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContentContainer: {
     padding: 16,
+    paddingBottom: 200,
   },
   card: {
     padding: 16,
@@ -591,7 +606,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     fontSize: 14,
-    minHeight: 100,
+    minHeight: 120,
+    maxHeight: 200,
     textAlignVertical: 'top',
   },
   differenceCard: {
