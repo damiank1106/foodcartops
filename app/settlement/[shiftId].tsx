@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
-import { ShiftRepository, SaleRepository, PaymentRepository } from '@/lib/repositories';
+import { ShiftRepository, SaleRepository, PaymentRepository, SavedRecordRepository, CartRepository } from '@/lib/repositories';
 import { ExpenseRepository } from '@/lib/repositories/expense.repository';
 import { PayrollRepository } from '@/lib/repositories/payroll.repository';
 import { LedgerRepository } from '@/lib/repositories/ledger.repository';
@@ -29,7 +29,6 @@ export default function SettlementEditorScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [cashCounted, setCashCounted] = useState('');
   const [notes, setNotes] = useState('');
 
   const settlementRepo = new SettlementRepository();
@@ -39,6 +38,8 @@ export default function SettlementEditorScreen() {
   const expenseRepo = new ExpenseRepository();
   const payrollRepo = new PayrollRepository();
   const ledgerRepo = new LedgerRepository();
+  const savedRecordRepo = new SavedRecordRepository();
+  const cartRepo = new CartRepository();
 
   const { data: shiftData, isLoading } = useQuery({
     queryKey: ['shift-settlement-data', shiftId],
@@ -110,46 +111,45 @@ export default function SettlementEditorScreen() {
     enabled: !!shiftId && !!isBoss,
   });
 
-  const saveDraftMutation = useMutation({
+  const saveSettlementMutation = useMutation({
     mutationFn: async () => {
       if (!user || !shiftData) throw new Error('Missing data');
 
-      const cashCountedCents = cashCounted && !isNaN(parseFloat(cashCounted)) 
-        ? Math.round(parseFloat(cashCounted) * 100)
-        : 0;
-      const cashDifferenceCents = SettlementService.computeCashDifference(
-        shiftData.computation.cash_expected_cents,
-        cashCountedCents
-      );
+      const cart = await cartRepo.findById(shiftData.shift.cart_id);
+      const cartName = cart?.name || shiftData.shift.cart_id;
 
-      if (shiftData.existingSettlement) {
-        throw new Error('Settlement already exists for this shift');
-      }
+      const payload = {
+        shift_id: shiftId,
+        cart_id: shiftData.shift.cart_id,
+        cart_name: cartName,
+        worker_id: shiftData.shift.worker_id,
+        shift_start: shiftData.shift.clock_in,
+        shift_end: shiftData.shift.clock_out,
+        settlement_day: shiftData.settlementDay,
+        total_sales_cents: shiftData.computation.total_sales_cents,
+        cash_sales_cents: shiftData.computation.cash_sales_cents,
+        non_cash_sales_cents: shiftData.computation.non_cash_sales_cents,
+        approved_expenses_cents: shiftData.computation.approved_expenses_cash_drawer_cents,
+        cash_expected_cents: shiftData.computation.cash_expected_cents,
+        daily_net_sales_cents: shiftData.dailyNetSalesCents,
+        manager_share_cents: shiftData.managerShareCents,
+        owner_share_cents: shiftData.ownerShareCents,
+        net_due_to_worker_cents: shiftData.computation.net_due_to_worker_cents,
+        net_due_to_boss_cents: shiftData.computation.net_due_to_boss_cents,
+        payments_by_method: shiftData.paymentsByMethod,
+        notes: notes || null,
+        computation: shiftData.computation,
+      };
 
-      const settlement = await settlementRepo.create(
-        shiftId!,
-        shiftData.shift.cart_id,
-        shiftData.shift.worker_id,
-        user.id,
-        shiftData.computation.cash_expected_cents,
-        cashCountedCents,
-        cashDifferenceCents,
-        shiftData.computation.net_due_to_worker_cents,
-        shiftData.computation.net_due_to_boss_cents,
-        JSON.stringify(shiftData.computation),
-        shiftData.settlementDay,
-        shiftData.dailyNetSalesCents,
-        shiftData.managerShareCents,
-        shiftData.ownerShareCents,
-        notes
-      );
+      await savedRecordRepo.saveSnapshot('settlement', shiftId!, payload, user.id, notes || undefined);
 
-      return settlement;
+      return payload;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shift-settlement-data'] });
       queryClient.invalidateQueries({ queryKey: ['unsettled-shifts'] });
-      Alert.alert('Success', 'Settlement draft saved', [
+      queryClient.invalidateQueries({ queryKey: ['saved-records'] });
+      Alert.alert('Success', 'Settlement saved', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     },
@@ -162,13 +162,8 @@ export default function SettlementEditorScreen() {
     mutationFn: async () => {
       if (!user || !shiftData) throw new Error('Missing data');
 
-      const cashCountedCents = cashCounted && !isNaN(parseFloat(cashCounted)) 
-        ? Math.round(parseFloat(cashCounted) * 100)
-        : 0;
-      const cashDifferenceCents = SettlementService.computeCashDifference(
-        shiftData.computation.cash_expected_cents,
-        cashCountedCents
-      );
+      const cashCountedCents = 0;
+      const cashDifferenceCents = 0;
 
       let settlementId: string;
 
@@ -235,10 +230,10 @@ export default function SettlementEditorScreen() {
     },
   });
 
-  const handleSaveDraft = () => {
-    Alert.alert('Save Draft', 'Save settlement as draft?', [
+  const handleSaveSettlement = () => {
+    Alert.alert('Save Settlement', 'Save this settlement?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Save', onPress: () => saveDraftMutation.mutate() },
+      { text: 'Save', onPress: () => saveSettlementMutation.mutate() },
     ]);
   };
 
@@ -438,56 +433,6 @@ export default function SettlementEditorScreen() {
         {!isFinalized ? (
           <>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Cash Count</Text>
-              <Text style={[styles.inputLabel, { color: theme.text }]}>Cash Counted (₱) - Optional</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
-                value={cashCounted}
-                onChangeText={setCashCounted}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={theme.textSecondary}
-                editable={!isFinalized}
-              />
-              {cashCounted && !isNaN(parseFloat(cashCounted)) && (
-                <View style={styles.differenceCard}>
-                  <Text style={[styles.differenceLabel, { color: theme.textSecondary }]}>
-                    Cash Difference:
-                  </Text>
-                  <Text
-                    style={[
-                      styles.differenceValue,
-                      {
-                        color:
-                          Math.round(parseFloat(cashCounted) * 100) -
-                            shiftData.computation.cash_expected_cents >
-                          0
-                            ? theme.success
-                            : Math.round(parseFloat(cashCounted) * 100) -
-                                shiftData.computation.cash_expected_cents <
-                              0
-                            ? theme.error
-                            : theme.text,
-                      },
-                    ]}
-                  >
-                    {Math.round(parseFloat(cashCounted) * 100) -
-                      shiftData.computation.cash_expected_cents >
-                    0
-                      ? '+'
-                      : ''}
-                    ₱
-                    {(
-                      (Math.round(parseFloat(cashCounted) * 100) -
-                        shiftData.computation.cash_expected_cents) /
-                      100
-                    ).toFixed(2)}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>Notes (Optional)</Text>
               <TextInput
                 style={[styles.textArea, { backgroundColor: theme.background, color: theme.text }]}
@@ -503,20 +448,20 @@ export default function SettlementEditorScreen() {
 
             <View style={styles.actions}>
               <TouchableOpacity
-                style={[styles.button, styles.draftButton, { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }]}
-                onPress={handleSaveDraft}
-                disabled={saveDraftMutation.isPending || finalizeMutation.isPending}
+                style={[styles.button, styles.saveButton, { backgroundColor: theme.success }]}
+                onPress={handleSaveSettlement}
+                disabled={saveSettlementMutation.isPending || finalizeMutation.isPending}
               >
-                {saveDraftMutation.isPending ? (
-                  <ActivityIndicator size="small" color={theme.text} />
+                {saveSettlementMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#FFF" />
                 ) : (
-                  <Text style={[styles.buttonText, { color: theme.text }]}>Save Draft</Text>
+                  <Text style={[styles.buttonText, { color: '#FFF' }]}>Save Settlement</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.button, styles.finalizeButton, { backgroundColor: theme.primary }]}
                 onPress={handleFinalize}
-                disabled={saveDraftMutation.isPending || finalizeMutation.isPending}
+                disabled={saveSettlementMutation.isPending || finalizeMutation.isPending}
               >
                 {finalizeMutation.isPending ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -675,7 +620,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
   },
-  draftButton: {},
+  saveButton: {},
   finalizeButton: {},
   buttonText: {
     fontSize: 16,

@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Receipt, Eye, X, Clock, FileText, DollarSign } from 'lucide-react-native';
+import { CheckCircle, XCircle, Receipt, Eye, X, Clock, FileText, DollarSign, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { ExpenseRepository, AuditRepository, SavedRecordRepository } from '@/lib/repositories';
@@ -81,6 +81,19 @@ export default function BossExpensesScreen() {
     },
   });
 
+  const deleteSavedRecordMutation = useMutation({
+    mutationFn: async (recordId: string) => {
+      if (!user) throw new Error('User not found');
+      await savedRecordRepo.softDelete(recordId, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-records'] });
+    },
+    onError: () => {
+      Alert.alert('Error', 'Failed to delete saved record');
+    },
+  });
+
   const handleApprove = (expenseId: string) => {
     Alert.alert('Approve Expense', 'Are you sure you want to approve this expense?', [
       { text: 'Cancel', style: 'cancel' },
@@ -106,6 +119,17 @@ export default function BossExpensesScreen() {
   const handleViewDetails = (expense: ExpenseWithDetails) => {
     setSelectedExpense(expense);
     setShowDetailModal(true);
+  };
+
+  const handleDeleteSavedRecord = (recordId: string) => {
+    Alert.alert('Delete Saved Record', 'Are you sure you want to delete this saved record?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteSavedRecordMutation.mutate(recordId),
+      },
+    ]);
   };
 
   const getStatusColor = (status: string) => {
@@ -179,15 +203,28 @@ export default function BossExpensesScreen() {
                     setShowSavedDetailModal(true);
                   }}
                 >
-                  <View style={styles.savedCardHeader}>
-                    <DollarSign size={20} color={theme.success} />
-                    <Text style={[styles.savedCardTitle, { color: theme.text }]}>Settlement</Text>
+                  <View style={styles.savedCardContent}>
+                    <View style={styles.savedCardLeft}>
+                      <View style={styles.savedCardHeader}>
+                        <DollarSign size={20} color={theme.success} />
+                        <Text style={[styles.savedCardTitle, { color: theme.text }]}>Settlement</Text>
+                      </View>
+                      <Text style={[styles.savedCardAmount, { color: theme.text }]}>₱{((payload.total_sales_cents || 0) / 100).toFixed(2)}</Text>
+                      <Text style={[styles.savedCardMeta, { color: theme.textSecondary }]}>{payload.cart_name || 'N/A'}</Text>
+                      <Text style={[styles.savedCardDate, { color: theme.textSecondary }]}>
+                        {format(new Date(record.created_at), 'MMM d, yyyy h:mm a')}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.savedCardTrash}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSavedRecord(record.id);
+                      }}
+                    >
+                      <Trash2 size={20} color={theme.error} />
+                    </TouchableOpacity>
                   </View>
-                  <Text style={[styles.savedCardAmount, { color: theme.text }]}>₱{((payload.cash_counted_cents || 0) / 100).toFixed(2)}</Text>
-                  <Text style={[styles.savedCardMeta, { color: theme.textSecondary }]}>{payload.cart_name || 'N/A'}</Text>
-                  <Text style={[styles.savedCardDate, { color: theme.textSecondary }]}>
-                    {format(new Date(record.created_at), 'MMM d, yyyy h:mm a')}
-                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -388,7 +425,7 @@ export default function BossExpensesScreen() {
             </View>
 
             {selectedExpense && (
-              <ScrollView style={styles.modalScroll}>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 180 }}>
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Amount</Text>
                   <Text style={[styles.detailValue, { color: theme.text }]}>
@@ -796,7 +833,6 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     padding: 20,
-    paddingBottom: 40,
   },
   detailRow: {
     flexDirection: 'row',
@@ -876,6 +912,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  savedCardContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  savedCardLeft: {
+    flex: 1,
+  },
+  savedCardTrash: {
+    padding: 8,
+    marginLeft: 12,
   },
   savedCardHeader: {
     flexDirection: 'row',
