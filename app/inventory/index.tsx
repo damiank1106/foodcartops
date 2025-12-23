@@ -2,98 +2,51 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { Package, TrendingDown, ArrowUpDown, Plus, AlertCircle, Warehouse, ShoppingCart } from 'lucide-react-native';
+import { Package, Plus, Edit2, Snowflake, ShoppingCart } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repository';
-import { StockLocationRepository } from '@/lib/repositories/stock-location.repository';
-import { StockMovementRepository } from '@/lib/repositories/stock-movement.repository';
-import { StockBalanceRepository } from '@/lib/repositories/stock-balance.repository';
-import { inventoryService } from '@/lib/services/inventory.service';
-import type { InventoryItem, StockLocation, StockBalance, StockMovementWithDetails, InventoryUnit, StockMovementReason } from '@/lib/types';
+import type { InventoryItem, InventoryUnit } from '@/lib/types';
 
-type TabType = 'items' | 'balances' | 'movements';
+type StorageGroup = 'FREEZER' | 'CART';
 
 export default function InventoryScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<TabType>('items');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [locations, setLocations] = useState<StockLocation[]>([]);
-  const [balances, setBalances] = useState<StockBalance[]>([]);
-  const [movements, setMovements] = useState<StockMovementWithDetails[]>([]);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const [selectedGroup, setSelectedGroup] = useState<StorageGroup | 'ALL'>('ALL');
 
-  const [showAddItemModal, setShowAddItemModal] = useState<boolean>(false);
-  const [showMovementModal, setShowMovementModal] = useState<boolean>(false);
+  const [showItemModal, setShowItemModal] = useState<boolean>(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
-  const [newItemName, setNewItemName] = useState<string>('');
-  const [newItemUnit, setNewItemUnit] = useState<InventoryUnit>('pcs');
-  const [newItemReorder, setNewItemReorder] = useState<string>('0');
-
-  const [movementItemId, setMovementItemId] = useState<string>('');
-  const [movementReason, setMovementReason] = useState<StockMovementReason>('PURCHASE');
-  const [movementQty, setMovementQty] = useState<string>('');
-  const [movementFromId, setMovementFromId] = useState<string>('');
-  const [movementToId, setMovementToId] = useState<string>('');
-  const [movementNotes, setMovementNotes] = useState<string>('');
+  const [itemName, setItemName] = useState<string>('');
+  const [itemUnit, setItemUnit] = useState<InventoryUnit>('pcs');
+  const [itemReorder, setItemReorder] = useState<string>('0');
+  const [itemGroup, setItemGroup] = useState<StorageGroup>('FREEZER');
 
   const itemRepo = useMemo(() => new InventoryItemRepository(), []);
-  const locationRepo = useMemo(() => new StockLocationRepository(), []);
-  const balanceRepo = useMemo(() => new StockBalanceRepository(), []);
-  const movementRepo = useMemo(() => new StockMovementRepository(), []);
 
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [itemsData, locationsData] = await Promise.all([
-        itemRepo.listActive(),
-        locationRepo.listActive(),
-      ]);
+      const itemsData = await itemRepo.listActive();
       setItems(itemsData);
-      setLocations(locationsData);
-
-      if (locationsData.length > 0 && !selectedLocationId) {
-        const warehouse = locationsData.find(l => l.type === 'WAREHOUSE');
-        setSelectedLocationId(warehouse?.id || locationsData[0].id);
-      }
     } catch (error) {
       console.error('[Inventory] Load error:', error);
       Alert.alert('Error', 'Failed to load data');
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLocationId, itemRepo, locationRepo]);
-
-  const loadBalances = useCallback(async () => {
-    if (!selectedLocationId) return;
-    try {
-      const data = await balanceRepo.getBalancesForLocation(selectedLocationId);
-      setBalances(data);
-    } catch (error) {
-      console.error('[Inventory] Load balances error:', error);
-    }
-  }, [selectedLocationId, balanceRepo]);
-
-  const loadMovements = useCallback(async () => {
-    try {
-      const data = await movementRepo.listRecent(50);
-      setMovements(data);
-    } catch (error) {
-      console.error('[Inventory] Load movements error:', error);
-    }
-  }, [movementRepo]);
+  }, [itemRepo]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData();
-    if (activeTab === 'balances') await loadBalances();
-    if (activeTab === 'movements') await loadMovements();
     setRefreshing(false);
-  }, [activeTab, loadData, loadBalances, loadMovements]);
+  }, [loadData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,233 +54,148 @@ export default function InventoryScreen() {
     }, [loadData])
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      if (activeTab === 'balances') loadBalances();
-      if (activeTab === 'movements') loadMovements();
-    }, [activeTab, loadBalances, loadMovements])
-  );
+  const openItemModal = (item?: InventoryItem) => {
+    if (item) {
+      setEditingItem(item);
+      setItemName(item.name);
+      setItemUnit(item.unit);
+      setItemReorder(item.reorder_level_qty.toString());
+      setItemGroup((item as any).storage_group || 'FREEZER');
+    } else {
+      setEditingItem(null);
+      setItemName('');
+      setItemUnit('pcs');
+      setItemReorder('0');
+      setItemGroup('FREEZER');
+    }
+    setShowItemModal(true);
+  };
 
-  const handleAddItem = async () => {
-    if (!newItemName.trim()) {
+  const handleSaveItem = async () => {
+    if (!itemName.trim()) {
       Alert.alert('Error', 'Item name is required');
       return;
     }
     if (!user?.id) return;
 
     try {
-      await itemRepo.create({
-        name: newItemName.trim(),
-        unit: newItemUnit,
-        reorder_level_qty: parseFloat(newItemReorder) || 0,
-        user_id: user.id,
-      });
-      setShowAddItemModal(false);
-      setNewItemName('');
-      setNewItemUnit('pcs');
-      setNewItemReorder('0');
+      if (editingItem) {
+        await itemRepo.update({
+          id: editingItem.id,
+          name: itemName.trim(),
+          unit: itemUnit,
+          reorder_level_qty: parseFloat(itemReorder) || 0,
+          storage_group: itemGroup,
+          user_id: user.id,
+        });
+        Alert.alert('Success', 'Item updated');
+      } else {
+        await itemRepo.create({
+          name: itemName.trim(),
+          unit: itemUnit,
+          reorder_level_qty: parseFloat(itemReorder) || 0,
+          storage_group: itemGroup,
+          user_id: user.id,
+        });
+        Alert.alert('Success', 'Item created');
+      }
+      setShowItemModal(false);
       await loadData();
-      Alert.alert('Success', 'Item created');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create item');
+      Alert.alert('Error', error.message || 'Failed to save item');
     }
   };
 
-  const handleCreateMovement = async () => {
-    if (!movementItemId) {
-      Alert.alert('Error', 'Select an item');
-      return;
-    }
-    const qty = parseFloat(movementQty);
-    if (!qty || qty <= 0) {
-      Alert.alert('Error', 'Enter valid quantity');
-      return;
-    }
-    if (!user?.id) return;
+  const filteredItems = useMemo(() => {
+    if (selectedGroup === 'ALL') return items;
+    return items.filter(item => (item as any).storage_group === selectedGroup);
+  }, [items, selectedGroup]);
 
-    try {
-      await inventoryService.createMovement({
-        inventory_item_id: movementItemId,
-        from_location_id: movementFromId || undefined,
-        to_location_id: movementToId || undefined,
-        qty,
-        reason: movementReason,
-        actor_user_id: user.id,
-        notes: movementNotes || undefined,
-      });
-      setShowMovementModal(false);
-      setMovementItemId('');
-      setMovementReason('PURCHASE');
-      setMovementQty('');
-      setMovementFromId('');
-      setMovementToId('');
-      setMovementNotes('');
-      await loadBalances();
-      await loadMovements();
-      Alert.alert('Success', 'Movement recorded');
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create movement');
-    }
-  };
-
-  const renderTabBar = () => (
-    <View style={[styles.tabBar, { backgroundColor: theme.card }]}>
+  const renderGroupFilter = () => (
+    <View style={[styles.groupFilter, { backgroundColor: theme.card }]}>
       <TouchableOpacity
-        style={[styles.tab, activeTab === 'items' && { borderBottomColor: theme.primary }]}
-        onPress={() => setActiveTab('items')}
+        style={[styles.groupButton, selectedGroup === 'ALL' && { backgroundColor: theme.primary }]}
+        onPress={() => setSelectedGroup('ALL')}
       >
-        <Package size={20} color={activeTab === 'items' ? theme.primary : theme.textSecondary} />
-        <Text style={[styles.tabText, { color: activeTab === 'items' ? theme.primary : theme.textSecondary }]}>
-          Items
+        <Text style={[styles.groupButtonText, { color: selectedGroup === 'ALL' ? '#fff' : theme.text }]}>
+          All
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[styles.tab, activeTab === 'balances' && { borderBottomColor: theme.primary }]}
-        onPress={() => setActiveTab('balances')}
+        style={[styles.groupButton, selectedGroup === 'FREEZER' && { backgroundColor: theme.primary }]}
+        onPress={() => setSelectedGroup('FREEZER')}
       >
-        <TrendingDown size={20} color={activeTab === 'balances' ? theme.primary : theme.textSecondary} />
-        <Text style={[styles.tabText, { color: activeTab === 'balances' ? theme.primary : theme.textSecondary }]}>
-          Balances
+        <Snowflake size={16} color={selectedGroup === 'FREEZER' ? '#fff' : theme.text} />
+        <Text style={[styles.groupButtonText, { color: selectedGroup === 'FREEZER' ? '#fff' : theme.text }]}>
+          Freezer
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[styles.tab, activeTab === 'movements' && { borderBottomColor: theme.primary }]}
-        onPress={() => setActiveTab('movements')}
+        style={[styles.groupButton, selectedGroup === 'CART' && { backgroundColor: theme.primary }]}
+        onPress={() => setSelectedGroup('CART')}
       >
-        <ArrowUpDown size={20} color={activeTab === 'movements' ? theme.primary : theme.textSecondary} />
-        <Text style={[styles.tabText, { color: activeTab === 'movements' ? theme.primary : theme.textSecondary }]}>
-          Movements
+        <ShoppingCart size={16} color={selectedGroup === 'CART' ? '#fff' : theme.text} />
+        <Text style={[styles.groupButtonText, { color: selectedGroup === 'CART' ? '#fff' : theme.text }]}>
+          Cart
         </Text>
       </TouchableOpacity>
     </View>
   );
 
-  const renderItemsTab = () => (
+  const renderItemsList = () => (
     <View style={styles.tabContent}>
       <TouchableOpacity
         style={[styles.addButton, { backgroundColor: theme.primary }]}
-        onPress={() => setShowAddItemModal(true)}
+        onPress={() => openItemModal()}
       >
         <Plus size={20} color="#fff" />
         <Text style={styles.addButtonText}>Add Item</Text>
       </TouchableOpacity>
-      {items.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
           <Package size={48} color={theme.textSecondary} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No items yet</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No items in this group</Text>
         </View>
       ) : (
-        items.map((item) => (
-          <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.card }]}>
-            <View style={styles.itemHeader}>
-              <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-              <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
-            </View>
-            <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
-              Reorder level: {item.reorder_level_qty} {item.unit}
-            </Text>
-          </View>
-        ))
-      )}
-    </View>
-  );
-
-  const renderBalancesTab = () => (
-    <View style={styles.tabContent}>
-      <View style={[styles.locationPicker, { backgroundColor: theme.card }]}>
-        <Text style={[styles.locationLabel, { color: theme.text }]}>Location:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.locationScroll}>
-          {locations.map((loc) => (
-            <TouchableOpacity
-              key={loc.id}
-              style={[
-                styles.locationChip,
-                { backgroundColor: selectedLocationId === loc.id ? theme.primary : theme.background },
-              ]}
-              onPress={() => setSelectedLocationId(loc.id)}
-            >
-              {loc.type === 'WAREHOUSE' ? (
-                <Warehouse size={16} color={selectedLocationId === loc.id ? '#fff' : theme.text} />
-              ) : (
-                <ShoppingCart size={16} color={selectedLocationId === loc.id ? '#fff' : theme.text} />
-              )}
-              <Text
-                style={[
-                  styles.locationChipText,
-                  { color: selectedLocationId === loc.id ? '#fff' : theme.text },
-                ]}
-              >
-                {loc.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-      {balances.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
-          <TrendingDown size={48} color={theme.textSecondary} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No stock at this location</Text>
-        </View>
-      ) : (
-        balances.map((bal) => (
-          <View key={`${bal.inventory_item_id}-${bal.stock_location_id}`} style={[styles.balanceCard, { backgroundColor: theme.card }]}>
-            <View style={styles.balanceHeader}>
-              <Text style={[styles.balanceName, { color: theme.text }]}>{bal.inventory_item_name}</Text>
-              {bal.is_low_stock ? (
-                <View style={[styles.lowStockBadge, { backgroundColor: theme.warning + '20' }]}>
-                  <AlertCircle size={14} color={theme.warning} />
-                  <Text style={[styles.lowStockText, { color: theme.warning }]}>Low</Text>
+        filteredItems.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            style={[styles.itemCard, { backgroundColor: theme.card }]}
+            onPress={() => openItemModal(item)}
+          >
+            <View style={styles.itemContent}>
+              <View style={styles.itemLeft}>
+                <View style={styles.itemHeader}>
+                  <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+                  <View style={[styles.groupBadge, { backgroundColor: (item as any).storage_group === 'FREEZER' ? theme.primary + '20' : theme.success + '20' }]}>
+                    {(item as any).storage_group === 'FREEZER' ? (
+                      <Snowflake size={12} color={theme.primary} />
+                    ) : (
+                      <ShoppingCart size={12} color={theme.success} />
+                    )}
+                    <Text style={[styles.groupBadgeText, { color: (item as any).storage_group === 'FREEZER' ? theme.primary : theme.success }]}>
+                      {(item as any).storage_group || 'FREEZER'}
+                    </Text>
+                  </View>
                 </View>
-              ) : null}
+                <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
+                <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
+                  Reorder: {item.reorder_level_qty} {item.unit}
+                </Text>
+              </View>
+              <Edit2 size={20} color={theme.textSecondary} />
             </View>
-            <Text style={[styles.balanceQty, { color: theme.primary }]}>
-              {bal.qty} {bal.unit}
-            </Text>
-          </View>
+          </TouchableOpacity>
         ))
       )}
     </View>
   );
 
-  const renderMovementsTab = () => (
-    <View style={styles.tabContent}>
-      <TouchableOpacity
-        style={[styles.addButton, { backgroundColor: theme.primary }]}
-        onPress={() => setShowMovementModal(true)}
-      >
-        <Plus size={20} color="#fff" />
-        <Text style={styles.addButtonText}>Create Movement</Text>
-      </TouchableOpacity>
-      {movements.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
-          <ArrowUpDown size={48} color={theme.textSecondary} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No movements yet</Text>
-        </View>
-      ) : (
-        movements.map((mov) => (
-          <View key={mov.id} style={[styles.movementCard, { backgroundColor: theme.card }]}>
-            <View style={styles.movementHeader}>
-              <Text style={[styles.movementItem, { color: theme.text }]}>{mov.inventory_item_name}</Text>
-              <Text style={[styles.movementReason, { color: theme.primary }]}>{mov.reason}</Text>
-            </View>
-            <View style={styles.movementDetails}>
-              <Text style={[styles.movementLocation, { color: theme.textSecondary }]}>
-                {mov.from_location_name || 'External'} → {mov.to_location_name || 'External'}
-              </Text>
-              <Text style={[styles.movementQty, { color: theme.text }]}>{mov.qty}</Text>
-            </View>
-            <Text style={[styles.movementActor, { color: theme.textSecondary }]}>
-              By {mov.actor_name} • {new Date(mov.created_at).toLocaleDateString()}
-            </Text>
-          </View>
-        ))
-      )}
-    </View>
-  );
+
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {renderTabBar()}
+      {renderGroupFilter()}
       <ScrollView
         style={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />}
@@ -335,34 +203,51 @@ export default function InventoryScreen() {
         {isLoading ? (
           <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
         ) : (
-          <>
-            {activeTab === 'items' && renderItemsTab()}
-            {activeTab === 'balances' && renderBalancesTab()}
-            {activeTab === 'movements' && renderMovementsTab()}
-          </>
+          renderItemsList()
         )}
       </ScrollView>
 
-      <Modal visible={showAddItemModal} animationType="slide" transparent>
+      <Modal visible={showItemModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Add Inventory Item</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {editingItem ? 'Edit Inventory Item' : 'Add Inventory Item'}
+            </Text>
+            
+            <Text style={[styles.label, { color: theme.text }]}>Storage Group:</Text>
+            <View style={styles.groupRow}>
+              <TouchableOpacity
+                style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'FREEZER' ? theme.primary : theme.background }]}
+                onPress={() => setItemGroup('FREEZER')}
+              >
+                <Snowflake size={18} color={itemGroup === 'FREEZER' ? '#fff' : theme.text} />
+                <Text style={[styles.groupSelectText, { color: itemGroup === 'FREEZER' ? '#fff' : theme.text }]}>Freezer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'CART' ? theme.primary : theme.background }]}
+                onPress={() => setItemGroup('CART')}
+              >
+                <ShoppingCart size={18} color={itemGroup === 'CART' ? '#fff' : theme.text} />
+                <Text style={[styles.groupSelectText, { color: itemGroup === 'CART' ? '#fff' : theme.text }]}>Cart</Text>
+              </TouchableOpacity>
+            </View>
+
             <TextInput
               style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
               placeholder="Item name"
               placeholderTextColor={theme.textSecondary}
-              value={newItemName}
-              onChangeText={setNewItemName}
+              value={itemName}
+              onChangeText={setItemName}
             />
             <Text style={[styles.label, { color: theme.text }]}>Unit:</Text>
             <View style={styles.unitRow}>
               {(['pcs', 'kg', 'g', 'L', 'mL'] as InventoryUnit[]).map((u) => (
                 <TouchableOpacity
                   key={u}
-                  style={[styles.unitButton, { backgroundColor: newItemUnit === u ? theme.primary : theme.background }]}
-                  onPress={() => setNewItemUnit(u)}
+                  style={[styles.unitButton, { backgroundColor: itemUnit === u ? theme.primary : theme.background }]}
+                  onPress={() => setItemUnit(u)}
                 >
-                  <Text style={[styles.unitButtonText, { color: newItemUnit === u ? '#fff' : theme.text }]}>{u}</Text>
+                  <Text style={[styles.unitButtonText, { color: itemUnit === u ? '#fff' : theme.text }]}>{u}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -371,133 +256,21 @@ export default function InventoryScreen() {
               placeholder="Reorder level"
               placeholderTextColor={theme.textSecondary}
               keyboardType="numeric"
-              value={newItemReorder}
-              onChangeText={setNewItemReorder}
+              value={itemReorder}
+              onChangeText={setItemReorder}
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.background }]}
-                onPress={() => setShowAddItemModal(false)}
+                onPress={() => setShowItemModal(false)}
               >
                 <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.primary }]} onPress={handleAddItem}>
-                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Add</Text>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.primary }]} onPress={handleSaveItem}>
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>{editingItem ? 'Update' : 'Add'}</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showMovementModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <ScrollView style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Create Movement</Text>
-            <Text style={[styles.label, { color: theme.text }]}>Item:</Text>
-            <View style={styles.pickerContainer}>
-              {items.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.pickerItem,
-                    { backgroundColor: movementItemId === item.id ? theme.primary : theme.background },
-                  ]}
-                  onPress={() => setMovementItemId(item.id)}
-                >
-                  <Text style={[styles.pickerText, { color: movementItemId === item.id ? '#fff' : theme.text }]}>
-                    {item.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={[styles.label, { color: theme.text }]}>Reason:</Text>
-            <View style={styles.pickerContainer}>
-              {(['PURCHASE', 'ISSUE_TO_CART', 'RETURN_TO_WAREHOUSE', 'WASTE', 'ADJUSTMENT', 'TRANSFER'] as StockMovementReason[]).map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={[
-                    styles.pickerItem,
-                    { backgroundColor: movementReason === r ? theme.primary : theme.background },
-                  ]}
-                  onPress={() => setMovementReason(r)}
-                >
-                  <Text style={[styles.pickerText, { color: movementReason === r ? '#fff' : theme.text }]}>{r}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
-              placeholder="Quantity"
-              placeholderTextColor={theme.textSecondary}
-              keyboardType="numeric"
-              value={movementQty}
-              onChangeText={setMovementQty}
-            />
-            {movementReason !== 'PURCHASE' && (
-              <>
-                <Text style={[styles.label, { color: theme.text }]}>From Location:</Text>
-                <View style={styles.pickerContainer}>
-                  {locations.map((loc) => (
-                    <TouchableOpacity
-                      key={loc.id}
-                      style={[
-                        styles.pickerItem,
-                        { backgroundColor: movementFromId === loc.id ? theme.primary : theme.background },
-                      ]}
-                      onPress={() => setMovementFromId(loc.id)}
-                    >
-                      <Text style={[styles.pickerText, { color: movementFromId === loc.id ? '#fff' : theme.text }]}>
-                        {loc.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-            {movementReason !== 'WASTE' && (
-              <>
-                <Text style={[styles.label, { color: theme.text }]}>To Location:</Text>
-                <View style={styles.pickerContainer}>
-                  {locations.map((loc) => (
-                    <TouchableOpacity
-                      key={loc.id}
-                      style={[
-                        styles.pickerItem,
-                        { backgroundColor: movementToId === loc.id ? theme.primary : theme.background },
-                      ]}
-                      onPress={() => setMovementToId(loc.id)}
-                    >
-                      <Text style={[styles.pickerText, { color: movementToId === loc.id ? '#fff' : theme.text }]}>
-                        {loc.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
-              placeholder="Notes (optional)"
-              placeholderTextColor={theme.textSecondary}
-              value={movementNotes}
-              onChangeText={setMovementNotes}
-              multiline
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.background }]}
-                onPress={() => setShowMovementModal(false)}
-              >
-                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.primary }]}
-                onPress={handleCreateMovement}
-              >
-                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Create</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -508,22 +281,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  tabBar: {
+  groupFilter: {
     flexDirection: 'row',
+    padding: 12,
+    gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
-  tab: {
-    flex: 1,
+  groupButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     gap: 6,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
   },
-  tabText: {
+  groupButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
   },
@@ -562,112 +335,46 @@ const styles = StyleSheet.create({
   itemCard: {
     padding: 16,
     borderRadius: 8,
-    gap: 8,
+    marginBottom: 8,
   },
-  itemHeader: {
+  itemContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  itemLeft: {
+    flex: 1,
+  },
+  itemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
   },
   itemName: {
     fontSize: 16,
     fontWeight: '600' as const,
   },
-  itemUnit: {
-    fontSize: 14,
-  },
-  itemReorder: {
-    fontSize: 14,
-  },
-  locationPicker: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  locationLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    marginBottom: 8,
-  },
-  locationScroll: {
-    flexDirection: 'row',
-  },
-  locationChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 8,
-    gap: 6,
-  },
-  locationChipText: {
-    fontSize: 14,
-    fontWeight: '500' as const,
-  },
-  balanceCard: {
-    padding: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  balanceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  balanceName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  lowStockBadge: {
+  groupBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 2,
     borderRadius: 12,
     gap: 4,
   },
-  lowStockText: {
-    fontSize: 12,
+  groupBadgeText: {
+    fontSize: 11,
     fontWeight: '600' as const,
   },
-  balanceQty: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-  },
-  movementCard: {
-    padding: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  movementHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  movementItem: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  movementReason: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-  },
-  movementDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  movementLocation: {
+  itemUnit: {
     fontSize: 14,
+    marginBottom: 2,
   },
-  movementQty: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  movementActor: {
+  itemReorder: {
     fontSize: 12,
   },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -710,21 +417,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
   },
-  pickerContainer: {
+  groupRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },
-  pickerItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  groupSelectButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
     borderRadius: 8,
+    gap: 8,
   },
-  pickerText: {
+  groupSelectText: {
     fontSize: 14,
-    fontWeight: '500' as const,
+    fontWeight: '600' as const,
   },
+
   modalButtons: {
     flexDirection: 'row',
     gap: 12,

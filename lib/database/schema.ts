@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const MIGRATIONS = [
   {
@@ -677,6 +677,45 @@ export const MIGRATIONS = [
       DROP INDEX IF EXISTS idx_products_inventory_item_id;
       ALTER TABLE products DROP COLUMN units_per_sale;
       ALTER TABLE products DROP COLUMN inventory_item_id;
+    `,
+  },
+  {
+    version: 17,
+    up: `
+      ALTER TABLE inventory_items ADD COLUMN storage_group TEXT NOT NULL DEFAULT 'FREEZER' CHECK(storage_group IN ('FREEZER', 'CART'));
+      
+      DROP TABLE IF EXISTS stock_balances_cache;
+      DROP TABLE IF EXISTS stock_movements;
+      DROP TABLE IF EXISTS stock_locations;
+
+      CREATE TABLE products_temp (
+        id TEXT PRIMARY KEY,
+        category_id TEXT,
+        name TEXT NOT NULL,
+        description TEXT,
+        price REAL NOT NULL,
+        price_cents INTEGER NOT NULL DEFAULT 0,
+        cost_cents INTEGER,
+        sku TEXT,
+        icon_image_uri TEXT,
+        category TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (category_id) REFERENCES product_categories(id)
+      );
+
+      INSERT INTO products_temp (id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, is_active, created_at, updated_at)
+      SELECT id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, is_active, created_at, updated_at FROM products;
+
+      DROP TABLE products;
+      ALTER TABLE products_temp RENAME TO products;
+
+      CREATE INDEX idx_products_category_id ON products(category_id);
+      CREATE INDEX idx_products_is_active ON products(is_active);
+    `,
+    down: `
+      ALTER TABLE inventory_items DROP COLUMN storage_group;
     `,
   },
 ];

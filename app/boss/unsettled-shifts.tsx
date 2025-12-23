@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { Clock, ChevronRight, Bookmark } from 'lucide-react-native';
+import { useRouter, Stack } from 'expo-router';
+import { Clock, ChevronRight, Bookmark, ArrowLeft } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -16,6 +16,10 @@ export default function UnsettledShiftsScreen() {
   const queryClient = useQueryClient();
   const settlementRepo = new SettlementRepository();
   const savedItemsRepo = new BossSavedItemsRepository();
+
+  const handleBackToExceptions = () => {
+    router.replace('/boss');
+  };
 
   const { data: unsettledShifts, isLoading } = useQuery({
     queryKey: ['unsettled-shifts', assignedCartIds, isBoss],
@@ -77,6 +81,18 @@ export default function UnsettledShiftsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={handleBackToExceptions}
+            >
+              <ArrowLeft size={24} color={theme.primary} />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <ScrollView style={styles.content}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.text }]}>Unsettled Shifts</Text>
@@ -221,5 +237,9 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  headerButton: {
+    padding: 8,
+    marginRight: 8,
   },
 });
