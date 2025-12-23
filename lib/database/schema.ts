@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 export const MIGRATIONS = [
   {
@@ -716,6 +716,31 @@ export const MIGRATIONS = [
     `,
     down: `
       ALTER TABLE inventory_items DROP COLUMN storage_group;
+    `,
+  },
+  {
+    version: 18,
+    up: `
+      CREATE TABLE IF NOT EXISTS saved_records (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK(type IN ('expense', 'settlement')),
+        source_id TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_by_user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_saved_records_type ON saved_records(type);
+      CREATE INDEX idx_saved_records_source_id ON saved_records(source_id);
+      CREATE INDEX idx_saved_records_is_deleted ON saved_records(is_deleted);
+      CREATE INDEX idx_saved_records_created_by ON saved_records(created_by_user_id);
+    `,
+    down: `
+      DROP TABLE IF EXISTS saved_records;
     `,
   },
 ];

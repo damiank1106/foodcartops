@@ -394,3 +394,17 @@ export interface StockBalance {
   reorder_level_qty: number;
   is_low_stock: boolean;
 }
+
+export type SavedRecordType = 'expense' | 'settlement';
+
+export interface SavedRecord {
+  id: string;
+  type: SavedRecordType;
+  source_id: string;
+  payload_json: string;
+  created_by_user_id: string;
+  created_at: number;
+  updated_at: number;
+  is_deleted: number;
+  notes?: string;
+}

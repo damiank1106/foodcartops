@@ -441,6 +441,15 @@ export default function BossDashboard() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tab}
+            onPress={() => setSelectedTab('carts')}
+          >
+            <Text style={[styles.tabText, { color: selectedTab === 'carts' ? theme.primary : theme.textSecondary }]}>
+              Carts
+            </Text>
+            {selectedTab === 'carts' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.tab}
             onPress={() => setSelectedTab('exceptions')}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'exceptions' ? theme.primary : theme.textSecondary }]}>
@@ -454,15 +463,6 @@ export default function BossDashboard() {
               </View>
             )}
             {selectedTab === 'exceptions' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tab}
-            onPress={() => setSelectedTab('activity')}
-          >
-            <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
-              Activity
-            </Text>
-            {selectedTab === 'activity' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tab}
@@ -480,12 +480,12 @@ export default function BossDashboard() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tab}
-            onPress={() => setSelectedTab('carts')}
+            onPress={() => setSelectedTab('activity')}
           >
-            <Text style={[styles.tabText, { color: selectedTab === 'carts' ? theme.primary : theme.textSecondary }]}>
-              Carts
+            <Text style={[styles.tabText, { color: selectedTab === 'activity' ? theme.primary : theme.textSecondary }]}>
+              Activity
             </Text>
-            {selectedTab === 'carts' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+            {selectedTab === 'activity' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
         </ScrollView>
       </View>

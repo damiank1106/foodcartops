@@ -11,11 +11,11 @@ import {
   Image,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Receipt, Eye, X, Clock } from 'lucide-react-native';
+import { CheckCircle, XCircle, Receipt, Eye, X, Clock, FileText, DollarSign } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { ExpenseRepository, AuditRepository } from '@/lib/repositories';
-import type { ExpenseWithDetails } from '@/lib/types';
+import { ExpenseRepository, AuditRepository, SavedRecordRepository } from '@/lib/repositories';
+import type { ExpenseWithDetails, SavedRecord } from '@/lib/types';
 import { format } from 'date-fns';
 
 export default function BossExpensesScreen() {
@@ -24,10 +24,14 @@ export default function BossExpensesScreen() {
   const queryClient = useQueryClient();
   const [selectedExpense, setSelectedExpense] = useState<ExpenseWithDetails | null>(null);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
+  const [selectedTab, setSelectedTab] = useState<'all' | 'saved'>('all');
   const [filter, setFilter] = useState<'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'ALL'>('SUBMITTED');
+  const [selectedSavedRecord, setSelectedSavedRecord] = useState<SavedRecord | null>(null);
+  const [showSavedDetailModal, setShowSavedDetailModal] = useState<boolean>(false);
 
   const expenseRepo = new ExpenseRepository();
   const auditRepo = new AuditRepository();
+  const savedRecordRepo = new SavedRecordRepository();
 
   const { data: expenses, isLoading } = useQuery({
     queryKey: ['boss-expenses', filter],
@@ -43,6 +47,11 @@ export default function BossExpensesScreen() {
     queryKey: ['pending-expenses-count'],
     queryFn: () => expenseRepo.getPendingCount(),
     refetchInterval: 30000,
+  });
+
+  const { data: savedRecords } = useQuery({
+    queryKey: ['saved-records'],
+    queryFn: () => savedRecordRepo.listAll(),
   });
 
   const reviewMutation = useMutation({
@@ -122,10 +131,82 @@ export default function BossExpensesScreen() {
     );
   }
 
+  const renderSavedTab = () => {
+    const savedExpenses = savedRecords?.filter(r => r.type === 'expense') || [];
+    const savedSettlements = savedRecords?.filter(r => r.type === 'settlement') || [];
+
+    return (
+      <View style={styles.savedContainer}>
+        {savedExpenses.length > 0 && (
+          <View style={styles.savedSection}>
+            <Text style={[styles.savedSectionTitle, { color: theme.text }]}>Saved Expenses</Text>
+            {savedExpenses.map((record) => {
+              const payload = JSON.parse(record.payload_json);
+              return (
+                <TouchableOpacity
+                  key={record.id}
+                  style={[styles.savedCard, { backgroundColor: theme.card }]}
+                  onPress={() => {
+                    setSelectedSavedRecord(record);
+                    setShowSavedDetailModal(true);
+                  }}
+                >
+                  <View style={styles.savedCardHeader}>
+                    <Receipt size={20} color={theme.primary} />
+                    <Text style={[styles.savedCardTitle, { color: theme.text }]}>Expense</Text>
+                  </View>
+                  <Text style={[styles.savedCardAmount, { color: theme.text }]}>₱{(payload.amount_cents / 100).toFixed(2)}</Text>
+                  <Text style={[styles.savedCardMeta, { color: theme.textSecondary }]}>{payload.category || 'N/A'}</Text>
+                  <Text style={[styles.savedCardDate, { color: theme.textSecondary }]}>
+                    {format(new Date(record.created_at), 'MMM d, yyyy h:mm a')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+        {savedSettlements.length > 0 && (
+          <View style={styles.savedSection}>
+            <Text style={[styles.savedSectionTitle, { color: theme.text }]}>Saved Settlements</Text>
+            {savedSettlements.map((record) => {
+              const payload = JSON.parse(record.payload_json);
+              return (
+                <TouchableOpacity
+                  key={record.id}
+                  style={[styles.savedCard, { backgroundColor: theme.card }]}
+                  onPress={() => {
+                    setSelectedSavedRecord(record);
+                    setShowSavedDetailModal(true);
+                  }}
+                >
+                  <View style={styles.savedCardHeader}>
+                    <DollarSign size={20} color={theme.success} />
+                    <Text style={[styles.savedCardTitle, { color: theme.text }]}>Settlement</Text>
+                  </View>
+                  <Text style={[styles.savedCardAmount, { color: theme.text }]}>₱{((payload.cash_counted_cents || 0) / 100).toFixed(2)}</Text>
+                  <Text style={[styles.savedCardMeta, { color: theme.textSecondary }]}>{payload.cart_name || 'N/A'}</Text>
+                  <Text style={[styles.savedCardDate, { color: theme.textSecondary }]}>
+                    {format(new Date(record.created_at), 'MMM d, yyyy h:mm a')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+        {savedExpenses.length === 0 && savedSettlements.length === 0 && (
+          <View style={styles.emptyState}>
+            <FileText size={64} color={theme.textSecondary} />
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No saved records</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Expense Approvals</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Expenses</Text>
         {pendingCount !== undefined && pendingCount > 0 && (
           <View style={[styles.badge, { backgroundColor: theme.error }]}>
             <Text style={styles.badgeText}>{pendingCount}</Text>
@@ -133,32 +214,52 @@ export default function BossExpensesScreen() {
         )}
       </View>
 
-      <View style={styles.filterRow}>
-        {(['SUBMITTED', 'APPROVED', 'REJECTED', 'ALL'] as const).map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[
-              styles.filterButton,
-              { backgroundColor: theme.card },
-              filter === f && { backgroundColor: theme.primary },
-            ]}
-            onPress={() => setFilter(f)}
-          >
-            <Text
-              style={[
-                styles.filterText,
-                { color: theme.text },
-                filter === f && { color: '#FFF', fontWeight: '600' as const },
-              ]}
-            >
-              {f === 'ALL' ? 'All' : getStatusLabel(f)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, selectedTab === 'all' && { backgroundColor: theme.primary }]}
+          onPress={() => setSelectedTab('all')}
+        >
+          <Text style={[styles.tabButtonText, { color: selectedTab === 'all' ? '#FFF' : theme.text }]}>All</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, selectedTab === 'saved' && { backgroundColor: theme.primary }]}
+          onPress={() => setSelectedTab('saved')}
+        >
+          <Text style={[styles.tabButtonText, { color: selectedTab === 'saved' ? '#FFF' : theme.text }]}>Saved</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.content}>
+      {selectedTab === 'all' && (
+        <View style={styles.filterRow}>
+          {(['SUBMITTED', 'APPROVED', 'REJECTED', 'ALL'] as const).map((f) => (
+            <TouchableOpacity
+              key={f}
+              style={[
+                styles.filterButton,
+                { backgroundColor: theme.card },
+                filter === f && { backgroundColor: theme.primary },
+              ]}
+              onPress={() => setFilter(f)}
+            >
+              <Text
+                style={[
+                  styles.filterText,
+                  { color: theme.text },
+                  filter === f && { color: '#FFF', fontWeight: '600' as const },
+                ]}
+              >
+                {f === 'ALL' ? 'All' : getStatusLabel(f)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {selectedTab === 'saved' ? (
+        <ScrollView style={styles.scrollView}>{renderSavedTab()}</ScrollView>
+      ) : (
+        <ScrollView style={styles.scrollView}>
+          <View style={styles.content}>
           {expenses && expenses.length > 0 ? (
             expenses.map((expense) => (
               <View key={expense.id} style={[styles.expenseCard, { backgroundColor: theme.card }]}>
@@ -264,8 +365,9 @@ export default function BossExpensesScreen() {
               </Text>
             </View>
           )}
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      )}
 
       <Modal
         visible={showDetailModal}
@@ -423,6 +525,61 @@ export default function BossExpensesScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showSavedDetailModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSavedDetailModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Saved Record Details</Text>
+              <TouchableOpacity
+                onPress={() => setShowSavedDetailModal(false)}
+                style={styles.closeButton}
+              >
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedSavedRecord && (
+              <ScrollView style={styles.modalScroll}>
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Type</Text>
+                  <Text style={[styles.detailValue, { color: theme.text }]}>
+                    {selectedSavedRecord.type.charAt(0).toUpperCase() + selectedSavedRecord.type.slice(1)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Saved At</Text>
+                  <Text style={[styles.detailValue, { color: theme.text }]}>
+                    {format(new Date(selectedSavedRecord.created_at), 'MMM d, yyyy h:mm a')}
+                  </Text>
+                </View>
+
+                <View style={[styles.detailRowFull, { marginTop: 16 }]}>
+                  <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Full Data</Text>
+                  <Text style={[styles.detailNotes, { color: theme.text }]}>
+                    {JSON.stringify(JSON.parse(selectedSavedRecord.payload_json), null, 2)}
+                  </Text>
+                </View>
+
+                {selectedSavedRecord.notes && (
+                  <View style={[styles.detailRowFull, { marginTop: 16 }]}>
+                    <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Notes</Text>
+                    <Text style={[styles.detailNotes, { color: theme.text }]}>
+                      {selectedSavedRecord.notes}
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -454,10 +611,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700' as const,
   },
+  tabsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  tabsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  tabButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  tabButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+  },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     gap: 8,
+    marginTop: 12,
     marginBottom: 16,
   },
   filterButton: {
@@ -676,5 +855,48 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  savedContainer: {
+    padding: 16,
+  },
+  savedSection: {
+    marginBottom: 24,
+  },
+  savedSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    marginBottom: 12,
+  },
+  savedCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  savedCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  savedCardTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  savedCardAmount: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    marginBottom: 4,
+  },
+  savedCardMeta: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  savedCardDate: {
+    fontSize: 11,
   },
 });

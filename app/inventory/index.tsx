@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { Package, Plus, Edit2, Snowflake, ShoppingCart } from 'lucide-react-native';
+import { Package, Plus, Edit2, Snowflake, ShoppingCart, Trash2 } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repository';
 import type { InventoryItem, InventoryUnit } from '@/lib/types';
@@ -106,6 +106,30 @@ export default function InventoryScreen() {
     }
   };
 
+  const handleDeleteItem = (item: InventoryItem) => {
+    Alert.alert(
+      'Delete Item',
+      `Are you sure you want to delete "${item.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return;
+            try {
+              await itemRepo.softDelete(item.id, user.id);
+              Alert.alert('Success', 'Item deleted');
+              await loadData();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete item');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const filteredItems = useMemo(() => {
     if (selectedGroup === 'ALL') return items;
     return items.filter(item => (item as any).storage_group === selectedGroup);
@@ -158,13 +182,12 @@ export default function InventoryScreen() {
         </View>
       ) : (
         filteredItems.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={[styles.itemCard, { backgroundColor: theme.card }]}
-            onPress={() => openItemModal(item)}
-          >
+          <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.card }]}>
             <View style={styles.itemContent}>
-              <View style={styles.itemLeft}>
+              <TouchableOpacity
+                style={styles.itemLeft}
+                onPress={() => openItemModal(item)}
+              >
                 <View style={styles.itemHeader}>
                   <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
                   <View style={[styles.groupBadge, { backgroundColor: (item as any).storage_group === 'FREEZER' ? theme.primary + '20' : theme.success + '20' }]}>
@@ -182,10 +205,23 @@ export default function InventoryScreen() {
                 <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
                   Reorder: {item.reorder_level_qty} {item.unit}
                 </Text>
+              </TouchableOpacity>
+              <View style={styles.itemActions}>
+                <TouchableOpacity
+                  style={[styles.actionIcon, { backgroundColor: theme.primary + '20' }]}
+                  onPress={() => openItemModal(item)}
+                >
+                  <Edit2 size={18} color={theme.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionIcon, { backgroundColor: theme.error + '20' }]}
+                  onPress={() => handleDeleteItem(item)}
+                >
+                  <Trash2 size={18} color={theme.error} />
+                </TouchableOpacity>
               </View>
-              <Edit2 size={20} color={theme.textSecondary} />
             </View>
-          </TouchableOpacity>
+          </View>
         ))
       )}
     </View>
@@ -210,66 +246,68 @@ export default function InventoryScreen() {
       <Modal visible={showItemModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>
-              {editingItem ? 'Edit Inventory Item' : 'Add Inventory Item'}
-            </Text>
-            
-            <Text style={[styles.label, { color: theme.text }]}>Storage Group:</Text>
-            <View style={styles.groupRow}>
-              <TouchableOpacity
-                style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'FREEZER' ? theme.primary : theme.background }]}
-                onPress={() => setItemGroup('FREEZER')}
-              >
-                <Snowflake size={18} color={itemGroup === 'FREEZER' ? '#fff' : theme.text} />
-                <Text style={[styles.groupSelectText, { color: itemGroup === 'FREEZER' ? '#fff' : theme.text }]}>Freezer</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'CART' ? theme.primary : theme.background }]}
-                onPress={() => setItemGroup('CART')}
-              >
-                <ShoppingCart size={18} color={itemGroup === 'CART' ? '#fff' : theme.text} />
-                <Text style={[styles.groupSelectText, { color: itemGroup === 'CART' ? '#fff' : theme.text }]}>Cart</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
-              placeholder="Item name"
-              placeholderTextColor={theme.textSecondary}
-              value={itemName}
-              onChangeText={setItemName}
-            />
-            <Text style={[styles.label, { color: theme.text }]}>Unit:</Text>
-            <View style={styles.unitRow}>
-              {(['pcs', 'kg', 'g', 'L', 'mL'] as InventoryUnit[]).map((u) => (
+            <ScrollView contentContainerStyle={styles.modalScrollContent}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                {editingItem ? 'Edit Inventory Item' : 'Add Inventory Item'}
+              </Text>
+              
+              <Text style={[styles.label, { color: theme.text }]}>Storage Group:</Text>
+              <View style={styles.groupRow}>
                 <TouchableOpacity
-                  key={u}
-                  style={[styles.unitButton, { backgroundColor: itemUnit === u ? theme.primary : theme.background }]}
-                  onPress={() => setItemUnit(u)}
+                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'FREEZER' ? theme.primary : theme.background }]}
+                  onPress={() => setItemGroup('FREEZER')}
                 >
-                  <Text style={[styles.unitButtonText, { color: itemUnit === u ? '#fff' : theme.text }]}>{u}</Text>
+                  <Snowflake size={18} color={itemGroup === 'FREEZER' ? '#fff' : theme.text} />
+                  <Text style={[styles.groupSelectText, { color: itemGroup === 'FREEZER' ? '#fff' : theme.text }]}>Freezer</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
-              placeholder="Reorder level"
-              placeholderTextColor={theme.textSecondary}
-              keyboardType="numeric"
-              value={itemReorder}
-              onChangeText={setItemReorder}
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.background }]}
-                onPress={() => setShowItemModal(false)}
-              >
-                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.primary }]} onPress={handleSaveItem}>
-                <Text style={[styles.modalButtonText, { color: '#fff' }]}>{editingItem ? 'Update' : 'Add'}</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'CART' ? theme.primary : theme.background }]}
+                  onPress={() => setItemGroup('CART')}
+                >
+                  <ShoppingCart size={18} color={itemGroup === 'CART' ? '#fff' : theme.text} />
+                  <Text style={[styles.groupSelectText, { color: itemGroup === 'CART' ? '#fff' : theme.text }]}>Cart</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
+                placeholder="Item name"
+                placeholderTextColor={theme.textSecondary}
+                value={itemName}
+                onChangeText={setItemName}
+              />
+              <Text style={[styles.label, { color: theme.text }]}>Unit:</Text>
+              <View style={styles.unitRow}>
+                {(['pcs', 'kg', 'g', 'L', 'mL'] as InventoryUnit[]).map((u) => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.unitButton, { backgroundColor: itemUnit === u ? theme.primary : theme.background }]}
+                    onPress={() => setItemUnit(u)}
+                  >
+                    <Text style={[styles.unitButtonText, { color: itemUnit === u ? '#fff' : theme.text }]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
+                placeholder="Reorder level"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={itemReorder}
+                onChangeText={setItemReorder}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: theme.background }]}
+                  onPress={() => setShowItemModal(false)}
+                >
+                  <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.primary }]} onPress={handleSaveItem}>
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>{editingItem ? 'Update' : 'Add'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -344,6 +382,18 @@ const styles = StyleSheet.create({
   },
   itemLeft: {
     flex: 1,
+    marginRight: 8,
+  },
+  itemActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   itemHeader: {
     flexDirection: 'row',
@@ -383,8 +433,11 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     borderRadius: 12,
-    padding: 24,
     maxHeight: '80%',
+  },
+  modalScrollContent: {
+    padding: 24,
+    paddingBottom: 150,
   },
   modalTitle: {
     fontSize: 20,
