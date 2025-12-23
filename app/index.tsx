@@ -27,15 +27,18 @@ export default function LoginScreen() {
     
     if (!isLoading && user) {
       didRedirect.current = true;
-      if (user.role === 'boss' || user.role === 'boss2' || user.role === 'developer') {
-        router.replace('/boss');
-      } else if (user.role === 'inventory_clerk') {
-        router.replace('/inventory');
-      } else {
-        router.replace('/worker');
-      }
+      setTimeout(() => {
+        if (user.role === 'boss' || user.role === 'boss2' || user.role === 'developer') {
+          router.replace('/boss');
+        } else if (user.role === 'inventory_clerk') {
+          router.replace('/inventory');
+        } else {
+          router.replace('/worker');
+        }
+      }, 0);
     }
-  }, [isLoading, user, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, user]);
 
   const addDigit = (digit: string) => {
     if (pin.length < 8) {
