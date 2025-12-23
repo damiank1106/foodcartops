@@ -23,11 +23,12 @@ export default function LoginScreen() {
   const didRedirect = useRef(false);
 
   React.useEffect(() => {
-    if (didRedirect.current) return;
+    if (didRedirect.current || isLoading || !user) return;
     
-    if (!isLoading && user) {
-      didRedirect.current = true;
-      setTimeout(() => {
+    didRedirect.current = true;
+    
+    const redirectTimeout = setTimeout(() => {
+      try {
         if (user.role === 'boss' || user.role === 'boss2' || user.role === 'developer') {
           router.replace('/boss');
         } else if (user.role === 'inventory_clerk') {
@@ -35,10 +36,14 @@ export default function LoginScreen() {
         } else {
           router.replace('/worker');
         }
-      }, 0);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, user]);
+      } catch (error) {
+        console.error('Navigation error:', error);
+        didRedirect.current = false;
+      }
+    }, 100);
+    
+    return () => clearTimeout(redirectTimeout);
+  }, [isLoading, user, router]);
 
   const addDigit = (digit: string) => {
     if (pin.length < 8) {
