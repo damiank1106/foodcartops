@@ -43,11 +43,7 @@ export default function BossExpensesScreen() {
     },
   });
 
-  const { data: pendingCount } = useQuery({
-    queryKey: ['pending-expenses-count'],
-    queryFn: () => expenseRepo.getPendingCount(),
-    refetchInterval: 30000,
-  });
+
 
   const { data: savedRecords } = useQuery({
     queryKey: ['saved-records'],
@@ -94,6 +90,21 @@ export default function BossExpensesScreen() {
     },
   });
 
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (expenseId: string) => {
+      if (!user) throw new Error('User not found');
+      await expenseRepo.softDelete(expenseId, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['worker-expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['shift-expenses'] });
+    },
+    onError: () => {
+      Alert.alert('Error', 'Failed to delete expense');
+    },
+  });
+
   const handleApprove = (expenseId: string) => {
     Alert.alert('Approve Expense', 'Are you sure you want to approve this expense?', [
       { text: 'Cancel', style: 'cancel' },
@@ -128,6 +139,17 @@ export default function BossExpensesScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: () => deleteSavedRecordMutation.mutate(recordId),
+      },
+    ]);
+  };
+
+  const handleDeleteExpense = (expenseId: string) => {
+    Alert.alert('Delete Expense', 'Are you sure you want to delete this expense?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteExpenseMutation.mutate(expenseId),
       },
     ]);
   };
@@ -242,15 +264,6 @@ export default function BossExpensesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Expenses</Text>
-        {pendingCount !== undefined && pendingCount > 0 && (
-          <View style={[styles.badge, { backgroundColor: theme.error }]}>
-            <Text style={styles.badgeText}>{pendingCount}</Text>
-          </View>
-        )}
-      </View>
-
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tabButton, selectedTab === 'all' && { backgroundColor: theme.primary }]}
@@ -361,6 +374,15 @@ export default function BossExpensesScreen() {
                   >
                     <Eye size={18} color={theme.primary} />
                     <Text style={[styles.actionButtonText, { color: theme.primary }]}>View</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: theme.error + '20' }]}
+                    onPress={() => handleDeleteExpense(expense.id)}
+                    disabled={deleteExpenseMutation.isPending}
+                  >
+                    <Trash2 size={18} color={theme.error} />
+                    <Text style={[styles.actionButtonText, { color: theme.error }]}>Delete</Text>
                   </TouchableOpacity>
 
                   {expense.status === 'SUBMITTED' && (
@@ -764,13 +786,14 @@ const styles = StyleSheet.create({
   cardActions: {
     flexDirection: 'row',
     gap: 8,
+    flexWrap: 'wrap',
   },
   actionButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
     gap: 6,
   },

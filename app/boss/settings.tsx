@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2 } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
@@ -20,6 +20,12 @@ export default function SettingsScreen() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [showPinConfirmModal, setShowPinConfirmModal] = useState(false);
+  const [showSecondConfirmModal, setShowSecondConfirmModal] = useState(false);
+  const [pinConfirmValue, setPinConfirmValue] = useState('');
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<'reset' | 'wipe' | null>(null);
+
+  const auditRepo = new AuditRepository();
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -112,84 +118,119 @@ export default function SettingsScreen() {
   };
 
   const handleResetDatabase = () => {
-    Alert.alert(
-      'Reset Database',
-      'This will delete ALL data and reset to factory defaults. Only the Boss account with PIN 1234 will remain. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('[Settings] Starting database reset...');
-              await logout();
-              await resetDatabase();
-              await seedDatabase();
-              Alert.alert('Success', 'Database reset complete. Please login with PIN 1234', [
-                { text: 'OK', onPress: () => router.replace('/') },
-              ]);
-            } catch (error) {
-              console.error('[Settings] Reset failed:', error);
-              Alert.alert('Error', 'Failed to reset database. Please restart the app.');
-            }
-          },
-        },
-      ]
-    );
+    setPendingDestructiveAction('reset');
+    setPinConfirmValue('');
+    setShowPinConfirmModal(true);
+  };
+
+  const handlePinConfirm = async () => {
+    if (!pinConfirmValue || !user) {
+      Alert.alert('Error', 'Please enter your PIN');
+      return;
+    }
+
+    try {
+      const userRepo = new UserRepository();
+      const isValid = await userRepo.verifyPinForUser(user.id, pinConfirmValue);
+      
+      if (!isValid) {
+        Alert.alert('Error', 'Incorrect PIN');
+        await auditRepo.log({
+          user_id: user.id,
+          entity_type: 'admin_action',
+          entity_id: 'pin_verify',
+          action: 'confirm_pin_failed',
+          new_data: JSON.stringify({ action: pendingDestructiveAction }),
+        });
+        return;
+      }
+
+      await auditRepo.log({
+        user_id: user.id,
+        entity_type: 'admin_action',
+        entity_id: 'pin_verify',
+        action: 'confirm_pin_success',
+        new_data: JSON.stringify({ action: pendingDestructiveAction }),
+      });
+
+      setShowPinConfirmModal(false);
+      setPinConfirmValue('');
+      setShowSecondConfirmModal(true);
+    } catch (error) {
+      console.error('[Settings] PIN verify failed:', error);
+      Alert.alert('Error', 'Failed to verify PIN');
+    }
+  };
+
+  const executeDestructiveAction = async () => {
+    setShowSecondConfirmModal(false);
+    
+    if (pendingDestructiveAction === 'reset') {
+      try {
+        console.log('[Settings] Starting database reset...');
+        await auditRepo.log({
+          user_id: user?.id,
+          entity_type: 'system',
+          entity_id: 'reset_database',
+          action: 'reset_database',
+        });
+        await logout();
+        await resetDatabase();
+        await seedDatabase();
+        Alert.alert('Success', 'Database reset complete. Please login with PIN 1234', [
+          { text: 'OK', onPress: () => router.replace('/') },
+        ]);
+      } catch (error) {
+        console.error('[Settings] Reset failed:', error);
+        Alert.alert('Error', 'Failed to reset database. Please restart the app.');
+      }
+    } else if (pendingDestructiveAction === 'wipe') {
+      try {
+        console.log('[Settings] Wiping workers and shifts...');
+        const userRepo = new UserRepository();
+        const shiftRepo = new ShiftRepository();
+        const auditRepo = new AuditRepository();
+        
+        const workers = await userRepo.findAll();
+        for (const worker of workers) {
+          if (worker.role === 'worker') {
+            await userRepo.update(worker.id, { is_active: 0 });
+            await auditRepo.log({
+              user_id: user?.id,
+              entity_type: 'user',
+              entity_id: worker.id,
+              action: 'delete',
+              old_data: JSON.stringify(worker),
+            });
+          }
+        }
+        
+        const shifts = await shiftRepo.getShifts();
+        for (const shift of shifts) {
+          await shiftRepo.deleteShift(shift.id);
+        }
+        
+        await auditRepo.log({
+          user_id: user?.id,
+          entity_type: 'system',
+          entity_id: 'wipe_workers_shifts',
+          action: 'wipe_workers_shifts',
+        });
+        
+        Alert.alert('Success', 'All workers and shifts have been removed.');
+      } catch (error) {
+        console.error('[Settings] Wipe failed:', error);
+        Alert.alert('Error', 'Failed to wipe data.');
+      }
+    }
+    
+    setPendingDestructiveAction(null);
   };
 
   const handleWipeWorkersAndShifts = () => {
-    Alert.alert(
-      'Wipe Workers & Shifts',
-      'This will delete all workers, shifts, sales, and related data. Boss account will remain. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Wipe',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('[Settings] Wiping workers and shifts...');
-              const userRepo = new UserRepository();
-              const shiftRepo = new ShiftRepository();
-              const auditRepo = new AuditRepository();
-              
-              const workers = await userRepo.findAll();
-              for (const worker of workers) {
-                if (worker.role === 'worker') {
-                  await userRepo.update(worker.id, { is_active: 0 });
-                  await auditRepo.log({
-                    user_id: user?.id,
-                    entity_type: 'user',
-                    entity_id: worker.id,
-                    action: 'delete',
-                    old_data: JSON.stringify(worker),
-                  });
-                }
-              }
-              
-              const shifts = await shiftRepo.getShifts();
-              for (const shift of shifts) {
-                await shiftRepo.deleteShift(shift.id);
-              }
-              
-              await auditRepo.log({
-                user_id: user?.id,
-                entity_type: 'system',
-                entity_id: 'wipe_workers_shifts',
-                action: 'wipe_workers_shifts',
-              });
-              
-              Alert.alert('Success', 'All workers and shifts have been removed.');
-            } catch (error) {
-              console.error('[Settings] Wipe failed:', error);
-              Alert.alert('Error', 'Failed to wipe data.');
-            }
-          },
-        },
-      ]
-    );
+    setPendingDestructiveAction('wipe');
+    setPinConfirmValue('');
+    setShowPinConfirmModal(true);
   };
 
   return (
@@ -408,6 +449,107 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showPinConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowPinConfirmModal(false);
+          setPendingDestructiveAction(null);
+          setPinConfirmValue('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Confirm with PIN</Text>
+              <TouchableOpacity onPress={() => {
+                setShowPinConfirmModal(false);
+                setPendingDestructiveAction(null);
+                setPinConfirmValue('');
+              }}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Enter your PIN to continue</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={pinConfirmValue}
+                onChangeText={setPinConfirmValue}
+                placeholder="Enter PIN"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="number-pad"
+                maxLength={8}
+                secureTextEntry
+                autoFocus
+              />
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handlePinConfirm}
+              >
+                <Text style={styles.modalButtonText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showSecondConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowSecondConfirmModal(false);
+          setPendingDestructiveAction(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderRow}>
+                <AlertTriangle size={24} color={theme.error} />
+                <Text style={[styles.modalTitle, { color: theme.text, marginLeft: 8 }]}>Are you sure?</Text>
+              </View>
+              <TouchableOpacity onPress={() => {
+                setShowSecondConfirmModal(false);
+                setPendingDestructiveAction(null);
+              }}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.warningText, { color: theme.textSecondary }]}>
+                {pendingDestructiveAction === 'reset' 
+                  ? 'This will permanently delete ALL data and reset to factory defaults. This action cannot be undone.'
+                  : 'This will permanently delete all workers, shifts, and related data. This action cannot be undone.'}
+              </Text>
+
+              <View style={styles.confirmButtons}>
+                <TouchableOpacity
+                  style={[styles.confirmButton, { backgroundColor: theme.background }]}
+                  onPress={() => {
+                    setShowSecondConfirmModal(false);
+                    setPendingDestructiveAction(null);
+                  }}
+                >
+                  <Text style={[styles.confirmButtonText, { color: theme.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmButton, { backgroundColor: theme.error }]}
+                  onPress={executeDestructiveAction}
+                >
+                  <Text style={[styles.confirmButtonText, { color: '#FFF' }]}>Reset</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -515,6 +657,29 @@ const styles = StyleSheet.create({
   },
   modalButtonText: {
     color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  warningText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
   },

@@ -62,7 +62,7 @@ export class ExpenseRepository extends BaseRepository {
     status?: ExpenseStatus;
   }): Promise<Expense[]> {
     const db = await getDatabase();
-    let query = 'SELECT * FROM expenses WHERE 1=1';
+    let query = 'SELECT * FROM expenses WHERE is_deleted = 0';
     const params: any[] = [];
 
     if (filters?.shift_id) {
@@ -108,7 +108,7 @@ export class ExpenseRepository extends BaseRepository {
       LEFT JOIN users u1 ON e.submitted_by_user_id = u1.id
       LEFT JOIN users u2 ON e.approved_by_user_id = u2.id
       LEFT JOIN carts c ON e.cart_id = c.id
-      WHERE 1=1
+      WHERE e.is_deleted = 0
     `;
     const params: any[] = [];
 
@@ -213,5 +213,21 @@ export class ExpenseRepository extends BaseRepository {
   async delete(id: string): Promise<void> {
     const db = await getDatabase();
     await db.runAsync('DELETE FROM expenses WHERE id = ?', [id]);
+  }
+
+  async softDelete(id: string, deletedByUserId: string): Promise<void> {
+    const db = await getDatabase();
+    const now = Date.now();
+    
+    const oldExpense = await this.findById(id);
+    
+    await db.runAsync(
+      'UPDATE expenses SET is_deleted = 1, updated_at = ? WHERE id = ?',
+      [now, id]
+    );
+
+    await this.auditLog(deletedByUserId, 'expense', id, 'delete', oldExpense, null);
+    
+    console.log('[ExpenseRepo] Soft deleted expense:', id);
   }
 }

@@ -164,6 +164,14 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Reset PIN for user:', id);
   }
 
+  async verifyPinForUser(userId: string, pin: string): Promise<boolean> {
+    const user = await this.findById(userId);
+    if (!user || !user.pin) {
+      return false;
+    }
+    return await verifyPin(pin, user.pin);
+  }
+
   async updateRole(id: string, newRole: UserRole, updatedByUserId: string): Promise<void> {
     const oldUser = await this.findById(id);
     

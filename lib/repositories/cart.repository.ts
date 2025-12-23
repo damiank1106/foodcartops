@@ -21,9 +21,9 @@ export class CartRepository extends BaseRepository {
     };
 
     await db.runAsync(
-      `INSERT INTO carts (id, name, location, notes, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [cart.id, cart.name, cart.location || null, cart.notes || null, cart.is_active, cart.created_at, cart.updated_at]
+      `INSERT INTO carts (id, name, location, notes, created_by_user_id, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [cart.id, cart.name, cart.location || null, cart.notes || null, userId || null, cart.is_active, cart.created_at, cart.updated_at]
     );
 
     if (userId) {

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 export const MIGRATIONS = [
   {
@@ -741,6 +741,20 @@ export const MIGRATIONS = [
     `,
     down: `
       DROP TABLE IF EXISTS saved_records;
+    `,
+  },
+  {
+    version: 19,
+    up: `
+      ALTER TABLE carts ADD COLUMN created_by_user_id TEXT;
+
+      ALTER TABLE expenses ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX idx_expenses_is_deleted ON expenses(is_deleted);
+    `,
+    down: `
+      ALTER TABLE carts DROP COLUMN created_by_user_id;
+      DROP INDEX IF EXISTS idx_expenses_is_deleted;
+      ALTER TABLE expenses DROP COLUMN is_deleted;
     `,
   },
 ];

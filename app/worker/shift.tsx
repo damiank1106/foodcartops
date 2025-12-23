@@ -13,7 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, MapPin, LogOut, Coins, CreditCard, Wallet, TrendingUp, Activity } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { CartRepository, ShiftRepository, SaleRepository, ExpenseRepository } from '@/lib/repositories';
+import { CartRepository, ShiftRepository, SaleRepository, ExpenseRepository, UserRepository } from '@/lib/repositories';
 import { format } from 'date-fns';
 
 export default function WorkerShiftScreen() {
@@ -28,6 +28,7 @@ export default function WorkerShiftScreen() {
   const shiftRepo = new ShiftRepository();
   const saleRepo = new SaleRepository();
   const expenseRepo = new ExpenseRepository();
+  const userRepo = new UserRepository();
 
   const { data: carts, isLoading: cartsLoading } = useQuery({
     queryKey: ['carts'],
@@ -80,7 +81,17 @@ export default function WorkerShiftScreen() {
 
   const { data: cartInfo } = useQuery({
     queryKey: ['cart', selectedCartId],
-    queryFn: () => (selectedCartId ? cartRepo.findById(selectedCartId) : null),
+    queryFn: async () => {
+      if (!selectedCartId) return null;
+      const cart = await cartRepo.findById(selectedCartId);
+      if (!cart) return null;
+      let creatorName = '';
+      if ((cart as any).created_by_user_id) {
+        const creator = await userRepo.findById((cart as any).created_by_user_id);
+        if (creator) creatorName = creator.name;
+      }
+      return { ...cart, creatorName };
+    },
     enabled: !!selectedCartId,
   });
 
@@ -201,7 +212,9 @@ export default function WorkerShiftScreen() {
             )}
             {cartInfo?.notes && (
               <View style={[styles.notesCard, { backgroundColor: theme.background }]}>
-                <Text style={[styles.notesLabel, { color: theme.textSecondary }]}>Boss Notes:</Text>
+                <Text style={[styles.notesLabel, { color: theme.textSecondary }]}>
+                  {(cartInfo as any).creatorName ? `${(cartInfo as any).creatorName} Notes:` : 'Notes:'}
+                </Text>
                 <Text style={[styles.notesText, { color: theme.text }]}>{cartInfo.notes}</Text>
               </View>
             )}
@@ -348,7 +361,7 @@ export default function WorkerShiftScreen() {
                     {cart?.notes && (
                       <View style={[styles.notesPreview, { backgroundColor: theme.background }]}>
                         <Text style={[styles.notesPreviewText, { color: theme.textSecondary }]} numberOfLines={2}>
-                          Boss Notes: {cart.notes}
+                          Notes: {cart.notes}
                         </Text>
                       </View>
                     )}
@@ -386,7 +399,7 @@ export default function WorkerShiftScreen() {
               {cart.notes && (
                 <View style={[styles.notesPreview, { backgroundColor: theme.background }]}>
                   <Text style={[styles.notesPreviewText, { color: theme.textSecondary }]} numberOfLines={2}>
-                    Boss Notes: {cart.notes}
+                    Notes: {cart.notes}
                   </Text>
                 </View>
               )}
