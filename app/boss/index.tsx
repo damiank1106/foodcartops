@@ -1529,13 +1529,11 @@ export default function BossDashboard() {
                           styles.calendarDayText,
                           { color: isSelected ? '#fff' : theme.text },
                           isToday && !isSelected && { color: theme.primary, fontWeight: '700' },
+                          hasEntries && !isSelected && !isToday && { color: '#22c55e' },
                         ]}
                       >
                         {day}
                       </Text>
-                      {hasEntries && (
-                        <View style={[styles.entryDot, { backgroundColor: isSelected ? '#fff' : '#22c55e' }]} />
-                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -2220,11 +2218,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  entryDot: {
-    position: 'absolute',
-    bottom: 4,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-  },
+
 });

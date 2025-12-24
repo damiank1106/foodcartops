@@ -22,7 +22,7 @@ import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { Svg, Rect, Line, Text as SvgText } from 'react-native-svg';
+import { Svg, Circle, Path } from 'react-native-svg';
 
 type SubTab = 'numbers' | 'export' | 'charts';
 
@@ -353,103 +353,89 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     );
   }
 
-  const renderChart = () => {
-    if (!analytics) {
+  const renderDonutChart = (data: { label: string; value: number; color: string }[], total: number) => {
+    const size = 200;
+    const strokeWidth = 40;
+    const radius = (size - strokeWidth) / 2;
+    const cx = size / 2;
+    const cy = size / 2;
+
+    if (total === 0) {
       return (
-        <View style={styles.emptyChart}>
-          <ActivityIndicator size="small" color={theme.primary} />
+        <View style={[styles.chartContainer, { height: size }]}>
+          <Svg width={size} height={size}>
+            <Circle
+              cx={cx}
+              cy={cy}
+              r={radius}
+              stroke={theme.border}
+              strokeWidth={strokeWidth}
+              fill="none"
+            />
+          </Svg>
+          <View style={styles.chartCenterText}>
+            <Text style={[styles.chartCenterValue, { color: theme.text }]}>₱0.00</Text>
+          </View>
         </View>
       );
     }
 
-    const maxValue = Math.max(
-      1,
-      ...analytics.breakdown.map((b) => b.sales_cents + b.expenses_cents + b.other_expenses_cents)
-    );
+    let currentAngle = -90;
+    const segments = data.map((item) => {
+      const percentage = item.value / total;
+      const angle = percentage * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+      currentAngle = endAngle;
 
-    const chartWidth = 320;
-    const chartHeight = 200;
-    const padding = 40;
-    const barWidth = analytics.breakdown.length > 0 ? (chartWidth - padding * 2) / analytics.breakdown.length / 3 : 20;
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
 
-    const effectiveBreakdown = analytics.breakdown.length > 0 ? analytics.breakdown : [
-      {
-        label: analytics.date_range.label,
-        date: anchorDate,
-        sales_cents: analytics.totals.sales_cents,
-        expenses_cents: analytics.totals.expenses_cents,
-        other_expenses_cents: analytics.totals.other_expenses_cents,
-      },
-    ];
+      const x1 = cx + radius * Math.cos(startRad);
+      const y1 = cy + radius * Math.sin(startRad);
+      const x2 = cx + radius * Math.cos(endRad);
+      const y2 = cy + radius * Math.sin(endRad);
+
+      const largeArcFlag = angle > 180 ? 1 : 0;
+
+      const pathData = [
+        `M ${x1} ${y1}`,
+        `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+      ].join(' ');
+
+      return { pathData, color: item.color, label: item.label, value: item.value, percentage };
+    });
 
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <Svg width={Math.max(chartWidth, effectiveBreakdown.length * 80)} height={chartHeight + 40}>
-          <Line
-            x1={padding}
-            y1={chartHeight - padding}
-            x2={chartWidth - padding}
-            y2={chartHeight - padding}
-            stroke={theme.border}
-            strokeWidth={1}
-          />
-          {effectiveBreakdown.map((item, index) => {
-            const x = padding + index * ((chartWidth - padding * 2) / effectiveBreakdown.length);
-            const salesHeight = ((item.sales_cents / maxValue) * (chartHeight - padding * 2)) || 1;
-            const expensesHeight = ((item.expenses_cents / maxValue) * (chartHeight - padding * 2)) || 1;
-            const otherExpensesHeight = ((item.other_expenses_cents / maxValue) * (chartHeight - padding * 2)) || 1;
-
-            return (
-              <React.Fragment key={index}>
-                <Rect
-                  x={x}
-                  y={chartHeight - padding - salesHeight}
-                  width={barWidth}
-                  height={salesHeight}
-                  fill={theme.primary}
-                />
-                <Rect
-                  x={x + barWidth + 2}
-                  y={chartHeight - padding - expensesHeight}
-                  width={barWidth}
-                  height={expensesHeight}
-                  fill={theme.error}
-                />
-                <Rect
-                  x={x + barWidth * 2 + 4}
-                  y={chartHeight - padding - otherExpensesHeight}
-                  width={barWidth}
-                  height={otherExpensesHeight}
-                  fill={theme.warning}
-                />
-                <SvgText
-                  x={x + barWidth}
-                  y={chartHeight - padding + 20}
-                  fontSize={10}
-                  fill={theme.text}
-                  textAnchor="middle"
-                >
-                  {item.label}
-                </SvgText>
-              </React.Fragment>
-            );
-          })}
-        </Svg>
-        <View style={styles.chartLegend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.legendText, { color: theme.text }]}>Sales</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: theme.error }]} />
-            <Text style={[styles.legendText, { color: theme.text }]}>Expenses</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: theme.warning }]} />
-            <Text style={[styles.legendText, { color: theme.text }]}>Other Expenses</Text>
+      <View style={styles.chartContainer}>
+        <View style={{ position: 'relative' }}>
+          <Svg width={size} height={size}>
+            {segments.map((segment, index) => (
+              <Path
+                key={index}
+                d={segment.pathData}
+                stroke={segment.color}
+                strokeWidth={strokeWidth}
+                fill="none"
+                strokeLinecap="round"
+              />
+            ))}
+          </Svg>
+          <View style={styles.chartCenterText}>
+            <Text style={[styles.chartCenterValue, { color: theme.text }]}>₱{(total / 100).toFixed(2)}</Text>
           </View>
         </View>
-      </ScrollView>
+        <View style={styles.chartLegend}>
+          {data.map((item, index) => (
+            <View key={index} style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: item.color }]} />
+              <Text style={[styles.legendText, { color: theme.text }]}>
+                {item.label}: ₱{(item.value / 100).toFixed(2)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
     );
   };
 
@@ -690,11 +676,43 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
           </>
         )}
 
-        {selectedSubTab === 'charts' && (
-          <View style={[styles.card, { backgroundColor: theme.card }]}>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>Sales vs Expenses</Text>
-            {renderChart()}
-          </View>
+        {selectedSubTab === 'charts' && analytics && (
+          <>
+            <View style={[styles.card, { backgroundColor: theme.card }]}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Composition for Period</Text>
+              {renderDonutChart(
+                [
+                  { label: 'Sales', value: analytics.totals.sales_cents, color: theme.primary },
+                  { label: 'Expenses', value: analytics.totals.expenses_cents, color: theme.error },
+                  { label: 'Other Expenses', value: analytics.totals.other_expenses_cents, color: theme.warning },
+                ],
+                analytics.totals.sales_cents + analytics.totals.expenses_cents + analytics.totals.other_expenses_cents
+              )}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: theme.card }]}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Payment Method Revenue</Text>
+              {renderDonutChart(
+                analytics.revenue_by_payment.map((item) => ({
+                  label: item.method,
+                  value: item.amount_cents,
+                  color: item.method === 'CASH' ? '#10b981' : item.method === 'GCASH' ? '#3b82f6' : '#f59e0b',
+                })),
+                analytics.revenue_by_payment.reduce((sum, item) => sum + item.amount_cents, 0)
+              )}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: theme.card }]}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Net Sales Split (70/30)</Text>
+              {renderDonutChart(
+                [
+                  { label: 'Operation Manager (70%)', value: analytics.totals.manager_share_cents, color: theme.success },
+                  { label: 'Owner (30%)', value: analytics.totals.owner_share_cents, color: theme.primary },
+                ],
+                analytics.totals.manager_share_cents + analytics.totals.owner_share_cents
+              )}
+            </View>
+          </>
         )}
       </ScrollView>
 
@@ -948,29 +966,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 16,
   },
-  emptyChart: {
-    height: 200,
+  chartContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  chartCenterText: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  chartCenterValue: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+  },
   chartLegend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-    marginTop: 16,
+    marginTop: 20,
+    gap: 12,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   legendColor: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   legendText: {
-    fontSize: 12,
+    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
