@@ -221,7 +221,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     }
   };
 
-  const handleExportCSV = async (type: 'sales' | 'expenses' | 'settlements' | 'revenues' | 'other_expenses' | 'split_70_30') => {
+  const handleExportCSV = async (type: 'sales' | 'expenses' | 'settlements' | 'revenues' | 'other_expenses' | 'split_70_30' | 'export_all') => {
     if (!analytics) return;
 
     let csvContent = '';
@@ -261,6 +261,25 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         csvContent += '\n';
         filename = `split_70_30_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
         break;
+      case 'export_all':
+        csvContent = `Export All CSV\n`;
+        csvContent += `Period Start,${format(analytics.date_range.start, 'yyyy-MM-dd HH:mm:ss')}\n`;
+        csvContent += `Period End,${format(analytics.date_range.end, 'yyyy-MM-dd HH:mm:ss')}\n`;
+        csvContent += `Generated At,${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}\n`;
+        csvContent += `\n`;
+        csvContent += 'Section,Date,ID,Description,Payment Method,Amount,Extra Data\n';
+        csvContent += `SALES,${analytics.date_range.label},,Total Sales,,₱${(analytics.totals.sales_cents / 100).toFixed(2)},\n`;
+        csvContent += `EXPENSES,${analytics.date_range.label},,Total Expenses,,₱${(analytics.totals.expenses_cents / 100).toFixed(2)},\n`;
+        analytics.revenue_by_payment.forEach((r) => {
+          csvContent += `REVENUES,${analytics.date_range.label},,${r.method},${r.method},₱${(r.amount_cents / 100).toFixed(2)},\n`;
+        });
+        analytics.other_expenses.forEach((oe) => {
+          csvContent += `OTHER_EXPENSES,${oe.date},${oe.id},"${oe.name}",,₱${(oe.amount_cents / 100).toFixed(2)},"${oe.notes || ''}"\n`;
+        });
+        csvContent += `SPLIT_70_30,${analytics.date_range.label},,Operation Manager (70%),,₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},\n`;
+        csvContent += `SPLIT_70_30,${analytics.date_range.label},,Owner (30%),,₱${(analytics.totals.owner_share_cents / 100).toFixed(2)},\n`;
+        filename = `export_all_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
+        break;
     }
 
     try {
@@ -282,65 +301,29 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
           Alert.alert('Export Ready', 'CSV file created in cache directory');
         }
       }
-    } catch (error) {
-      Alert.alert('Error', `Failed to export: ${error}`);
-    }
-  };
 
-  const handleExportAll = async () => {
-    if (!analytics) return;
-
-    try {
-      const files: string[] = [];
-
-      const salesFile = new File(Paths.cache, `sales_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
-      salesFile.write(`Date,Total Sales\n${analytics.date_range.label},₱${(analytics.totals.sales_cents / 100).toFixed(2)}\n`);
-      files.push(salesFile.uri);
-
-      const expensesFile = new File(Paths.cache, `expenses_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
-      expensesFile.write(`Date,Total Expenses\n${analytics.date_range.label},₱${(analytics.totals.expenses_cents / 100).toFixed(2)}\n`);
-      files.push(expensesFile.uri);
-
-      let revenuesContent = 'Payment Method,Amount\n';
-      analytics.revenue_by_payment.forEach((r) => {
-        revenuesContent += `${r.method},₱${(r.amount_cents / 100).toFixed(2)}\n`;
-      });
-      const revenuesFile = new File(Paths.cache, `revenues_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
-      revenuesFile.write(revenuesContent);
-      files.push(revenuesFile.uri);
-
-      let otherExpensesContent = 'Date,Name,Amount,Notes\n';
-      analytics.other_expenses.forEach((oe) => {
-        otherExpensesContent += `${oe.date},"${oe.name}",₱${(oe.amount_cents / 100).toFixed(2)},"${oe.notes || ''}"\n`;
-      });
-      const otherExpensesFile = new File(Paths.cache, `other_expenses_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
-      otherExpensesFile.write(otherExpensesContent);
-      files.push(otherExpensesFile.uri);
-
-      let splitContent = 'Period,Net Sales,Operation Manager (70%),Owner (30%),Cash,GCash,Card\n';
-      splitContent += `${analytics.date_range.label},₱${(analytics.totals.net_sales_cents / 100).toFixed(2)},₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},₱${(analytics.totals.owner_share_cents / 100).toFixed(2)}`;
-      analytics.revenue_by_payment.forEach((r) => {
-        splitContent += `,₱${(r.amount_cents / 100).toFixed(2)}`;
-      });
-      splitContent += '\n';
-      const splitFile = new File(Paths.cache, `split_70_30_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
-      splitFile.write(splitContent);
-      files.push(splitFile.uri);
-
-      const canEmail = await MailComposer.isAvailableAsync();
-      if (canEmail) {
-        await MailComposer.composeAsync({
-          subject: `All Exports - ${analytics.date_range.label}`,
-          body: `Please find attached all export files for ${analytics.date_range.label}.`,
-          attachments: files,
+      if (type === 'export_all' && user?.id) {
+        const { AuditRepository } = await import('@/lib/repositories/audit.repository');
+        const auditRepo = new AuditRepository();
+        await auditRepo.log({
+          user_id: user.id,
+          entity_type: 'export',
+          entity_id: `calendar_export_all_${format(anchorDate, 'yyyy-MM-dd')}`,
+          action: 'calendar_export_all_csv',
+          new_data: {
+            period_type: periodType,
+            period_start: format(analytics.date_range.start, 'yyyy-MM-dd'),
+            period_end: format(analytics.date_range.end, 'yyyy-MM-dd'),
+            role: user.role,
+          },
         });
-      } else {
-        Alert.alert('Export Ready', 'CSV files created. Email composer not available.');
       }
     } catch (error) {
       Alert.alert('Error', `Failed to export: ${error}`);
     }
   };
+
+
 
   const handleExportPDF = async () => {
     if (!analytics) return;
@@ -711,31 +694,18 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
           <>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>Export CSV</Text>
-              {(['sales', 'expenses', 'revenues', 'other_expenses', 'split_70_30'] as const).map((type) => (
+              {(['sales', 'expenses', 'revenues', 'other_expenses', 'split_70_30', 'export_all'] as const).map((type) => (
                 <TouchableOpacity
                   key={type}
-                  style={[styles.exportButton, { backgroundColor: theme.primary + '15' }]}
+                  style={[styles.exportButton, { backgroundColor: type === 'export_all' ? theme.success + '15' : theme.primary + '15' }]}
                   onPress={() => handleExportCSV(type)}
                 >
-                  <FileText size={20} color={theme.primary} />
-                  <Text style={[styles.exportButtonText, { color: theme.primary }]}>
-                    Export {type === 'split_70_30' ? '30/70 Split' : type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')} CSV
+                  <FileText size={20} color={type === 'export_all' ? theme.success : theme.primary} />
+                  <Text style={[styles.exportButtonText, { color: type === 'export_all' ? theme.success : theme.primary }]}>
+                    {type === 'export_all' ? 'Export All CSV' : type === 'split_70_30' ? 'Export 30/70 Split CSV' : `Export ${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')} CSV`}
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
-
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Export All</Text>
-              <TouchableOpacity
-                style={[styles.exportButton, { backgroundColor: theme.success + '15' }]}
-                onPress={handleExportAll}
-              >
-                <FileText size={20} color={theme.success} />
-                <Text style={[styles.exportButtonText, { color: theme.success }]}>
-                  Export All CSV (Sales, Expenses, Revenues, Other Expenses, Split 70/30)
-                </Text>
-              </TouchableOpacity>
             </View>
 
             <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -764,18 +734,6 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                   { label: 'Other Expenses', value: analytics.totals.other_expenses_cents, color: theme.warning },
                 ],
                 analytics.totals.sales_cents + analytics.totals.expenses_cents + analytics.totals.other_expenses_cents
-              )}
-            </View>
-
-            <View style={[styles.card, { backgroundColor: theme.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Payment Method Revenue</Text>
-              {renderDonutChart(
-                analytics.revenue_by_payment.map((item) => ({
-                  label: item.method,
-                  value: item.amount_cents,
-                  color: item.method === 'CASH' ? '#10b981' : item.method === 'GCASH' ? '#3b82f6' : '#f59e0b',
-                })),
-                analytics.revenue_by_payment.reduce((sum, item) => sum + item.amount_cents, 0)
               )}
             </View>
 
