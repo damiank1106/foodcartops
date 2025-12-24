@@ -50,6 +50,9 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
   const [otherExpenseAmount, setOtherExpenseAmount] = useState('');
   const [otherExpenseNotes, setOtherExpenseNotes] = useState('');
   const [otherExpenseDate, setOtherExpenseDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [progressModalVisible, setProgressModalVisible] = useState(false);
+  const [progressSteps, setProgressSteps] = useState<{ label: string; state: 'pending' | 'done' | 'error' }[]>([]);
+  const [exportStatus, setExportStatus] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
 
   const analyticsService = new CalendarAnalyticsService();
   const otherExpenseRepo = new OtherExpenseRepository();
@@ -221,8 +224,23 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     }
   };
 
+  const updateProgressStep = (index: number, state: 'pending' | 'done' | 'error') => {
+    setProgressSteps((prev) => {
+      const updated = [...prev];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], state };
+      }
+      return updated;
+    });
+  };
+
   const handleExportCSV = async (type: 'sales' | 'expenses' | 'settlements' | 'revenues' | 'other_expenses' | 'split_70_30' | 'export_all') => {
     if (!analytics) return;
+
+    if (type === 'export_all') {
+      await handleExportAllCSV();
+      return;
+    }
 
     let csvContent = '';
     let filename = '';
@@ -261,55 +279,144 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         csvContent += '\n';
         filename = `split_70_30_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
         break;
-      case 'export_all':
-        csvContent = `Export All CSV\n`;
-        csvContent += `Period Start,${format(analytics.date_range.start, 'yyyy-MM-dd HH:mm:ss')}\n`;
-        csvContent += `Period End,${format(analytics.date_range.end, 'yyyy-MM-dd HH:mm:ss')}\n`;
-        csvContent += `Generated At,${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}\n`;
-        csvContent += `\n`;
-        csvContent += 'Section,Date,ID,Description,Payment Method,Amount,Extra Data\n';
-        csvContent += `SALES,${analytics.date_range.label},,Total Sales,,₱${(analytics.totals.sales_cents / 100).toFixed(2)},\n`;
-        csvContent += `EXPENSES,${analytics.date_range.label},,Total Expenses,,₱${(analytics.totals.expenses_cents / 100).toFixed(2)},\n`;
-        analytics.revenue_by_payment.forEach((r) => {
-          csvContent += `REVENUES,${analytics.date_range.label},,${r.method},${r.method},₱${(r.amount_cents / 100).toFixed(2)},\n`;
-        });
-        analytics.other_expenses.forEach((oe) => {
-          csvContent += `OTHER_EXPENSES,${oe.date},${oe.id},"${oe.name}",,₱${(oe.amount_cents / 100).toFixed(2)},"${oe.notes || ''}"\n`;
-        });
-        csvContent += `SPLIT_70_30,${analytics.date_range.label},,Operation Manager (70%),,₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},\n`;
-        csvContent += `SPLIT_70_30,${analytics.date_range.label},,Owner (30%),,₱${(analytics.totals.owner_share_cents / 100).toFixed(2)},\n`;
-        filename = `export_all_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
-        break;
     }
 
     try {
       const file = new File(Paths.cache, filename);
       file.write(csvContent);
-      const fileUri = file.uri;
 
       const canEmail = await MailComposer.isAvailableAsync();
       if (canEmail) {
         await MailComposer.composeAsync({
           subject: `${type.toUpperCase()} Export - ${analytics.date_range.label}`,
           body: `Please find attached the ${type} export.`,
-          attachments: [fileUri],
+          attachments: [file.uri],
         });
       } else {
         if (Platform.OS !== 'web') {
-          await Sharing.shareAsync(fileUri);
+          await Sharing.shareAsync(file.uri);
         } else {
           Alert.alert('Export Ready', 'CSV file created in cache directory');
         }
       }
+    } catch (error) {
+      Alert.alert('Error', `Failed to export: ${error}`);
+    }
+  };
 
-      if (type === 'export_all' && user?.id) {
-        const { AuditRepository } = await import('@/lib/repositories/audit.repository');
-        const auditRepo = new AuditRepository();
+  const handleExportAllCSV = async () => {
+    if (!analytics || !user?.id) return;
+
+    const steps = [
+      { label: 'Preparing date range…', state: 'pending' as const },
+      { label: 'Loading sales…', state: 'pending' as const },
+      { label: 'Loading expenses…', state: 'pending' as const },
+      { label: 'Loading other expenses…', state: 'pending' as const },
+      { label: 'Calculating 70/30 split…', state: 'pending' as const },
+      { label: 'Generating CSV…', state: 'pending' as const },
+      { label: 'Writing file…', state: 'pending' as const },
+      { label: 'Opening email…', state: 'pending' as const },
+    ];
+
+    setProgressSteps(steps);
+    setExportStatus('running');
+    setProgressModalVisible(true);
+
+    const { AuditRepository } = await import('@/lib/repositories/audit.repository');
+    const auditRepo = new AuditRepository();
+
+    await auditRepo.log({
+      user_id: user.id,
+      entity_type: 'export',
+      entity_id: `calendar_export_all_start_${format(anchorDate, 'yyyy-MM-dd')}`,
+      action: 'calendar_export_all_csv_start',
+      new_data: {
+        period_type: periodType,
+        period_start: format(analytics.date_range.start, 'yyyy-MM-dd'),
+        period_end: format(analytics.date_range.end, 'yyyy-MM-dd'),
+        role: user.role,
+      },
+    });
+
+    try {
+      updateProgressStep(0, 'done');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      updateProgressStep(1, 'done');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      updateProgressStep(2, 'done');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      updateProgressStep(3, 'done');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      updateProgressStep(4, 'done');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      updateProgressStep(5, 'done');
+
+      let csvContent = `Export All CSV\n`;
+      csvContent += `Period Start,${format(analytics.date_range.start, 'yyyy-MM-dd HH:mm:ss')}\n`;
+      csvContent += `Period End,${format(analytics.date_range.end, 'yyyy-MM-dd HH:mm:ss')}\n`;
+      csvContent += `Generated At,${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}\n`;
+      csvContent += `\n`;
+      csvContent += 'Section,Date,ID,Description,Payment Method,Amount,Extra Data\n';
+
+      if (analytics.totals.sales_cents > 0 || analytics.totals.expenses_cents > 0 || analytics.other_expenses.length > 0) {
+        csvContent += `SALES,${analytics.date_range.label},,Total Sales,,₱${(analytics.totals.sales_cents / 100).toFixed(2)},\n`;
+        csvContent += `EXPENSES,${analytics.date_range.label},,Total Expenses,,₱${(analytics.totals.expenses_cents / 100).toFixed(2)},\n`;
+        
+        analytics.revenue_by_payment.forEach((r) => {
+          csvContent += `REVENUES,${analytics.date_range.label},,${r.method},${r.method},₱${(r.amount_cents / 100).toFixed(2)},\n`;
+        });
+        
+        analytics.other_expenses.forEach((oe) => {
+          const escapedName = oe.name.replace(/"/g, '""');
+          const escapedNotes = (oe.notes || '').replace(/"/g, '""');
+          csvContent += `OTHER_EXPENSES,${oe.date},${oe.id},"${escapedName}",,₱${(oe.amount_cents / 100).toFixed(2)},"${escapedNotes}"\n`;
+        });
+        
+        csvContent += `SPLIT_70_30,${analytics.date_range.label},,Operation Manager (70%),,₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},\n`;
+        csvContent += `SPLIT_70_30,${analytics.date_range.label},,Owner (30%),,₱${(analytics.totals.owner_share_cents / 100).toFixed(2)},\n`;
+      } else {
+        csvContent += `NO_DATA,${analytics.date_range.label},,No entries found for this period,,,\n`;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      updateProgressStep(6, 'done');
+
+      const filename = `foodcartops_export_all_${format(analytics.date_range.start, 'yyyy-MM-dd')}_to_${format(analytics.date_range.end, 'yyyy-MM-dd')}.csv`;
+      const file = new File(Paths.cache, filename);
+      file.write(csvContent);
+
+      if (!file.exists || file.size === 0) {
+        throw new Error('File write failed or file is empty');
+      }
+
+      console.log(`[Export All CSV] File created: ${file.uri}, size: ${file.size} bytes`);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      updateProgressStep(7, 'done');
+
+      const canEmail = await MailComposer.isAvailableAsync();
+      if (!canEmail) {
+        throw new Error('MAIL_COMPOSER_UNAVAILABLE');
+      }
+
+      const emailResult = await MailComposer.composeAsync({
+        subject: `FoodCartOps Export All - ${analytics.date_range.label}`,
+        body: `Please find attached the complete export for the period ${analytics.date_range.label}.\n\nGenerated on ${format(new Date(), 'MMM d, yyyy h:mm a')}.`,
+        attachments: [file.uri],
+      });
+
+      if (emailResult.status === 'cancelled') {
+        setExportStatus('idle');
         await auditRepo.log({
           user_id: user.id,
           entity_type: 'export',
-          entity_id: `calendar_export_all_${format(anchorDate, 'yyyy-MM-dd')}`,
-          action: 'calendar_export_all_csv',
+          entity_id: `calendar_export_all_cancelled_${format(anchorDate, 'yyyy-MM-dd')}`,
+          action: 'calendar_export_all_csv_cancelled',
           new_data: {
             period_type: periodType,
             period_start: format(analytics.date_range.start, 'yyyy-MM-dd'),
@@ -317,9 +424,72 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
             role: user.role,
           },
         });
+        return;
       }
-    } catch (error) {
-      Alert.alert('Error', `Failed to export: ${error}`);
+
+      setExportStatus('success');
+      
+      await auditRepo.log({
+        user_id: user.id,
+        entity_type: 'export',
+        entity_id: `calendar_export_all_success_${format(anchorDate, 'yyyy-MM-dd')}`,
+        action: 'calendar_export_all_csv_success',
+        new_data: {
+          period_type: periodType,
+          period_start: format(analytics.date_range.start, 'yyyy-MM-dd'),
+          period_end: format(analytics.date_range.end, 'yyyy-MM-dd'),
+          role: user.role,
+          file_size: file.size,
+        },
+      });
+
+      setTimeout(() => {
+        Alert.alert(
+          'Export Complete',
+          'Export All CSV is ready and attached to your email.',
+          [{ text: 'OK', onPress: () => setProgressModalVisible(false) }]
+        );
+      }, 500);
+    } catch (error: any) {
+      console.error('[Export All CSV] Error:', error);
+
+      const errorIndex = progressSteps.findIndex((step) => step.state === 'pending');
+      if (errorIndex !== -1) {
+        updateProgressStep(errorIndex, 'error');
+      }
+
+      setExportStatus('failed');
+
+      let errorCode = 'UNKNOWN_ERROR';
+      let errorMessage = String(error?.message || error || 'Unknown error');
+
+      if (errorMessage.includes('MAIL_COMPOSER_UNAVAILABLE')) {
+        errorCode = 'MAIL_COMPOSER_UNAVAILABLE';
+      } else if (errorMessage.includes('File write failed')) {
+        errorCode = 'FILE_WRITE_ERROR';
+      }
+
+      await auditRepo.log({
+        user_id: user.id,
+        entity_type: 'export',
+        entity_id: `calendar_export_all_failed_${format(anchorDate, 'yyyy-MM-dd')}`,
+        action: 'calendar_export_all_csv_failed',
+        new_data: {
+          period_type: periodType,
+          period_start: format(analytics.date_range.start, 'yyyy-MM-dd'),
+          period_end: format(analytics.date_range.end, 'yyyy-MM-dd'),
+          role: user.role,
+          error_code: errorCode,
+        },
+      });
+
+      setTimeout(() => {
+        Alert.alert(
+          'Failed',
+          `Report to Developer.\n\nError: ${errorCode}`,
+          [{ text: 'OK', onPress: () => setProgressModalVisible(false) }]
+        );
+      }, 500);
     }
   };
 
@@ -826,6 +996,68 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={progressModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProgressModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.progressModalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Building report…</Text>
+              <TouchableOpacity onPress={() => setProgressModalVisible(false)}>
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.progressBody}>
+              {progressSteps.map((step, index) => (
+                <View key={index} style={styles.progressStep}>
+                  <View
+                    style={[
+                      styles.progressStepIndicator,
+                      {
+                        backgroundColor:
+                          step.state === 'done'
+                            ? theme.success
+                            : step.state === 'error'
+                            ? theme.error
+                            : theme.border,
+                      },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.progressStepLabel,
+                      {
+                        color:
+                          step.state === 'done'
+                            ? theme.text
+                            : step.state === 'error'
+                            ? theme.error
+                            : theme.textSecondary,
+                      },
+                    ]}
+                  >
+                    {step.label}
+                  </Text>
+                  {step.state === 'done' && (
+                    <Text style={[styles.progressStepStatus, { color: theme.success }]}>✓</Text>
+                  )}
+                  {step.state === 'error' && (
+                    <Text style={[styles.progressStepStatus, { color: theme.error }]}>✗</Text>
+                  )}
+                  {step.state === 'pending' && exportStatus === 'running' && (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1101,5 +1333,34 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  progressModalContent: {
+    width: '90%',
+    maxWidth: 400,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  progressBody: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  progressStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  progressStepIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  progressStepLabel: {
+    flex: 1,
+    fontSize: 14,
+  },
+  progressStepStatus: {
+    fontSize: 16,
+    fontWeight: '700' as const,
   },
 });
