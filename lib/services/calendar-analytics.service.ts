@@ -174,7 +174,8 @@ export class CalendarAnalyticsService {
 
     switch (periodType) {
       case 'day':
-        return [];
+        intervals = [dateRange.start];
+        break;
       case 'week':
         intervals = eachDayOfInterval({ start: dateRange.start, end: dateRange.end });
         break;
@@ -191,7 +192,11 @@ export class CalendarAnalyticsService {
       let rangeEnd: Date;
       let label: string;
 
-      if (periodType === 'week') {
+      if (periodType === 'day') {
+        rangeStart = startOfDay(date);
+        rangeEnd = endOfDay(date);
+        label = format(date, 'MMM d');
+      } else if (periodType === 'week') {
         rangeStart = startOfDay(date);
         rangeEnd = endOfDay(date);
         label = format(date, 'EEE d');
@@ -228,5 +233,45 @@ export class CalendarAnalyticsService {
         other_expenses_cents,
       };
     });
+  }
+
+  async getDatesWithEntries(year: number, month: number): Promise<Set<string>> {
+    const startDate = new Date(year, month, 1);
+    const endDate = endOfMonth(startDate);
+
+    const [sales, expenses, otherExpenses] = await Promise.all([
+      this.saleRepo.findAll({
+        start_date: startOfDay(startDate),
+        end_date: endOfDay(endDate),
+      }),
+      this.expenseRepo.findAll(),
+      this.otherExpenseRepo.listByRange(
+        format(startDate, 'yyyy-MM-dd'),
+        format(endDate, 'yyyy-MM-dd')
+      ),
+    ]);
+
+    const datesSet = new Set<string>();
+
+    for (const sale of sales) {
+      const dateStr = format(new Date(sale.created_at), 'yyyy-MM-dd');
+      datesSet.add(dateStr);
+    }
+
+    for (const expense of expenses) {
+      if (expense.status === 'APPROVED') {
+        const expenseDate = new Date(expense.created_at);
+        if (expenseDate >= startDate && expenseDate <= endDate) {
+          const dateStr = format(expenseDate, 'yyyy-MM-dd');
+          datesSet.add(dateStr);
+        }
+      }
+    }
+
+    for (const oe of otherExpenses) {
+      datesSet.add(oe.date);
+    }
+
+    return datesSet;
   }
 }

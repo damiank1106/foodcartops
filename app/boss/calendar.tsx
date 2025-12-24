@@ -354,28 +354,37 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
   }
 
   const renderChart = () => {
-    if (!analytics || analytics.breakdown.length === 0) {
+    if (!analytics) {
       return (
         <View style={styles.emptyChart}>
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            No breakdown data for this period
-          </Text>
+          <ActivityIndicator size="small" color={theme.primary} />
         </View>
       );
     }
 
     const maxValue = Math.max(
+      1,
       ...analytics.breakdown.map((b) => b.sales_cents + b.expenses_cents + b.other_expenses_cents)
     );
 
     const chartWidth = 320;
     const chartHeight = 200;
     const padding = 40;
-    const barWidth = (chartWidth - padding * 2) / analytics.breakdown.length / 3;
+    const barWidth = analytics.breakdown.length > 0 ? (chartWidth - padding * 2) / analytics.breakdown.length / 3 : 20;
+
+    const effectiveBreakdown = analytics.breakdown.length > 0 ? analytics.breakdown : [
+      {
+        label: analytics.date_range.label,
+        date: anchorDate,
+        sales_cents: analytics.totals.sales_cents,
+        expenses_cents: analytics.totals.expenses_cents,
+        other_expenses_cents: analytics.totals.other_expenses_cents,
+      },
+    ];
 
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <Svg width={Math.max(chartWidth, analytics.breakdown.length * 80)} height={chartHeight + 40}>
+        <Svg width={Math.max(chartWidth, effectiveBreakdown.length * 80)} height={chartHeight + 40}>
           <Line
             x1={padding}
             y1={chartHeight - padding}
@@ -384,8 +393,8 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
             stroke={theme.border}
             strokeWidth={1}
           />
-          {analytics.breakdown.map((item, index) => {
-            const x = padding + index * ((chartWidth - padding * 2) / analytics.breakdown.length);
+          {effectiveBreakdown.map((item, index) => {
+            const x = padding + index * ((chartWidth - padding * 2) / effectiveBreakdown.length);
             const salesHeight = ((item.sales_cents / maxValue) * (chartHeight - padding * 2)) || 1;
             const expensesHeight = ((item.expenses_cents / maxValue) * (chartHeight - padding * 2)) || 1;
             const otherExpensesHeight = ((item.other_expenses_cents / maxValue) * (chartHeight - padding * 2)) || 1;

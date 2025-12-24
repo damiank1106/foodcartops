@@ -6,6 +6,7 @@ import { useRouter, useNavigation } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SaleRepository, ShiftRepository, CartRepository, ExpenseRepository, AuditRepository } from '@/lib/repositories';
+import { CalendarAnalyticsService } from '@/lib/services/calendar-analytics.service';
 import DatabaseScreen from './database';
 import CalendarScreen from './calendar';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
@@ -37,6 +38,7 @@ export default function BossDashboard() {
   const [pickerDate, setPickerDate] = useState(new Date());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [datesWithEntries, setDatesWithEntries] = useState<Set<string>>(new Set());
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -483,6 +485,15 @@ export default function BossDashboard() {
   };
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  React.useEffect(() => {
+    if (showCalendarPicker) {
+      const service = new CalendarAnalyticsService();
+      service.getDatesWithEntries(selectedYear, selectedMonth).then((dates) => {
+        setDatesWithEntries(dates);
+      });
+    }
+  }, [showCalendarPicker, selectedYear, selectedMonth]);
 
   useLayoutEffect(() => {
     if (selectedTab === 'calendar') {
@@ -1501,6 +1512,8 @@ export default function BossDashboard() {
                   const day = i + 1;
                   const isToday = day === new Date().getDate() && selectedMonth === new Date().getMonth() && selectedYear === new Date().getFullYear();
                   const isSelected = day === pickerDate.getDate() && selectedMonth === pickerDate.getMonth() && selectedYear === pickerDate.getFullYear();
+                  const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const hasEntries = datesWithEntries.has(dateStr);
                   return (
                     <TouchableOpacity
                       key={day}
@@ -1520,6 +1533,9 @@ export default function BossDashboard() {
                       >
                         {day}
                       </Text>
+                      {hasEntries && (
+                        <View style={[styles.entryDot, { backgroundColor: isSelected ? '#fff' : '#22c55e' }]} />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -2203,5 +2219,12 @@ const styles = StyleSheet.create({
   calendarCloseText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  entryDot: {
+    position: 'absolute',
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
 });
