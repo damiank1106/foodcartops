@@ -120,6 +120,36 @@ export default function SettlementEditorScreen() {
       const cart = await cartRepo.findById(shiftData.shift.cart_id);
       const cartName = cart?.name || shiftData.shift.cart_id;
 
+      const expensesWithDetails = await Promise.all(
+        shiftData.expenses.map(async (expense) => {
+          const submittedBy = await (async () => {
+            try {
+              const userRepo = new (await import('@/lib/repositories')).UserRepository();
+              const u = await userRepo.findById(expense.submitted_by_user_id);
+              return u?.name || expense.submitted_by_user_id;
+            } catch {
+              return expense.submitted_by_user_id;
+            }
+          })();
+
+          return {
+            id: expense.id,
+            date: expense.created_at,
+            category: expense.category,
+            amount_cents: expense.amount_cents,
+            notes: expense.notes,
+            status: expense.status,
+            receipt_image_uri: expense.receipt_image_uri,
+            created_by: submittedBy,
+          };
+        })
+      );
+
+      const expenses_total_cents = shiftData.expenses.reduce(
+        (sum, e) => sum + e.amount_cents,
+        0
+      );
+
       const payload = {
         shift_id: shiftId,
         cart_id: shiftData.shift.cart_id,
@@ -141,6 +171,8 @@ export default function SettlementEditorScreen() {
         payments_by_method: shiftData.paymentsByMethod,
         notes: notes || null,
         computation: shiftData.computation,
+        expenses_total_cents,
+        expenses: expensesWithDetails,
       };
 
       await savedRecordRepo.saveSnapshot('settlement', shiftId!, payload, user.id, notes || undefined);
@@ -151,9 +183,8 @@ export default function SettlementEditorScreen() {
       queryClient.invalidateQueries({ queryKey: ['shift-settlement-data'] });
       queryClient.invalidateQueries({ queryKey: ['unsettled-shifts'] });
       queryClient.invalidateQueries({ queryKey: ['saved-records'] });
-      Alert.alert('Success', 'Settlement saved', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      queryClient.invalidateQueries({ queryKey: ['calendar-analytics'] });
+      Alert.alert('Success', 'Settlement saved');
     },
     onError: (error: any) => {
       Alert.alert('Error', error.message || 'Failed to save settlement');
@@ -233,6 +264,11 @@ export default function SettlementEditorScreen() {
   });
 
   const handleSaveSettlement = () => {
+    if (shiftData?.existingSettlement) {
+      Alert.alert('Already Saved', 'Settlement already saved for this shift');
+      return;
+    }
+
     Alert.alert('Save Settlement', 'Save this settlement?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Save', onPress: () => saveSettlementMutation.mutate() },

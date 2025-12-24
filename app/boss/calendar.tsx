@@ -221,7 +221,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     }
   };
 
-  const handleExportCSV = async (type: 'sales' | 'expenses' | 'settlements' | 'revenues' | 'other_expenses') => {
+  const handleExportCSV = async (type: 'sales' | 'expenses' | 'settlements' | 'revenues' | 'other_expenses' | 'split_70_30') => {
     if (!analytics) return;
 
     let csvContent = '';
@@ -252,6 +252,15 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         });
         filename = `other_expenses_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
         break;
+      case 'split_70_30':
+        csvContent = 'Period,Net Sales,Operation Manager (70%),Owner (30%),Cash,GCash,Card\n';
+        csvContent += `${analytics.date_range.label},₱${(analytics.totals.net_sales_cents / 100).toFixed(2)},₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},₱${(analytics.totals.owner_share_cents / 100).toFixed(2)}`;
+        analytics.revenue_by_payment.forEach((r) => {
+          csvContent += `,₱${(r.amount_cents / 100).toFixed(2)}`;
+        });
+        csvContent += '\n';
+        filename = `split_70_30_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
+        break;
     }
 
     try {
@@ -272,6 +281,61 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         } else {
           Alert.alert('Export Ready', 'CSV file created in cache directory');
         }
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to export: ${error}`);
+    }
+  };
+
+  const handleExportAll = async () => {
+    if (!analytics) return;
+
+    try {
+      const files: string[] = [];
+
+      const salesFile = new File(Paths.cache, `sales_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
+      salesFile.write(`Date,Total Sales\n${analytics.date_range.label},₱${(analytics.totals.sales_cents / 100).toFixed(2)}\n`);
+      files.push(salesFile.uri);
+
+      const expensesFile = new File(Paths.cache, `expenses_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
+      expensesFile.write(`Date,Total Expenses\n${analytics.date_range.label},₱${(analytics.totals.expenses_cents / 100).toFixed(2)}\n`);
+      files.push(expensesFile.uri);
+
+      let revenuesContent = 'Payment Method,Amount\n';
+      analytics.revenue_by_payment.forEach((r) => {
+        revenuesContent += `${r.method},₱${(r.amount_cents / 100).toFixed(2)}\n`;
+      });
+      const revenuesFile = new File(Paths.cache, `revenues_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
+      revenuesFile.write(revenuesContent);
+      files.push(revenuesFile.uri);
+
+      let otherExpensesContent = 'Date,Name,Amount,Notes\n';
+      analytics.other_expenses.forEach((oe) => {
+        otherExpensesContent += `${oe.date},"${oe.name}",₱${(oe.amount_cents / 100).toFixed(2)},"${oe.notes || ''}"\n`;
+      });
+      const otherExpensesFile = new File(Paths.cache, `other_expenses_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
+      otherExpensesFile.write(otherExpensesContent);
+      files.push(otherExpensesFile.uri);
+
+      let splitContent = 'Period,Net Sales,Operation Manager (70%),Owner (30%),Cash,GCash,Card\n';
+      splitContent += `${analytics.date_range.label},₱${(analytics.totals.net_sales_cents / 100).toFixed(2)},₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},₱${(analytics.totals.owner_share_cents / 100).toFixed(2)}`;
+      analytics.revenue_by_payment.forEach((r) => {
+        splitContent += `,₱${(r.amount_cents / 100).toFixed(2)}`;
+      });
+      splitContent += '\n';
+      const splitFile = new File(Paths.cache, `split_70_30_${format(anchorDate, 'yyyy-MM-dd')}.csv`);
+      splitFile.write(splitContent);
+      files.push(splitFile.uri);
+
+      const canEmail = await MailComposer.isAvailableAsync();
+      if (canEmail) {
+        await MailComposer.composeAsync({
+          subject: `All Exports - ${analytics.date_range.label}`,
+          body: `Please find attached all export files for ${analytics.date_range.label}.`,
+          attachments: files,
+        });
+      } else {
+        Alert.alert('Export Ready', 'CSV files created. Email composer not available.');
       }
     } catch (error) {
       Alert.alert('Error', `Failed to export: ${error}`);
@@ -647,7 +711,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
           <>
             <View style={[styles.card, { backgroundColor: theme.card }]}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>Export CSV</Text>
-              {(['sales', 'expenses', 'revenues', 'other_expenses'] as const).map((type) => (
+              {(['sales', 'expenses', 'revenues', 'other_expenses', 'split_70_30'] as const).map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[styles.exportButton, { backgroundColor: theme.primary + '15' }]}
@@ -655,10 +719,23 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                 >
                   <FileText size={20} color={theme.primary} />
                   <Text style={[styles.exportButtonText, { color: theme.primary }]}>
-                    Export {type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')} CSV
+                    Export {type === 'split_70_30' ? '30/70 Split' : type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')} CSV
                   </Text>
                 </TouchableOpacity>
               ))}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: theme.card }]}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>Export All</Text>
+              <TouchableOpacity
+                style={[styles.exportButton, { backgroundColor: theme.success + '15' }]}
+                onPress={handleExportAll}
+              >
+                <FileText size={20} color={theme.success} />
+                <Text style={[styles.exportButtonText, { color: theme.success }]}>
+                  Export All CSV (Sales, Expenses, Revenues, Other Expenses, Split 70/30)
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <View style={[styles.card, { backgroundColor: theme.card }]}>
