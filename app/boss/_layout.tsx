@@ -143,6 +143,12 @@ export default function BossLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

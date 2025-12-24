@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database, Calendar as CalendarIcon } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SaleRepository, ShiftRepository, CartRepository, ExpenseRepository, AuditRepository } from '@/lib/repositories';
@@ -17,6 +17,7 @@ export default function BossDashboard() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const router = useRouter();
+  const navigation = useNavigation();
   const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<'overview' | 'calendar' | 'settlements' | 'activity' | 'saved' | 'carts' | 'database'>('overview');
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -467,14 +468,6 @@ export default function BossDashboard() {
 
 
 
-  if (isLoading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
-  }
-
   const handleDateSelect = (day: number) => {
     const newDate = new Date(selectedYear, selectedMonth, day);
     setPickerDate(newDate);
@@ -491,18 +484,35 @@ export default function BossDashboard() {
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.headerRow, { borderBottomColor: theme.border }]}>
-        {selectedTab === 'calendar' && (
+  useLayoutEffect(() => {
+    if (selectedTab === 'calendar') {
+      navigation.setOptions({
+        headerRight: () => (
           <TouchableOpacity
-            style={[styles.calendarIconButton, { backgroundColor: theme.primary + '15' }]}
+            style={[styles.headerCalendarButton, { backgroundColor: theme.primary + '15' }]}
             onPress={() => setShowCalendarPicker(true)}
           >
             <CalendarIcon size={20} color={theme.primary} />
           </TouchableOpacity>
-        )}
+        ),
+      });
+    } else {
+      navigation.setOptions({
+        headerRight: undefined,
+      });
+    }
+  }, [selectedTab, navigation, theme]);
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
           <TouchableOpacity
@@ -1546,6 +1556,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerCalendarButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   tabsContainer: {
     height: 44,
