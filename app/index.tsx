@@ -30,11 +30,11 @@ export default function LoginScreen() {
     const redirectTimeout = setTimeout(() => {
       try {
         if (user.role === 'boss' || user.role === 'boss2' || user.role === 'developer') {
-          router.replace('/boss');
+          router.replace('/boss' as any);
         } else if (user.role === 'inventory_clerk') {
-          router.replace('/inventory');
+          router.replace('/inventory' as any);
         } else {
-          router.replace('/worker');
+          router.replace('/worker' as any);
         }
       } catch (error) {
         console.error('Navigation error:', error);
@@ -43,7 +43,7 @@ export default function LoginScreen() {
     }, 100);
     
     return () => clearTimeout(redirectTimeout);
-  }, [isLoading, user]);
+  }, [isLoading, user, router]);
 
   const addDigit = (digit: string) => {
     if (pin.length < 8) {

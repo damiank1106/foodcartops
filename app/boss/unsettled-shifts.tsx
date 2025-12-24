@@ -18,7 +18,7 @@ export default function UnsettledShiftsScreen() {
   const savedItemsRepo = new BossSavedItemsRepository();
 
   const handleBackToExceptions = () => {
-    router.replace('/boss');
+    router.replace('/boss' as any);
   };
 
   const { data: unsettledShifts, isLoading } = useQuery({

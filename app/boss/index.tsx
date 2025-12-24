@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database } from 'lucide-react-native';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database, Calendar as CalendarIcon } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -32,6 +32,10 @@ export default function BossDashboard() {
   const [settlementDetailModalVisible, setSettlementDetailModalVisible] = useState(false);
   const [selectedSettlement, setSelectedSettlement] = useState<any>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -471,8 +475,34 @@ export default function BossDashboard() {
     );
   }
 
+  const handleDateSelect = (day: number) => {
+    const newDate = new Date(selectedYear, selectedMonth, day);
+    setPickerDate(newDate);
+    setShowCalendarPicker(false);
+  };
+
+  const getDaysInMonth = (year: number, month: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (year: number, month: number) => {
+    return new Date(year, month, 1).getDay();
+  };
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.headerRow, { borderBottomColor: theme.border }]}>
+        {selectedTab === 'calendar' && (
+          <TouchableOpacity
+            style={[styles.calendarIconButton, { backgroundColor: theme.primary + '15' }]}
+            onPress={() => setShowCalendarPicker(true)}
+          >
+            <CalendarIcon size={20} color={theme.primary} />
+          </TouchableOpacity>
+        )}
+      </View>
       <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
           <TouchableOpacity
@@ -1010,7 +1040,7 @@ export default function BossDashboard() {
           )}
 
           {selectedTab === 'calendar' && (user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && (
-            <CalendarScreen />
+            <CalendarScreen selectedDate={pickerDate} />
           )}
 
           {selectedTab === 'database' && user?.role === 'developer' && (
@@ -1400,6 +1430,100 @@ export default function BossDashboard() {
           </ScrollView>
         </View>
       </Modal>
+
+      <Modal
+        visible={showCalendarPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCalendarPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.calendarPickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCalendarPicker(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={[styles.calendarPickerContent, { backgroundColor: theme.card }]}>
+              <View style={styles.calendarPickerHeader}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedMonth === 0) {
+                      setSelectedMonth(11);
+                      setSelectedYear(selectedYear - 1);
+                    } else {
+                      setSelectedMonth(selectedMonth - 1);
+                    }
+                  }}
+                  style={styles.calendarNavButton}
+                >
+                  <Text style={[styles.calendarNavText, { color: theme.primary }]}>‹</Text>
+                </TouchableOpacity>
+                <Text style={[styles.calendarHeaderText, { color: theme.text }]}>
+                  {monthNames[selectedMonth]} {selectedYear}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (selectedMonth === 11) {
+                      setSelectedMonth(0);
+                      setSelectedYear(selectedYear + 1);
+                    } else {
+                      setSelectedMonth(selectedMonth + 1);
+                    }
+                  }}
+                  style={styles.calendarNavButton}
+                >
+                  <Text style={[styles.calendarNavText, { color: theme.primary }]}>›</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.calendarGrid}>
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+                  <View key={i} style={styles.calendarDayHeader}>
+                    <Text style={[styles.calendarDayHeaderText, { color: theme.textSecondary }]}>{day}</Text>
+                  </View>
+                ))}
+                {Array.from({ length: getFirstDayOfMonth(selectedYear, selectedMonth) }).map((_, i) => (
+                  <View key={`empty-${i}`} style={styles.calendarDay} />
+                ))}
+                {Array.from({ length: getDaysInMonth(selectedYear, selectedMonth) }).map((_, i) => {
+                  const day = i + 1;
+                  const isToday = day === new Date().getDate() && selectedMonth === new Date().getMonth() && selectedYear === new Date().getFullYear();
+                  const isSelected = day === pickerDate.getDate() && selectedMonth === pickerDate.getMonth() && selectedYear === pickerDate.getFullYear();
+                  return (
+                    <TouchableOpacity
+                      key={day}
+                      style={[
+                        styles.calendarDay,
+                        isToday && { backgroundColor: theme.primary + '20' },
+                        isSelected && { backgroundColor: theme.primary },
+                      ]}
+                      onPress={() => handleDateSelect(day)}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarDayText,
+                          { color: isSelected ? '#fff' : theme.text },
+                          isToday && !isSelected && { color: theme.primary, fontWeight: '700' },
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <TouchableOpacity
+                style={[styles.calendarCloseButton, { backgroundColor: theme.background }]}
+                onPress={() => setShowCalendarPicker(false)}
+              >
+                <Text style={[styles.calendarCloseText, { color: theme.text }]}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1407,6 +1531,21 @@ export default function BossDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  calendarIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabsContainer: {
     height: 44,
@@ -1979,5 +2118,72 @@ const styles = StyleSheet.create({
   settlementNotesText: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  calendarPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  calendarPickerContent: {
+    width: 320,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  calendarPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  calendarNavButton: {
+    padding: 8,
+  },
+  calendarNavText: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  calendarHeaderText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayHeader: {
+    width: '14.28%',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  calendarDayHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  calendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  calendarDayText: {
+    fontSize: 14,
+  },
+  calendarCloseButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  calendarCloseText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

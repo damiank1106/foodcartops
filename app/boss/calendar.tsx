@@ -26,13 +26,23 @@ import { Svg, Rect, Line, Text as SvgText } from 'react-native-svg';
 
 type SubTab = 'numbers' | 'export' | 'charts';
 
-export default function CalendarScreen() {
+interface CalendarScreenProps {
+  selectedDate?: Date;
+}
+
+export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [periodType, setPeriodType] = useState<PeriodType>('day');
-  const [anchorDate, setAnchorDate] = useState<Date>(new Date());
+  const [anchorDate, setAnchorDate] = useState<Date>(selectedDate || new Date());
+
+  React.useEffect(() => {
+    if (selectedDate) {
+      setAnchorDate(selectedDate);
+    }
+  }, [selectedDate]);
   const [selectedSubTab, setSelectedSubTab] = useState<SubTab>('numbers');
   const [otherExpenseModalVisible, setOtherExpenseModalVisible] = useState(false);
   const [editingOtherExpense, setEditingOtherExpense] = useState<any>(null);

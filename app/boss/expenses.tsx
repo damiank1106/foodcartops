@@ -481,17 +481,17 @@ const styles = StyleSheet.create({
   },
   tabsContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
+    paddingVertical: 10,
+    gap: 6,
   },
   tabButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
   tabButtonText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600' as const,
   },
   filterRow: {

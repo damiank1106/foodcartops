@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle, Eye, EyeOff } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
@@ -10,12 +10,13 @@ import { seedDatabase } from '@/lib/utils/seed';
 
 export default function SettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
-  const { user, logout, changePin } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const [showPinModal, setShowPinModal] = useState(false);
-  const [oldPin, setOldPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [showNewPin, setShowNewPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [isChanging, setIsChanging] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [newName, setNewName] = useState('');
@@ -46,7 +47,7 @@ export default function SettingsScreen() {
   };
 
   const handleChangePin = async () => {
-    if (!oldPin || !newPin || !confirmPin) {
+    if (!newPin || !confirmPin) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -68,17 +69,19 @@ export default function SettingsScreen() {
 
     setIsChanging(true);
     try {
-      const success = await changePin(oldPin, newPin);
-      if (success) {
+      const userRepo = new UserRepository();
+      if (user?.id) {
+        await userRepo.resetPin(user.id, newPin, user.id);
+        
         Alert.alert('Success', 'PIN changed successfully');
         setShowPinModal(false);
-        setOldPin('');
         setNewPin('');
         setConfirmPin('');
-      } else {
-        Alert.alert('Error', 'Current PIN is incorrect');
+        setShowNewPin(false);
+        setShowConfirmPin(false);
       }
-    } catch {
+    } catch (error) {
+      console.error('[Settings] Failed to change PIN:', error);
       Alert.alert('Error', 'Failed to change PIN');
     } finally {
       setIsChanging(false);
@@ -357,41 +360,45 @@ export default function SettingsScreen() {
             </View>
 
             <View style={styles.modalBody}>
-              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Current PIN</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={oldPin}
-                onChangeText={setOldPin}
-                placeholder="Enter current PIN"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="number-pad"
-                maxLength={8}
-                secureTextEntry
-              />
-
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New PIN (4-8 digits)</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={newPin}
-                onChangeText={setNewPin}
-                placeholder="Enter new PIN (4-8 digits)"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="number-pad"
-                maxLength={8}
-                secureTextEntry
-              />
+              <View style={[styles.inputWithIcon, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                <TextInput
+                  style={[styles.inputField, { color: theme.text }]}
+                  value={newPin}
+                  onChangeText={setNewPin}
+                  placeholder="Enter new PIN (4-8 digits)"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="number-pad"
+                  maxLength={8}
+                  secureTextEntry={!showNewPin}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowNewPin(!showNewPin)}
+                  style={styles.eyeIcon}
+                >
+                  {showNewPin ? <Eye size={20} color={theme.textSecondary} /> : <EyeOff size={20} color={theme.textSecondary} />}
+                </TouchableOpacity>
+              </View>
 
               <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>Confirm New PIN</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={confirmPin}
-                onChangeText={setConfirmPin}
-                placeholder="Re-enter new PIN"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="number-pad"
-                maxLength={8}
-                secureTextEntry
-              />
+              <View style={[styles.inputWithIcon, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                <TextInput
+                  style={[styles.inputField, { color: theme.text }]}
+                  value={confirmPin}
+                  onChangeText={setConfirmPin}
+                  placeholder="Re-enter new PIN"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="number-pad"
+                  maxLength={8}
+                  secureTextEntry={!showConfirmPin}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPin(!showConfirmPin)}
+                  style={styles.eyeIcon}
+                >
+                  {showConfirmPin ? <Eye size={20} color={theme.textSecondary} /> : <EyeOff size={20} color={theme.textSecondary} />}
+                </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: theme.primary }]}
@@ -650,6 +657,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     fontSize: 16,
+  },
+  inputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  inputField: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 4,
   },
   modalButton: {
     marginTop: 24,
