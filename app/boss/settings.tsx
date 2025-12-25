@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle, Eye, EyeOff } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle, Eye, EyeOff, BookOpen, Shield } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
@@ -236,6 +236,27 @@ export default function SettingsScreen() {
     setShowPinConfirmModal(true);
   };
 
+  const handlePrivacyPolicy = async () => {
+    try {
+      const url = 'https://damiank1106.github.io/foodcartops/';
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+        await auditRepo.log({
+          user_id: user?.id,
+          entity_type: 'settings',
+          entity_id: 'privacy_policy',
+          action: 'open_privacy_policy',
+        });
+      } else {
+        Alert.alert('Error', 'Unable to open Privacy Policy. Please try again.');
+      }
+    } catch (error) {
+      console.error('[Settings] Failed to open Privacy Policy:', error);
+      Alert.alert('Error', 'Unable to open Privacy Policy. Please try again.');
+    }
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
@@ -323,6 +344,30 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Help & Legal</Text>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => router.push('/boss/how-to-use' as any)}
+          >
+            <View style={styles.listItemLeft}>
+              <BookOpen size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>How to Use App</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={handlePrivacyPolicy}
+          >
+            <View style={styles.listItemLeft}>
+              <Shield size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Privacy Policy</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
 
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>About</Text>

@@ -149,6 +149,13 @@ export default function BossLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="how-to-use"
+        options={{
+          href: null,
+          title: 'How to Use App',
+        }}
+      />
     </Tabs>
   );
 }
