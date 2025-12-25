@@ -77,51 +77,58 @@ export default function InventoryProfileScreen() {
     try {
       setIsLoading(true);
       const asset = result.assets[0];
-      
-      const baseDir = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory;
-      if (!baseDir) {
-        console.error('[Profile] Storage not available');
-        Alert.alert('Error', 'Storage not available. Please try again.');
-        return;
-      }
-      
-      console.log('[Profile] Base directory:', baseDir);
-      
-      const profilePicsDir = `${baseDir}profile_pics/`;
-      const dirInfo = await FileSystem.getInfoAsync(profilePicsDir);
-      if (!dirInfo.exists) {
-        console.log('[Profile] Creating profile_pics directory');
-        await FileSystem.makeDirectoryAsync(profilePicsDir, { intermediates: true });
-      }
+      let finalUri: string;
 
-      const filename = `${user.id}.jpg`;
-      const destination = `${profilePicsDir}${filename}`;
-      console.log('[Profile] Destination path:', destination);
+      if (Platform.OS === 'web') {
+        console.log('[Profile] Web platform: using picked URI directly');
+        finalUri = asset.uri;
+      } else {
+        const baseDir = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory;
+        if (!baseDir) {
+          console.error('[Profile] Storage not available');
+          Alert.alert('Error', 'Storage not available. Please try again.');
+          return;
+        }
+        
+        console.log('[Profile] Base directory:', baseDir);
+        
+        const profilePicsDir = `${baseDir}profile_pics/`;
+        const dirInfo = await FileSystem.getInfoAsync(profilePicsDir);
+        if (!dirInfo.exists) {
+          console.log('[Profile] Creating profile_pics directory');
+          await FileSystem.makeDirectoryAsync(profilePicsDir, { intermediates: true });
+        }
 
-      try {
-        await FileSystem.copyAsync({
-          from: asset.uri,
-          to: destination,
-        });
-        console.log('[Profile] File copied successfully');
-      } catch (copyError: any) {
-        console.warn('[Profile] Copy failed, trying move:', copyError.message);
-        await FileSystem.moveAsync({
-          from: asset.uri,
-          to: destination,
-        });
-        console.log('[Profile] File moved successfully');
-      }
+        const filename = `${user.id}.jpg`;
+        const destination = `${profilePicsDir}${filename}`;
+        console.log('[Profile] Destination path:', destination);
 
-      const fileInfo = await FileSystem.getInfoAsync(destination);
-      if (!fileInfo.exists) {
-        throw new Error('File was not saved properly');
+        try {
+          await FileSystem.copyAsync({
+            from: asset.uri,
+            to: destination,
+          });
+          console.log('[Profile] File copied successfully');
+        } catch (copyError: any) {
+          console.warn('[Profile] Copy failed, trying move:', copyError.message);
+          await FileSystem.moveAsync({
+            from: asset.uri,
+            to: destination,
+          });
+          console.log('[Profile] File moved successfully');
+        }
+
+        const fileInfo = await FileSystem.getInfoAsync(destination);
+        if (!fileInfo.exists) {
+          throw new Error('File was not saved properly');
+        }
+        console.log('[Profile] File verified, size:', (fileInfo as any).size);
+        finalUri = destination;
       }
-      console.log('[Profile] File verified, size:', (fileInfo as any).size);
 
       const userRepo = new UserRepository();
-      await userRepo.updateProfileImage(user.id, destination, user.id);
-      setProfileImageUri(destination);
+      await userRepo.updateProfileImage(user.id, finalUri, user.id);
+      setProfileImageUri(finalUri);
       Alert.alert('Success', 'Profile picture updated');
     } catch (error: any) {
       console.error('[Profile] Image save error:', error);
@@ -178,10 +185,14 @@ export default function InventoryProfileScreen() {
             try {
               setIsLoading(true);
               
-              if (profileImageUri) {
-                const fileInfo = await FileSystem.getInfoAsync(profileImageUri);
-                if (fileInfo.exists) {
-                  await FileSystem.deleteAsync(profileImageUri);
+              if (profileImageUri && Platform.OS !== 'web') {
+                try {
+                  const fileInfo = await FileSystem.getInfoAsync(profileImageUri);
+                  if (fileInfo.exists) {
+                    await FileSystem.deleteAsync(profileImageUri);
+                  }
+                } catch (err) {
+                  console.warn('[Profile] Could not delete file:', err);
                 }
               }
 
