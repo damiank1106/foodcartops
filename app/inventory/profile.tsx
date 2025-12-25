@@ -15,6 +15,7 @@ import { useAuth } from '@/lib/contexts/auth.context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { UserRepository } from '@/lib/repositories/user.repository';
 
 export default function InventoryProfileScreen() {
@@ -83,7 +84,11 @@ export default function InventoryProfileScreen() {
         console.log('[Profile] Web platform: using picked URI directly');
         finalUri = asset.uri;
       } else {
-        const baseDir = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory;
+        const FS = FileSystem as typeof FileSystem & {
+          documentDirectory: string | null;
+          cacheDirectory: string | null;
+        };
+        const baseDir = FS.documentDirectory ?? FS.cacheDirectory;
         if (!baseDir) {
           console.error('[Profile] Storage not available');
           Alert.alert('Error', 'Storage not available. Please try again.');
@@ -92,38 +97,37 @@ export default function InventoryProfileScreen() {
         
         console.log('[Profile] Base directory:', baseDir);
         
-        const profilePicsDir = `${baseDir}profile_pics/`;
-        const dirInfo = await FileSystem.getInfoAsync(profilePicsDir);
-        if (!dirInfo.exists) {
-          console.log('[Profile] Creating profile_pics directory');
-          await FileSystem.makeDirectoryAsync(profilePicsDir, { intermediates: true });
-        }
+        const dir = `${baseDir}profile_pics/`;
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        console.log('[Profile] Directory ensured');
 
-        const filename = `${user.id}.jpg`;
-        const destination = `${profilePicsDir}${filename}`;
-        console.log('[Profile] Destination path:', destination);
+        console.log('[Profile] Normalizing image with ImageManipulator...');
+        const normalized = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [],
+          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        console.log('[Profile] Image normalized:', normalized.uri);
+
+        const destUri = `${dir}${user.id}.jpg`;
+        console.log('[Profile] Destination path:', destUri);
 
         try {
-          await FileSystem.copyAsync({
-            from: asset.uri,
-            to: destination,
-          });
-          console.log('[Profile] File copied successfully');
-        } catch (copyError: any) {
-          console.warn('[Profile] Copy failed, trying move:', copyError.message);
-          await FileSystem.moveAsync({
-            from: asset.uri,
-            to: destination,
-          });
-          console.log('[Profile] File moved successfully');
+          await FileSystem.deleteAsync(destUri, { idempotent: true });
+          console.log('[Profile] Deleted old file if existed');
+        } catch {
+          console.log('[Profile] No old file to delete (expected)');
         }
 
-        const fileInfo = await FileSystem.getInfoAsync(destination);
+        await FileSystem.copyAsync({ from: normalized.uri, to: destUri });
+        console.log('[Profile] File copied successfully');
+
+        const fileInfo = await FileSystem.getInfoAsync(destUri);
         if (!fileInfo.exists) {
           throw new Error('File was not saved properly');
         }
         console.log('[Profile] File verified, size:', (fileInfo as any).size);
-        finalUri = destination;
+        finalUri = destUri;
       }
 
       const userRepo = new UserRepository();
