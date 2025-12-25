@@ -17,8 +17,6 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { UserRepository } from '@/lib/repositories/user.repository';
 
-const DOCUMENT_DIRECTORY = (FileSystem as any).documentDirectory as string | null;
-
 export default function InventoryProfileScreen() {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
@@ -80,24 +78,46 @@ export default function InventoryProfileScreen() {
       setIsLoading(true);
       const asset = result.assets[0];
       
-      const docDir = DOCUMENT_DIRECTORY;
-      if (!docDir) {
-        throw new Error('Document directory not available');
+      const baseDir = (FileSystem as any).documentDirectory ?? (FileSystem as any).cacheDirectory;
+      if (!baseDir) {
+        console.error('[Profile] Storage not available');
+        Alert.alert('Error', 'Storage not available. Please try again.');
+        return;
       }
       
-      const profilePicsDir = `${docDir}profile_pics/`;
+      console.log('[Profile] Base directory:', baseDir);
+      
+      const profilePicsDir = `${baseDir}profile_pics/`;
       const dirInfo = await FileSystem.getInfoAsync(profilePicsDir);
       if (!dirInfo.exists) {
+        console.log('[Profile] Creating profile_pics directory');
         await FileSystem.makeDirectoryAsync(profilePicsDir, { intermediates: true });
       }
 
       const filename = `${user.id}.jpg`;
       const destination = `${profilePicsDir}${filename}`;
+      console.log('[Profile] Destination path:', destination);
 
-      await FileSystem.copyAsync({
-        from: asset.uri,
-        to: destination,
-      });
+      try {
+        await FileSystem.copyAsync({
+          from: asset.uri,
+          to: destination,
+        });
+        console.log('[Profile] File copied successfully');
+      } catch (copyError: any) {
+        console.warn('[Profile] Copy failed, trying move:', copyError.message);
+        await FileSystem.moveAsync({
+          from: asset.uri,
+          to: destination,
+        });
+        console.log('[Profile] File moved successfully');
+      }
+
+      const fileInfo = await FileSystem.getInfoAsync(destination);
+      if (!fileInfo.exists) {
+        throw new Error('File was not saved properly');
+      }
+      console.log('[Profile] File verified, size:', (fileInfo as any).size);
 
       const userRepo = new UserRepository();
       await userRepo.updateProfileImage(user.id, destination, user.id);
@@ -105,7 +125,7 @@ export default function InventoryProfileScreen() {
       Alert.alert('Success', 'Profile picture updated');
     } catch (error: any) {
       console.error('[Profile] Image save error:', error);
-      Alert.alert('Error', error.message || 'Failed to save profile picture');
+      Alert.alert('Error', error.message || 'Failed to save profile picture. Report to Developer.');
     } finally {
       setIsLoading(false);
     }
