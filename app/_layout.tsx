@@ -3,10 +3,12 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, AppState } from 'react-native';
+import * as Network from 'expo-network';
 import { AuthProvider } from '@/lib/contexts/auth.context';
 import { ThemeProvider } from '@/lib/contexts/theme.context';
 import { seedDatabase } from '@/lib/utils/seed';
+import { syncService } from '@/lib/services/sync.service';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,12 +37,51 @@ export default function RootLayout() {
       await seedDatabase();
       setIsReady(true);
       await SplashScreen.hideAsync();
+      
+      syncService.syncNow().catch(err => {
+        console.log('[App] Initial sync failed:', err);
+      });
     } catch (error) {
       console.error('[App] Init failed:', error);
       setIsReady(true);
       await SplashScreen.hideAsync();
     }
   };
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('[App] App became active, triggering sync');
+        syncService.syncNow().catch(err => {
+          console.log('[App] Resume sync failed:', err);
+        });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const checkNetworkAndSync = async () => {
+      try {
+        const networkState = await Network.getNetworkStateAsync();
+        if (networkState.isConnected && networkState.isInternetReachable) {
+          console.log('[App] Network became reachable, triggering sync');
+          await syncService.syncNow();
+        }
+      } catch (error) {
+        console.log('[App] Network check failed:', error);
+      }
+    };
+
+    const intervalId = setInterval(checkNetworkAndSync, 30000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
 
   if (!isReady) {
     return (

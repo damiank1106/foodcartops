@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle, Eye, EyeOff, BookOpen, Shield } from 'lucide-react-native';
+import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle, Eye, EyeOff, BookOpen, Shield, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
 import { resetDatabase } from '@/lib/database/init';
 import { seedDatabase } from '@/lib/utils/seed';
+import { syncService } from '@/lib/services/sync.service';
+import { isSyncEnabled } from '@/lib/supabase/client';
 
 export default function SettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
@@ -25,8 +27,46 @@ export default function SettingsScreen() {
   const [showSecondConfirmModal, setShowSecondConfirmModal] = useState(false);
   const [pinConfirmValue, setPinConfirmValue] = useState('');
   const [pendingDestructiveAction, setPendingDestructiveAction] = useState<'reset' | 'wipe' | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{
+    lastSync: string | null;
+    pendingCount: number;
+    lastError: string | null;
+    isSyncing: boolean;
+  } | null>(null);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
 
   const auditRepo = new AuditRepository();
+
+  useEffect(() => {
+    if (user?.role === 'developer') {
+      loadSyncStatus();
+      const interval = setInterval(loadSyncStatus, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  const loadSyncStatus = async () => {
+    try {
+      const status = await syncService.getSyncStatus();
+      setSyncStatus(status);
+    } catch (error) {
+      console.error('[Settings] Failed to load sync status:', error);
+    }
+  };
+
+  const handleManualSync = async () => {
+    setIsManualSyncing(true);
+    try {
+      await syncService.syncNow();
+      await loadSyncStatus();
+      Alert.alert('Success', 'Sync completed successfully');
+    } catch (error) {
+      console.error('[Settings] Manual sync failed:', error);
+      Alert.alert('Error', 'Sync failed. Check console for details.');
+    } finally {
+      setIsManualSyncing(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -318,6 +358,56 @@ export default function SettingsScreen() {
         {user?.role === 'developer' && (
           <View style={[styles.section, { backgroundColor: theme.card }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Developer Actions</Text>
+            {isSyncEnabled() && (
+              <>
+                <View style={styles.listItem}>
+                  <View style={styles.listItemLeft}>
+                    <RefreshCw size={20} color={theme.text} />
+                    <Text style={[styles.label, { color: theme.text }]}>Sync Status</Text>
+                  </View>
+                  <Text style={[styles.value, { color: theme.textSecondary }]}>
+                    {syncStatus?.isSyncing ? 'Syncing...' : syncStatus?.pendingCount ? `${syncStatus.pendingCount} pending` : 'Up to date'}
+                  </Text>
+                </View>
+                {syncStatus?.lastSync && (
+                  <View style={styles.listItem}>
+                    <View style={styles.listItemLeft}>
+                      <Info size={20} color={theme.text} />
+                      <Text style={[styles.label, { color: theme.text }]}>Last Sync</Text>
+                    </View>
+                    <Text style={[styles.value, { color: theme.textSecondary, fontSize: 12 }]}>
+                      {new Date(syncStatus.lastSync).toLocaleString()}
+                    </Text>
+                  </View>
+                )}
+                {syncStatus?.lastError && (
+                  <View style={styles.listItem}>
+                    <View style={styles.listItemLeft}>
+                      <AlertTriangle size={20} color={theme.error} />
+                      <Text style={[styles.label, { color: theme.error }]}>Last Error</Text>
+                    </View>
+                    <Text style={[styles.value, { color: theme.error, fontSize: 12 }]} numberOfLines={1}>
+                      {syncStatus.lastError}
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity 
+                  style={styles.listItem} 
+                  onPress={handleManualSync}
+                  disabled={isManualSyncing}
+                >
+                  <View style={styles.listItemLeft}>
+                    <RefreshCw size={20} color={theme.primary} />
+                    <Text style={[styles.label, { color: theme.primary }]}>Manual Sync</Text>
+                  </View>
+                  {isManualSyncing ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : (
+                    <ChevronRight size={20} color={theme.textSecondary} />
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
             <TouchableOpacity style={styles.listItem} onPress={handleWipeWorkersAndShifts}>
               <View style={styles.listItemLeft}>
                 <Trash2 size={20} color={theme.warning || '#F59E0B'} />

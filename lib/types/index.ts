@@ -63,6 +63,11 @@ export interface ProductCategory {
   is_active: number;
   created_at: number;
   updated_at: number;
+  business_id?: string;
+  device_id?: string;
+  deleted_at?: string;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface Product {
@@ -79,6 +84,11 @@ export interface Product {
   is_active: number;
   created_at: number;
   updated_at: number;
+  business_id?: string;
+  device_id?: string;
+  deleted_at?: string;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface Sale {

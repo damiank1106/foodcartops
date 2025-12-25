@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 22;
+export const SCHEMA_VERSION = 23;
 
 export const MIGRATIONS = [
   {
@@ -861,6 +861,65 @@ export const MIGRATIONS = [
     down: `
       DROP TABLE IF EXISTS user_preferences;
       ALTER TABLE users DROP COLUMN profile_image_uri;
+    `,
+  },
+  {
+    version: 23,
+    up: `
+      ALTER TABLE product_categories ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE product_categories ADD COLUMN device_id TEXT;
+      ALTER TABLE product_categories ADD COLUMN deleted_at TEXT;
+      ALTER TABLE product_categories ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE product_categories ADD COLUMN updated_at_iso TEXT;
+
+      ALTER TABLE products ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE products ADD COLUMN device_id TEXT;
+      ALTER TABLE products ADD COLUMN deleted_at TEXT;
+      ALTER TABLE products ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE products ADD COLUMN updated_at_iso TEXT;
+
+      CREATE TABLE IF NOT EXISTS sync_outbox (
+        id TEXT PRIMARY KEY,
+        table_name TEXT NOT NULL CHECK(table_name IN ('product_categories', 'products')),
+        row_id TEXT NOT NULL,
+        op TEXT NOT NULL CHECK(op IN ('upsert', 'delete')),
+        payload_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT
+      );
+
+      CREATE INDEX idx_sync_outbox_table_name ON sync_outbox(table_name);
+      CREATE INDEX idx_sync_outbox_created_at ON sync_outbox(created_at);
+
+      CREATE TABLE IF NOT EXISTS sync_state (
+        table_name TEXT PRIMARY KEY,
+        last_sync_at TEXT
+      );
+
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('product_categories');
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('products');
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added Supabase sync columns to product_categories and products', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Created sync_outbox table for offline-first sync', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Created sync_state table for tracking last sync timestamps', ${Date.now()});
+    `,
+    down: `
+      DROP TABLE IF EXISTS sync_state;
+      DROP TABLE IF EXISTS sync_outbox;
+      
+      ALTER TABLE products DROP COLUMN updated_at_iso;
+      ALTER TABLE products DROP COLUMN created_at_iso;
+      ALTER TABLE products DROP COLUMN deleted_at;
+      ALTER TABLE products DROP COLUMN device_id;
+      ALTER TABLE products DROP COLUMN business_id;
+
+      ALTER TABLE product_categories DROP COLUMN updated_at_iso;
+      ALTER TABLE product_categories DROP COLUMN created_at_iso;
+      ALTER TABLE product_categories DROP COLUMN deleted_at;
+      ALTER TABLE product_categories DROP COLUMN device_id;
+      ALTER TABLE product_categories DROP COLUMN business_id;
     `,
   },
 ];

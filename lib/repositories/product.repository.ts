@@ -1,9 +1,12 @@
 import { BaseRepository } from './base';
 import { Product } from '../types';
 import { AuditRepository } from './audit.repository';
+import { SyncOutboxRepository } from './sync-outbox.repository';
+import { getDeviceId } from '../utils/device-id';
 
 export class ProductRepository extends BaseRepository {
   private auditRepo = new AuditRepository();
+  private syncOutbox = new SyncOutboxRepository();
   async create(data: {
     name: string;
     category_id?: string;
@@ -17,6 +20,8 @@ export class ProductRepository extends BaseRepository {
     const db = await this.getDb();
     const id = this.generateId();
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
+    const deviceId = await getDeviceId();
 
     const price_cents = Math.round(data.price * 100);
 
@@ -34,13 +39,37 @@ export class ProductRepository extends BaseRepository {
       is_active: 1,
       created_at: now,
       updated_at: now,
+      business_id: 'default_business',
+      device_id: deviceId,
+      created_at_iso: nowISO,
+      updated_at_iso: nowISO,
     };
 
     await db.runAsync(
-      `INSERT INTO products (id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [product.id, product.category_id || null, product.name, product.description || null, product.price, product.price_cents, product.cost_cents || null, product.sku || null, product.icon_image_uri || null, product.category || null, product.is_active, product.created_at, product.updated_at]
+      `INSERT INTO products (id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, is_active, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        product.id,
+        product.category_id || null,
+        product.name,
+        product.description || null,
+        product.price,
+        product.price_cents,
+        product.cost_cents || null,
+        product.sku || null,
+        product.icon_image_uri || null,
+        product.category || null,
+        product.is_active,
+        product.created_at,
+        product.updated_at,
+        product.business_id ?? 'default_business',
+        product.device_id ?? null,
+        product.created_at_iso ?? nowISO,
+        product.updated_at_iso ?? nowISO,
+      ]
     );
+
+    await this.syncOutbox.add('products', product.id, 'upsert', product);
 
     if (userId) {
       await this.auditRepo.log({
@@ -107,14 +136,18 @@ export class ProductRepository extends BaseRepository {
     const values: any[] = [];
 
     Object.entries(data).forEach(([key, value]) => {
-      if (key !== 'id' && key !== 'created_at') {
+      if (key !== 'id' && key !== 'created_at' && key !== 'created_at_iso') {
         updates.push(`${key} = ?`);
         values.push(value === undefined ? null : value);
       }
     });
 
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
     updates.push('updated_at = ?');
-    values.push(this.now());
+    values.push(now);
+    updates.push('updated_at_iso = ?');
+    values.push(nowISO);
     values.push(id);
 
     await db.runAsync(
@@ -122,8 +155,12 @@ export class ProductRepository extends BaseRepository {
       values
     );
 
+    const newData = await this.findById(id);
+    if (newData) {
+      await this.syncOutbox.add('products', id, 'upsert', newData);
+    }
+
     if (userId) {
-      const newData = await this.findById(id);
       await this.auditRepo.log({
         user_id: userId,
         entity_type: 'product',
@@ -138,12 +175,24 @@ export class ProductRepository extends BaseRepository {
   }
 
   async softDelete(id: string, userId?: string): Promise<void> {
+    const db = await this.getDb();
     const oldData = await this.findById(id);
     if (!oldData) {
       throw new Error('Product not found');
     }
 
-    await this.update(id, { is_active: 0 }, userId);
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
+
+    await db.runAsync(
+      'UPDATE products SET is_active = 0, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+      [nowISO, now, nowISO, id]
+    );
+
+    const deletedData = await this.findById(id);
+    if (deletedData) {
+      await this.syncOutbox.add('products', id, 'delete', { id, deleted_at: nowISO });
+    }
 
     if (userId) {
       await this.auditRepo.log({

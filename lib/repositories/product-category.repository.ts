@@ -1,14 +1,19 @@
 import { BaseRepository } from './base';
 import { ProductCategory } from '../types';
 import { AuditRepository } from './audit.repository';
+import { SyncOutboxRepository } from './sync-outbox.repository';
+import { getDeviceId } from '../utils/device-id';
 
 export class ProductCategoryRepository extends BaseRepository {
   private auditRepo = new AuditRepository();
+  private syncOutbox = new SyncOutboxRepository();
 
   async create(data: { name: string; sort_order?: number }, userId?: string): Promise<ProductCategory> {
     const db = await this.getDb();
     const id = this.generateId();
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
+    const deviceId = await getDeviceId();
 
     const category: ProductCategory = {
       id,
@@ -17,13 +22,30 @@ export class ProductCategoryRepository extends BaseRepository {
       is_active: 1,
       created_at: now,
       updated_at: now,
+      business_id: 'default_business',
+      device_id: deviceId,
+      created_at_iso: nowISO,
+      updated_at_iso: nowISO,
     };
 
     await db.runAsync(
-      `INSERT INTO product_categories (id, name, sort_order, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [category.id, category.name, category.sort_order, category.is_active, category.created_at, category.updated_at]
+      `INSERT INTO product_categories (id, name, sort_order, is_active, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        category.id,
+        category.name,
+        category.sort_order,
+        category.is_active,
+        category.created_at,
+        category.updated_at,
+        category.business_id ?? 'default_business',
+        category.device_id ?? null,
+        category.created_at_iso ?? nowISO,
+        category.updated_at_iso ?? nowISO,
+      ]
     );
+
+    await this.syncOutbox.add('product_categories', category.id, 'upsert', category);
 
     if (userId) {
       await this.auditRepo.log({
@@ -86,8 +108,12 @@ export class ProductCategoryRepository extends BaseRepository {
       values.push(data.is_active);
     }
 
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
     updates.push('updated_at = ?');
-    values.push(this.now());
+    values.push(now);
+    updates.push('updated_at_iso = ?');
+    values.push(nowISO);
     values.push(id);
 
     await db.runAsync(
@@ -95,8 +121,12 @@ export class ProductCategoryRepository extends BaseRepository {
       values
     );
 
+    const newData = await this.findById(id);
+    if (newData) {
+      await this.syncOutbox.add('product_categories', id, 'upsert', newData);
+    }
+
     if (userId) {
-      const newData = await this.findById(id);
       await this.auditRepo.log({
         user_id: userId,
         entity_type: 'product_category',
@@ -111,12 +141,24 @@ export class ProductCategoryRepository extends BaseRepository {
   }
 
   async softDelete(id: string, userId?: string): Promise<void> {
+    const db = await this.getDb();
     const oldData = await this.findById(id);
     if (!oldData) {
       throw new Error('Product category not found');
     }
 
-    await this.update(id, { is_active: 0 }, userId);
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
+
+    await db.runAsync(
+      'UPDATE product_categories SET is_active = 0, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+      [nowISO, now, nowISO, id]
+    );
+
+    const deletedData = await this.findById(id);
+    if (deletedData) {
+      await this.syncOutbox.add('product_categories', id, 'delete', { id, deleted_at: nowISO });
+    }
 
     if (userId) {
       await this.auditRepo.log({
