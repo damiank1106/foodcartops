@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 22;
 
 export const MIGRATIONS = [
   {
@@ -834,6 +834,33 @@ export const MIGRATIONS = [
     `,
     down: `
       DROP TABLE IF EXISTS other_expenses;
+    `,
+  },
+  {
+    version: 22,
+    up: `
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id TEXT PRIMARY KEY,
+        dark_mode INTEGER NOT NULL DEFAULT 1,
+        light_bg_color TEXT,
+        light_bg_intensity TEXT NOT NULL DEFAULT 'medium' CHECK(light_bg_intensity IN ('light', 'medium', 'high')),
+        food_icons_enabled INTEGER NOT NULL DEFAULT 0,
+        food_icons_intensity TEXT NOT NULL DEFAULT 'medium' CHECK(food_icons_intensity IN ('light', 'medium', 'high')),
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+
+      CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
+
+      ALTER TABLE users ADD COLUMN profile_image_uri TEXT;
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Created user_preferences table for inventory settings', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Added profile_image_uri to users table', ${Date.now()});
+    `,
+    down: `
+      DROP TABLE IF EXISTS user_preferences;
+      ALTER TABLE users DROP COLUMN profile_image_uri;
     `,
   },
 ];

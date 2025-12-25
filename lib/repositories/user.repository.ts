@@ -236,6 +236,27 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Activated user with audit:', id);
   }
 
+  async updateProfileImage(userId: string, imageUri: string | null, actorUserId: string): Promise<void> {
+    const db = await this.getDb();
+    const oldUser = await this.findById(userId);
+    
+    await db.runAsync(
+      'UPDATE users SET profile_image_uri = ?, updated_at = ? WHERE id = ?',
+      [imageUri ?? null, this.now(), userId]
+    );
+
+    await this.auditLog(
+      actorUserId,
+      'user_profile',
+      userId,
+      imageUri ? 'profile_picture_set' : 'profile_picture_delete',
+      oldUser,
+      { profile_image_uri: imageUri }
+    );
+
+    console.log('[UserRepo] Updated profile image for user:', userId);
+  }
+
   async getAllWithCartCounts(): Promise<(User & { assigned_carts_count: number })[]> {
     const db = await this.getDb();
     const results = await db.getAllAsync<User & { assigned_carts_count: number }>(

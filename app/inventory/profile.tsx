@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,198 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  Image,
+  Platform,
 } from 'react-native';
-import { LogOut, User } from 'lucide-react-native';
+import { LogOut, User, Camera, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { UserRepository } from '@/lib/repositories/user.repository';
+
+const DOCUMENT_DIRECTORY = (FileSystem as any).documentDirectory as string | null;
 
 export default function InventoryProfileScreen() {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
   const router = useRouter();
+
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const loadProfileImage = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const userRepo = new UserRepository();
+      const userData = await userRepo.findById(user.id);
+      if (userData && (userData as any).profile_image_uri) {
+        setProfileImageUri((userData as any).profile_image_uri);
+      }
+    } catch (error) {
+      console.error('[Profile] Load image error:', error);
+    }
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileImage();
+    }, [loadProfileImage])
+  );
+
+  const requestPermissions = async (type: 'camera' | 'library'): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      return true;
+    }
+
+    try {
+      if (type === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Camera permission is required to take photos');
+          return false;
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Photo library permission is required to select photos');
+          return false;
+        }
+      }
+      return true;
+    } catch (error) {
+      console.error('[Profile] Permission error:', error);
+      return false;
+    }
+  };
+
+  const handleImagePicked = async (result: ImagePicker.ImagePickerResult) => {
+    if (!user?.id) return;
+    if (result.canceled) return;
+
+    try {
+      setIsLoading(true);
+      const asset = result.assets[0];
+      
+      const docDir = DOCUMENT_DIRECTORY;
+      if (!docDir) {
+        throw new Error('Document directory not available');
+      }
+      
+      const profilePicsDir = `${docDir}profile_pics/`;
+      const dirInfo = await FileSystem.getInfoAsync(profilePicsDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(profilePicsDir, { intermediates: true });
+      }
+
+      const filename = `${user.id}.jpg`;
+      const destination = `${profilePicsDir}${filename}`;
+
+      await FileSystem.copyAsync({
+        from: asset.uri,
+        to: destination,
+      });
+
+      const userRepo = new UserRepository();
+      await userRepo.updateProfileImage(user.id, destination, user.id);
+      setProfileImageUri(destination);
+      Alert.alert('Success', 'Profile picture updated');
+    } catch (error: any) {
+      console.error('[Profile] Image save error:', error);
+      Alert.alert('Error', error.message || 'Failed to save profile picture');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const hasPermission = await requestPermissions('camera');
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      await handleImagePicked(result);
+    } catch (error) {
+      console.error('[Profile] Camera error:', error);
+    }
+  };
+
+  const handlePickFromLibrary = async () => {
+    const hasPermission = await requestPermissions('library');
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      await handleImagePicked(result);
+    } catch (error) {
+      console.error('[Profile] Library error:', error);
+    }
+  };
+
+  const handleDeleteProfilePicture = () => {
+    Alert.alert(
+      'Delete Profile Picture',
+      'Are you sure you want to delete your profile picture?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user?.id) return;
+            try {
+              setIsLoading(true);
+              
+              if (profileImageUri) {
+                const fileInfo = await FileSystem.getInfoAsync(profileImageUri);
+                if (fileInfo.exists) {
+                  await FileSystem.deleteAsync(profileImageUri);
+                }
+              }
+
+              const userRepo = new UserRepository();
+              await userRepo.updateProfileImage(user.id, null, user.id);
+              setProfileImageUri(null);
+              Alert.alert('Success', 'Profile picture deleted');
+            } catch (error: any) {
+              console.error('[Profile] Delete error:', error);
+              Alert.alert('Error', error.message || 'Failed to delete profile picture');
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const showImageOptions = () => {
+    Alert.alert(
+      'Profile Picture',
+      'Choose an option',
+      [
+        {
+          text: 'Take Photo',
+          onPress: handleTakePhoto,
+        },
+        {
+          text: 'Choose from Library',
+          onPress: handlePickFromLibrary,
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -42,13 +224,40 @@ export default function InventoryProfileScreen() {
     >
       <View style={[styles.card, { backgroundColor: theme.card }]}>
         <View style={styles.iconContainer}>
-          <View
-            style={[
-              styles.iconCircle,
-              { backgroundColor: theme.primary + '20' },
-            ]}
-          >
-            <User size={32} color={theme.primary} />
+          <TouchableOpacity onPress={showImageOptions} disabled={isLoading}>
+            {profileImageUri ? (
+              <Image
+                source={{ uri: profileImageUri }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.iconCircle,
+                  { backgroundColor: theme.primary + '20' },
+                ]}
+              >
+                <User size={32} color={theme.primary} />
+              </View>
+            )}
+          </TouchableOpacity>
+          <View style={styles.imageActions}>
+            <TouchableOpacity
+              style={[styles.imageActionButton, { backgroundColor: theme.primary }]}
+              onPress={showImageOptions}
+              disabled={isLoading}
+            >
+              <Camera size={16} color="#fff" />
+            </TouchableOpacity>
+            {profileImageUri && (
+              <TouchableOpacity
+                style={[styles.imageActionButton, { backgroundColor: theme.error }]}
+                onPress={handleDeleteProfilePicture}
+                disabled={isLoading}
+              >
+                <Trash2 size={16} color="#fff" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
         <Text style={[styles.name, { color: theme.text }]}>{user.name}</Text>
@@ -97,6 +306,23 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  imageActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  imageActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
