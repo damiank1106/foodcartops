@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Receipt, Eye, X, Clock, Trash2 } from 'lucide-react-native';
+import { CheckCircle, XCircle, Coins, Eye, X, Clock, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { ExpenseRepository, AuditRepository } from '@/lib/repositories';
@@ -175,7 +175,7 @@ export default function BossExpensesScreen() {
                 <View style={styles.cardHeader}>
                   <View style={styles.cardLeft}>
                     <View style={[styles.categoryBadge, { backgroundColor: theme.primary + '20' }]}>
-                      <Receipt size={14} color={theme.primary} />
+                      <Coins size={14} color={theme.primary} />
                       <Text style={[styles.categoryText, { color: theme.primary }]}>
                         {expense.category}
                       </Text>
@@ -277,7 +277,7 @@ export default function BossExpensesScreen() {
             ))
           ) : (
             <View style={styles.emptyState}>
-              <Receipt size={64} color={theme.textSecondary} />
+              <Coins size={64} color={theme.textSecondary} />
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
                 No {filter !== 'ALL' ? filter.toLowerCase() : ''} expenses
               </Text>

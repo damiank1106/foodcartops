@@ -2,12 +2,12 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { Package, Plus, Edit2, Snowflake, ShoppingCart, Trash2 } from 'lucide-react-native';
+import { Package, Plus, Edit2, Snowflake, ShoppingCart, Trash2, Box, UtensilsCrossed } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repository';
 import type { InventoryItem, InventoryUnit } from '@/lib/types';
 
-type StorageGroup = 'FREEZER' | 'CART';
+type StorageGroup = 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
 
 export default function InventoryScreen() {
   const { theme } = useTheme();
@@ -136,7 +136,12 @@ export default function InventoryScreen() {
   }, [items, selectedGroup]);
 
   const renderGroupFilter = () => (
-    <View style={[styles.groupFilter, { backgroundColor: theme.card }]}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={[styles.groupFilter, { backgroundColor: theme.card }]}
+      contentContainerStyle={styles.groupFilterContent}
+    >
       <TouchableOpacity
         style={[styles.groupButton, selectedGroup === 'ALL' && { backgroundColor: theme.primary }]}
         onPress={() => setSelectedGroup('ALL')}
@@ -163,7 +168,25 @@ export default function InventoryScreen() {
           Cart
         </Text>
       </TouchableOpacity>
-    </View>
+      <TouchableOpacity
+        style={[styles.groupButton, selectedGroup === 'PACKAGING_SUPPLY' && { backgroundColor: theme.primary }]}
+        onPress={() => setSelectedGroup('PACKAGING_SUPPLY')}
+      >
+        <Box size={16} color={selectedGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text} />
+        <Text style={[styles.groupButtonText, { color: selectedGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text }]}>
+          Packaging Supply
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.groupButton, selectedGroup === 'CONDIMENTS' && { backgroundColor: theme.primary }]}
+        onPress={() => setSelectedGroup('CONDIMENTS')}
+      >
+        <UtensilsCrossed size={16} color={selectedGroup === 'CONDIMENTS' ? '#fff' : theme.text} />
+        <Text style={[styles.groupButtonText, { color: selectedGroup === 'CONDIMENTS' ? '#fff' : theme.text }]}>
+          Condiments
+        </Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 
   const renderItemsList = () => (
@@ -190,13 +213,29 @@ export default function InventoryScreen() {
               >
                 <View style={styles.itemHeader}>
                   <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-                  <View style={[styles.groupBadge, { backgroundColor: (item as any).storage_group === 'FREEZER' ? theme.primary + '20' : theme.success + '20' }]}>
+                  <View style={[styles.groupBadge, { 
+                    backgroundColor: 
+                      (item as any).storage_group === 'FREEZER' ? theme.primary + '20' :
+                      (item as any).storage_group === 'CART' ? theme.success + '20' :
+                      (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' + '20' :
+                      '#F7931E' + '20'
+                  }]}>
                     {(item as any).storage_group === 'FREEZER' ? (
                       <Snowflake size={12} color={theme.primary} />
-                    ) : (
+                    ) : (item as any).storage_group === 'CART' ? (
                       <ShoppingCart size={12} color={theme.success} />
+                    ) : (item as any).storage_group === 'PACKAGING_SUPPLY' ? (
+                      <Box size={12} color="#FF6B35" />
+                    ) : (
+                      <UtensilsCrossed size={12} color="#F7931E" />
                     )}
-                    <Text style={[styles.groupBadgeText, { color: (item as any).storage_group === 'FREEZER' ? theme.primary : theme.success }]}>
+                    <Text style={[styles.groupBadgeText, { 
+                      color: 
+                        (item as any).storage_group === 'FREEZER' ? theme.primary :
+                        (item as any).storage_group === 'CART' ? theme.success :
+                        (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' :
+                        '#F7931E'
+                    }]}>
                       {(item as any).storage_group || 'FREEZER'}
                     </Text>
                   </View>
@@ -268,6 +307,22 @@ export default function InventoryScreen() {
                   <Text style={[styles.groupSelectText, { color: itemGroup === 'CART' ? '#fff' : theme.text }]}>Cart</Text>
                 </TouchableOpacity>
               </View>
+              <View style={styles.groupRow}>
+                <TouchableOpacity
+                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'PACKAGING_SUPPLY' ? theme.primary : theme.background }]}
+                  onPress={() => setItemGroup('PACKAGING_SUPPLY')}
+                >
+                  <Box size={18} color={itemGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text} />
+                  <Text style={[styles.groupSelectText, { color: itemGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text }]}>Packaging</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'CONDIMENTS' ? theme.primary : theme.background }]}
+                  onPress={() => setItemGroup('CONDIMENTS')}
+                >
+                  <UtensilsCrossed size={18} color={itemGroup === 'CONDIMENTS' ? '#fff' : theme.text} />
+                  <Text style={[styles.groupSelectText, { color: itemGroup === 'CONDIMENTS' ? '#fff' : theme.text }]}>Condiments</Text>
+                </TouchableOpacity>
+              </View>
 
               <TextInput
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
@@ -320,11 +375,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   groupFilter: {
-    flexDirection: 'row',
-    padding: 12,
-    gap: 8,
+    flexGrow: 0,
+    flexShrink: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+  },
+  groupFilterContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 8,
   },
   groupButton: {
     flexDirection: 'row',

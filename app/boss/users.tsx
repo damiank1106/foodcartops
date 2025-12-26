@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository } from '@/lib/repositories';
 import { UserCartAssignmentRepository } from '@/lib/repositories/user-cart-assignment.repository';
 import { User, UserRole } from '@/lib/types';
+import { getRoleLabel } from '@/lib/utils/role-labels';
 
 type ModalMode = 'create' | 'edit' | 'pin' | null;
 
@@ -242,7 +243,7 @@ export default function UsersScreen() {
                 <View style={styles.badges}>
                   <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user.role) + '20' }]}>
                     <Text style={[styles.roleBadgeText, { color: getRoleBadgeColor(user.role) }]}>
-                      {user.role === 'inventory_clerk' ? 'INVENTORY' : user.role.toUpperCase()}
+                      {getRoleLabel(user.role).toUpperCase()}
                     </Text>
                   </View>
 
@@ -334,7 +335,7 @@ export default function UsersScreen() {
                           formData.role === 'boss2' && { color: theme.primary, fontWeight: '700' as const },
                         ]}
                       >
-                        Boss2
+                        {getRoleLabel('boss2')}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -352,7 +353,7 @@ export default function UsersScreen() {
                           formData.role === 'developer' && { color: theme.primary, fontWeight: '700' as const },
                         ]}
                       >
-                        Developer
+                        {getRoleLabel('developer')}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -370,7 +371,7 @@ export default function UsersScreen() {
                           formData.role === 'worker' && { color: theme.primary, fontWeight: '700' as const },
                         ]}
                       >
-                        Worker
+                        {getRoleLabel('worker')}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -388,7 +389,7 @@ export default function UsersScreen() {
                           formData.role === 'inventory_clerk' && { color: theme.primary, fontWeight: '700' as const },
                         ]}
                       >
-                        Inventory Clerk
+                        {getRoleLabel('inventory_clerk')}
                       </Text>
                     </TouchableOpacity>
                   </View>

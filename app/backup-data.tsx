@@ -178,9 +178,24 @@ export default function BackupDataScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Stack.Screen options={{ title: 'Backup Data' }} />
+      <Stack.Screen 
+        options={{ 
+          title: 'Backup Data',
+          headerStyle: {
+            backgroundColor: '#000',
+          },
+          headerTintColor: '#FFF',
+          headerTitleStyle: {
+            color: '#FFF',
+          },
+        }} 
+      />
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContentContainer}
+      >
         <View style={[styles.statusCard, { backgroundColor: theme.card }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>Credentials</Text>
@@ -445,7 +460,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContentContainer: {
     padding: 16,
+    paddingBottom: 100,
   },
   statusCard: {
     padding: 16,

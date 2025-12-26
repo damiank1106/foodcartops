@@ -38,7 +38,7 @@ export class InventoryItemRepository extends BaseRepository {
     name: string;
     unit: InventoryUnit;
     reorder_level_qty?: number;
-    storage_group?: 'FREEZER' | 'CART';
+    storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
     user_id: string;
   }): Promise<InventoryItem> {
     console.log('[InventoryItemRepository] Creating inventory item:', data.name);
@@ -80,7 +80,7 @@ export class InventoryItemRepository extends BaseRepository {
     name?: string;
     unit?: InventoryUnit;
     reorder_level_qty?: number;
-    storage_group?: 'FREEZER' | 'CART';
+    storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
     user_id: string;
   }): Promise<InventoryItem> {
     console.log(`[InventoryItemRepository] Updating inventory item: ${data.id}`);

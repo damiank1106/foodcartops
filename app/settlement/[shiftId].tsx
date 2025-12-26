@@ -54,6 +54,39 @@ export default function SettlementEditorScreen() {
       const existingSettlement = await settlementRepo.findByShiftId(shiftId);
 
       const sales = (await saleRepo.findAll()).filter((sale) => sale.shift_id === shiftId);
+      const saleItems = await Promise.all(
+        sales.map(async (sale) => {
+          const items = await (async () => {
+            const db = await (await import('@/lib/database/init')).getDatabase();
+            return await db.getAllAsync<any>(
+              `SELECT si.*, p.name as product_name 
+               FROM sale_items si 
+               LEFT JOIN products p ON si.product_id = p.id 
+               WHERE si.sale_id = ?`,
+              [sale.id]
+            );
+          })();
+          return items;
+        })
+      );
+      const flatSaleItems = saleItems.flat();
+
+      const productsSold = flatSaleItems.reduce((acc: any[], item: any) => {
+        const existing = acc.find((p) => p.product_id === item.product_id);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.total_cents += item.line_total_cents;
+        } else {
+          acc.push({
+            product_id: item.product_id,
+            product_name: item.product_name || 'Unknown Product',
+            quantity: item.quantity,
+            total_cents: item.line_total_cents,
+          });
+        }
+        return acc;
+      }, []);
+
       const payments = await Promise.all(sales.map((sale) => paymentRepo.findBySaleId(sale.id)));
       const flatPayments = payments.flat();
       const expenses = await expenseRepo.getApprovedExpensesForShift(shiftId);
@@ -108,6 +141,7 @@ export default function SettlementEditorScreen() {
         managerShareCents,
         ownerShareCents,
         paymentsByMethod,
+        productsSold,
       };
     },
     enabled: !!shiftId && !!isBoss,
@@ -435,6 +469,25 @@ export default function SettlementEditorScreen() {
           </View>
         </View>
 
+        <View style={[styles.card, { backgroundColor: theme.card }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Products Sold</Text>
+          {shiftData.productsSold && shiftData.productsSold.length > 0 ? (
+            shiftData.productsSold.map((product: any, index: number) => (
+              <View key={index} style={styles.productRow}>
+                <View style={styles.productLeft}>
+                  <Text style={[styles.productName, { color: theme.text }]}>{product.product_name}</Text>
+                  <Text style={[styles.productQty, { color: theme.textSecondary }]}>Qty: {product.quantity}</Text>
+                </View>
+                <Text style={[styles.productTotal, { color: theme.text }]}>
+                  ₱{(product.total_cents / 100).toFixed(2)}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={[styles.emptyProductsText, { color: theme.textSecondary }]}>No products sold in this shift</Text>
+          )}
+        </View>
+
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.primary, borderWidth: 2 }]}>
           <View style={styles.splitHeader}>
             <TrendingUp size={24} color={theme.primary} />
@@ -458,7 +511,7 @@ export default function SettlementEditorScreen() {
           <View style={styles.divider} />
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-              Operation Manager (70%):
+              General Manager (70%):
             </Text>
             <Text style={[styles.summaryValue, { color: theme.success, fontWeight: '600' }]}>
               ₱{(shiftData.managerShareCents / 100).toFixed(2)}
@@ -466,14 +519,14 @@ export default function SettlementEditorScreen() {
           </View>
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-              Owner (30%):
+              General Manager (30%):
             </Text>
             <Text style={[styles.summaryValue, { color: theme.text, fontWeight: '600' }]}>
               ₱{(shiftData.ownerShareCents / 100).toFixed(2)}
             </Text>
           </View>
           <Text style={[styles.noteText, { color: theme.textSecondary }]}>
-            * The manager who finalizes this settlement will be credited the Operation Manager share.
+            * The manager who finalizes this settlement will be credited the General Manager share.
           </Text>
         </View>
 
@@ -661,6 +714,34 @@ const styles = StyleSheet.create({
   differenceValue: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  productRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  productLeft: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  productQty: {
+    fontSize: 13,
+  },
+  productTotal: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyProductsText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    paddingVertical: 12,
   },
   actions: {
     gap: 12,
