@@ -9,15 +9,18 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Key, UserX, UserCheck, X } from 'lucide-react-native';
+import { Plus, Edit2, Key, UserX, UserCheck, X, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository } from '@/lib/repositories';
 import { UserCartAssignmentRepository } from '@/lib/repositories/user-cart-assignment.repository';
 import { User, UserRole } from '@/lib/types';
 import { getRoleLabel } from '@/lib/utils/role-labels';
+import { useFocusEffect } from 'expo-router';
 
 type ModalMode = 'create' | 'edit' | 'pin' | null;
 
@@ -43,6 +46,12 @@ export default function UsersScreen() {
     queryKey: ['users-with-carts'],
     queryFn: () => userRepo.getAllWithCartCounts(),
   });
+
+  useFocusEffect(
+    React.useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
+    }, [queryClient])
+  );
 
 
 
@@ -154,6 +163,35 @@ export default function UsersScreen() {
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      if (!currentUser) throw new Error('Not authenticated');
+      await userRepo.deactivateWithAudit(userId, currentUser.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
+      Alert.alert('Success', 'User deleted successfully');
+    },
+    onError: (error: Error) => {
+      Alert.alert('Error', error.message);
+    },
+  });
+
+  const handleDeleteUser = (user: User) => {
+    Alert.alert(
+      'Delete User',
+      `Are you sure you want to delete ${user.name}? This will deactivate their account.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteUserMutation.mutate(user.id),
+        },
+      ]
+    );
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -258,7 +296,7 @@ export default function UsersScreen() {
                   )}
                 </View>
               </View>
-              {user.role !== 'boss' && (
+              {user.role !== 'boss' && user.role !== 'boss2' && user.role !== 'developer' && (
                 <View style={styles.userActions}>
                   <TouchableOpacity
                     style={[styles.actionButton, { backgroundColor: theme.primary + '20' }]}
@@ -272,6 +310,15 @@ export default function UsersScreen() {
                   >
                     <Key size={18} color={theme.warning} />
                   </TouchableOpacity>
+                  {(user.role === 'worker' || user.role === 'inventory_clerk') && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: theme.error + '20' }]}
+                      onPress={() => handleDeleteUser(user)}
+                      disabled={deleteUserMutation.isPending}
+                    >
+                      <Trash2 size={18} color={theme.error} />
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={[styles.actionButton, { backgroundColor: (user.is_active === 1 ? theme.error : theme.success) + '20' }]}
                     onPress={() => toggleActiveMutation.mutate(user)}
@@ -291,7 +338,10 @@ export default function UsersScreen() {
       </ScrollView>
 
       <Modal visible={modalMode !== null} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>
@@ -310,7 +360,11 @@ export default function UsersScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
+            <ScrollView 
+              style={styles.modalBody} 
+              contentContainerStyle={styles.modalBodyContent}
+              keyboardShouldPersistTaps="handled"
+            >
               {modalMode !== 'pin' && (
                 <>
                   <Text style={[styles.label, { color: theme.text }]}>Name *</Text>
@@ -324,42 +378,6 @@ export default function UsersScreen() {
 
                   <Text style={[styles.label, { color: theme.text }]}>Role</Text>
                   <View style={styles.roleButtons}>
-                    <TouchableOpacity
-                      style={[
-                        styles.roleButton,
-                        { borderColor: theme.border },
-                        formData.role === 'boss2' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
-                      ]}
-                      onPress={() => setFormData((prev) => ({ ...prev, role: 'boss2' }))}
-                    >
-                      <Text
-                        style={[
-                          styles.roleButtonText,
-                          { color: theme.text },
-                          formData.role === 'boss2' && { color: theme.primary, fontWeight: '700' as const },
-                        ]}
-                      >
-                        {getRoleLabel('boss2')}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.roleButton,
-                        { borderColor: theme.border },
-                        formData.role === 'developer' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
-                      ]}
-                      onPress={() => setFormData((prev) => ({ ...prev, role: 'developer' }))}
-                    >
-                      <Text
-                        style={[
-                          styles.roleButtonText,
-                          { color: theme.text },
-                          formData.role === 'developer' && { color: theme.primary, fontWeight: '700' as const },
-                        ]}
-                      >
-                        {getRoleLabel('developer')}
-                      </Text>
-                    </TouchableOpacity>
                     <TouchableOpacity
                       style={[
                         styles.roleButton,
@@ -457,7 +475,7 @@ export default function UsersScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -583,7 +601,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   modalBodyContent: {
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   label: {
     fontSize: 14,

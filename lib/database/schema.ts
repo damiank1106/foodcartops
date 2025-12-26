@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 23;
+export const SCHEMA_VERSION = 24;
 
 export const MIGRATIONS = [
   {
@@ -920,6 +920,55 @@ export const MIGRATIONS = [
       ALTER TABLE product_categories DROP COLUMN deleted_at;
       ALTER TABLE product_categories DROP COLUMN device_id;
       ALTER TABLE product_categories DROP COLUMN business_id;
+    `,
+  },
+  {
+    version: 24,
+    up: `
+      CREATE TABLE inventory_items_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL CHECK(unit IN ('pcs', 'kg', 'g', 'L', 'mL')),
+        reorder_level_qty REAL NOT NULL DEFAULT 0,
+        storage_group TEXT NOT NULL DEFAULT 'FREEZER' CHECK(storage_group IN ('FREEZER', 'CART', 'PACKAGING_SUPPLY', 'CONDIMENTS')),
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO inventory_items_new (id, name, unit, reorder_level_qty, storage_group, is_active, created_at, updated_at)
+      SELECT id, name, unit, reorder_level_qty, storage_group, is_active, created_at, updated_at FROM inventory_items;
+
+      DROP TABLE inventory_items;
+      ALTER TABLE inventory_items_new RENAME TO inventory_items;
+
+      CREATE INDEX idx_inventory_items_is_active ON inventory_items(is_active);
+      CREATE INDEX idx_inventory_items_name ON inventory_items(name);
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Updated inventory_items storage_group constraint to include PACKAGING_SUPPLY and CONDIMENTS', ${Date.now()});
+    `,
+    down: `
+      CREATE TABLE inventory_items_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL CHECK(unit IN ('pcs', 'kg', 'g', 'L', 'mL')),
+        reorder_level_qty REAL NOT NULL DEFAULT 0,
+        storage_group TEXT NOT NULL DEFAULT 'FREEZER' CHECK(storage_group IN ('FREEZER', 'CART')),
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO inventory_items_new (id, name, unit, reorder_level_qty, storage_group, is_active, created_at, updated_at)
+      SELECT id, name, unit, reorder_level_qty, storage_group, is_active, created_at, updated_at FROM inventory_items
+      WHERE storage_group IN ('FREEZER', 'CART');
+
+      DROP TABLE inventory_items;
+      ALTER TABLE inventory_items_new RENAME TO inventory_items;
+
+      CREATE INDEX idx_inventory_items_is_active ON inventory_items(is_active);
+      CREATE INDEX idx_inventory_items_name ON inventory_items(name);
     `,
   },
 ];

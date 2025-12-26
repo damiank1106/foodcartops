@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { Package, Plus, Edit2, Snowflake, ShoppingCart, Trash2, Box, UtensilsCrossed } from 'lucide-react-native';
@@ -283,9 +283,15 @@ export default function InventoryScreen() {
       </ScrollView>
 
       <Modal visible={showItemModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <ScrollView contentContainerStyle={styles.modalScrollContent}>
+            <ScrollView 
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={[styles.modalTitle, { color: theme.text }]}>
                 {editingItem ? 'Edit Inventory Item' : 'Add Inventory Item'}
               </Text>
@@ -364,7 +370,7 @@ export default function InventoryScreen() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -496,7 +502,7 @@ const styles = StyleSheet.create({
   },
   modalScrollContent: {
     padding: 24,
-    paddingBottom: 150,
+    paddingBottom: 200,
   },
   modalTitle: {
     fontSize: 20,
