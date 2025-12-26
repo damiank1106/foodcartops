@@ -8,7 +8,7 @@ import * as Network from 'expo-network';
 import { AuthProvider } from '@/lib/contexts/auth.context';
 import { ThemeProvider } from '@/lib/contexts/theme.context';
 import { seedDatabase } from '@/lib/utils/seed';
-import { syncNow } from '@/lib/services/sync.service';
+import { syncNow, onSyncComplete } from '@/lib/services/sync.service';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -80,6 +80,18 @@ export default function RootLayout() {
 
     return () => {
       clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[App] Sync completed, invalidating product queries');
+      queryClient.invalidateQueries({ queryKey: ['product-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    });
+
+    return () => {
+      unsubscribe();
     };
   }, []);
 

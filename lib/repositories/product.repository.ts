@@ -191,7 +191,7 @@ export class ProductRepository extends BaseRepository {
 
     const deletedData = await this.findById(id);
     if (deletedData) {
-      await this.syncOutbox.add('products', id, 'delete', { id, deleted_at: nowISO });
+      await this.syncOutbox.add('products', id, 'upsert', deletedData);
     }
 
     if (userId) {

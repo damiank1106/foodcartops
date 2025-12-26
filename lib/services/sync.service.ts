@@ -20,6 +20,7 @@ interface SyncStateRow {
 
 let syncInProgress = false;
 let syncListeners: ((status: SyncStatus) => void)[] = [];
+let syncCompletionCallbacks: (() => void)[] = [];
 
 export interface SyncStatus {
   isRunning: boolean;
@@ -49,6 +50,24 @@ export function subscribeSyncStatus(listener: (status: SyncStatus) => void): () 
   return () => {
     syncListeners = syncListeners.filter(l => l !== listener);
   };
+}
+
+export function onSyncComplete(callback: () => void): () => void {
+  syncCompletionCallbacks.push(callback);
+  return () => {
+    syncCompletionCallbacks = syncCompletionCallbacks.filter(cb => cb !== callback);
+  };
+}
+
+function notifySyncComplete() {
+  console.log(`[Sync] Notifying ${syncCompletionCallbacks.length} completion callbacks`);
+  syncCompletionCallbacks.forEach(callback => {
+    try {
+      callback();
+    } catch (error) {
+      console.error('[Sync] Error in completion callback:', error);
+    }
+  });
 }
 
 function updateStatus(updates: Partial<SyncStatus>) {
@@ -196,7 +215,8 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         const { data, error } = await supabase
           .from(tableName)
           .select('*')
-          .gt('updated_at_iso', lastSyncAt);
+          .gte('updated_at_iso', lastSyncAt)
+          .order('updated_at_iso', { ascending: true });
 
         if (error) {
           throw error;
@@ -206,6 +226,8 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           console.log(`[Sync] Received ${data.length} ${tableName} rows`);
 
           updateStatus({ currentStep: `Applying ${tableName} updates...` });
+
+          let maxUpdatedAt = lastSyncAt;
 
           for (const remoteRow of data) {
             const pendingChanges = await db.getAllAsync<SyncOutboxRow>(
@@ -225,14 +247,20 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             const values = columns.map(col => remoteRow[col]);
 
             await db.runAsync(insertSQL, values);
-          }
-        }
 
-        const now = new Date().toISOString();
-        await db.runAsync(
-          'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
-          [now, tableName]
-        );
+            if (remoteRow.updated_at_iso && remoteRow.updated_at_iso > maxUpdatedAt) {
+              maxUpdatedAt = remoteRow.updated_at_iso;
+            }
+          }
+
+          await db.runAsync(
+            'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
+            [maxUpdatedAt, tableName]
+          );
+          console.log(`[Sync] Updated last_sync_at for ${tableName} to ${maxUpdatedAt}`);
+        } else {
+          console.log(`[Sync] No new ${tableName} rows since ${lastSyncAt}`);
+        }
       } catch (error: any) {
         console.error(`[Sync] Failed to pull ${tableName}:`, error);
         updateStatus({ lastError: error.message || String(error) });
@@ -247,6 +275,8 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       lastSyncAt: new Date().toISOString(),
       pendingCount: status.pendingCount
     });
+
+    notifySyncComplete();
 
     syncInProgress = false;
     return { success: true };

@@ -157,7 +157,40 @@ export class ProductCategoryRepository extends BaseRepository {
 
     const deletedData = await this.findById(id);
     if (deletedData) {
-      await this.syncOutbox.add('product_categories', id, 'delete', { id, deleted_at: nowISO });
+      await this.syncOutbox.add('product_categories', id, 'upsert', deletedData);
+    }
+
+    const productsInCategory = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM products WHERE category_id = ? AND is_active = 1',
+      [id]
+    );
+
+    console.log(`[ProductCategoryRepo] Cascade deleting ${productsInCategory.length} products in category:`, id);
+
+    for (const product of productsInCategory) {
+      await db.runAsync(
+        'UPDATE products SET is_active = 0, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+        [nowISO, now, nowISO, product.id]
+      );
+
+      const deletedProduct = await db.getFirstAsync(
+        'SELECT * FROM products WHERE id = ?',
+        [product.id]
+      );
+
+      if (deletedProduct) {
+        await this.syncOutbox.add('products', product.id, 'upsert', deletedProduct);
+      }
+
+      if (userId) {
+        await this.auditRepo.log({
+          user_id: userId,
+          entity_type: 'product',
+          entity_id: product.id,
+          action: 'delete',
+          old_data: JSON.stringify({ cascade_from_category: id }),
+        });
+      }
     }
 
     if (userId) {
