@@ -511,7 +511,7 @@ export default function SettlementEditorScreen() {
           <View style={styles.divider} />
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-              General Manager (70%):
+              Operation Manager (70%):
             </Text>
             <Text style={[styles.summaryValue, { color: theme.success, fontWeight: '600' }]}>
               ₱{(shiftData.managerShareCents / 100).toFixed(2)}

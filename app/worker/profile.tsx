@@ -81,8 +81,7 @@ export default function WorkerProfileScreen() {
           <View style={[styles.avatar, { backgroundColor: theme.primary + '20' }]}>
             <UserIcon size={32} color={theme.primary} />
           </View>
-          <Text style={[styles.name, { color: theme.text }]}>{user?.name}</Text>
-          <Text style={[styles.role, { color: theme.textSecondary }]}>Worker</Text>
+          <Text style={[styles.name, { color: theme.text }]}>{user?.name || 'USER'}</Text>
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.card }]}>

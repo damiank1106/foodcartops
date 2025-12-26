@@ -210,6 +210,8 @@ export default function UsersScreen() {
     return theme.success;
   };
 
+  const shouldShowRoles = currentUser?.role === 'boss' || currentUser?.role === 'boss2' || currentUser?.role === 'developer';
+
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -239,13 +241,15 @@ export default function UsersScreen() {
           <View key={user.id} style={[styles.userCard, { backgroundColor: theme.card }]}>
             <View style={styles.userHeader}>
               <View style={styles.userInfo}>
-                <Text style={[styles.userName, { color: theme.text }]}>{user.name}</Text>
+                <Text style={[styles.userName, { color: theme.text }]}>{user.name || 'USER'}</Text>
                 <View style={styles.badges}>
-                  <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user.role) + '20' }]}>
-                    <Text style={[styles.roleBadgeText, { color: getRoleBadgeColor(user.role) }]}>
-                      {getRoleLabel(user.role).toUpperCase()}
-                    </Text>
-                  </View>
+                  {shouldShowRoles && (
+                    <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(user.role) + '20' }]}>
+                      <Text style={[styles.roleBadgeText, { color: getRoleBadgeColor(user.role) }]}>
+                        {getRoleLabel(user.role).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
 
                   {user.is_active === 0 && (
                     <View style={[styles.inactiveBadge, { backgroundColor: theme.error + '20' }]}>

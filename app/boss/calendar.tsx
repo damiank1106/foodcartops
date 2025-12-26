@@ -271,7 +271,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         filename = `other_expenses_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
         break;
       case 'split_70_30':
-        csvContent = 'Period,Net Sales,Operation Manager (70%),Owner (30%),Cash,GCash,Card\n';
+        csvContent = 'Period,Net Sales,Operation Manager (70%),General Manager (30%),Cash,GCash,Card\n';
         csvContent += `${analytics.date_range.label},₱${(analytics.totals.net_sales_cents / 100).toFixed(2)},₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},₱${(analytics.totals.owner_share_cents / 100).toFixed(2)}`;
         analytics.revenue_by_payment.forEach((r) => {
           csvContent += `,₱${(r.amount_cents / 100).toFixed(2)}`;
@@ -378,7 +378,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         });
         
         csvContent += `SPLIT_70_30,${analytics.date_range.label},,Operation Manager (70%),,₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},\n`;
-        csvContent += `SPLIT_70_30,${analytics.date_range.label},,Owner (30%),,₱${(analytics.totals.owner_share_cents / 100).toFixed(2)},\n`;
+        csvContent += `SPLIT_70_30,${analytics.date_range.label},,General Manager (30%),,₱${(analytics.totals.owner_share_cents / 100).toFixed(2)},\n`;
       } else {
         csvContent += `NO_DATA,${analytics.date_range.label},,No entries found for this period,,,\n`;
       }
@@ -528,7 +528,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
           <table>
             <tr><th>Share</th><th>Amount</th></tr>
             <tr><td>Operation Manager (70%)</td><td>₱${(analytics.totals.manager_share_cents / 100).toFixed(2)}</td></tr>
-            <tr><td>Owner (30%)</td><td>₱${(analytics.totals.owner_share_cents / 100).toFixed(2)}</td></tr>
+            <tr><td>General Manager (30%)</td><td>₱${(analytics.totals.owner_share_cents / 100).toFixed(2)}</td></tr>
           </table>
 
           <h2>Payment Method Revenue</h2>
@@ -797,7 +797,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                 </Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Owner (30%)</Text>
+                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>General Manager (30%)</Text>
                 <Text style={[styles.summaryValue, { color: theme.primary, fontWeight: '600' }]}>
                   ₱{(analytics.totals.owner_share_cents / 100).toFixed(2)}
                 </Text>
@@ -912,7 +912,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
               {renderDonutChart(
                 [
                   { label: 'Operation Manager (70%)', value: analytics.totals.manager_share_cents, color: theme.success },
-                  { label: 'Owner (30%)', value: analytics.totals.owner_share_cents, color: theme.primary },
+                  { label: 'General Manager (30%)', value: analytics.totals.owner_share_cents, color: theme.primary },
                 ],
                 analytics.totals.manager_share_cents + analytics.totals.owner_share_cents
               )}

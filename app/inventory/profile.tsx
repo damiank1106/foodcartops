@@ -51,10 +51,7 @@ export default function InventoryProfileScreen() {
             <User size={32} color={theme.primary} />
           </View>
         </View>
-        <Text style={[styles.name, { color: theme.text }]}>{user.name}</Text>
-        <Text style={[styles.role, { color: theme.textSecondary }]}>
-          {user.role === 'inventory_clerk' ? 'Inventory Clerk' : user.role}
-        </Text>
+        <Text style={[styles.name, { color: theme.text }]}>{user.name || 'USER'}</Text>
       </View>
 
       <View style={[styles.card, { backgroundColor: theme.card }]}>
