@@ -1,5 +1,5 @@
 import * as Network from 'expo-network';
-import { getSupabaseClient } from '../supabase/client';
+import { initSupabaseClient } from '../supabase/client';
 import { getDatabase } from '../database/init';
 
 interface SyncOutboxRow {
@@ -99,7 +99,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       return { success: false, error: 'No internet connection' };
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = await initSupabaseClient();
     if (!supabase) {
       console.log('[Sync] Supabase not configured');
       updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Supabase not configured' });
@@ -152,9 +152,30 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         await db.runAsync('DELETE FROM sync_outbox WHERE id = ?', [row.id]);
       } catch (error: any) {
         console.error(`[Sync] Failed to push ${row.table_name}:`, error);
+        const errorMsg = error.message || String(error);
+        
+        if (errorMsg.toLowerCase().includes('invalid api key')) {
+          console.error('[Sync] Invalid API key detected - stopping sync');
+          await db.runAsync(
+            'UPDATE sync_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?',
+            [errorMsg, row.id]
+          );
+          await db.runAsync(
+            'UPDATE sync_state SET last_error = ? WHERE table_name = ?',
+            ['Invalid API key. Please check your credentials.', row.table_name]
+          );
+          updateStatus({ 
+            isRunning: false, 
+            currentStep: 'idle', 
+            lastError: 'Invalid API key. Please check your credentials.' 
+          });
+          syncInProgress = false;
+          return { success: false, error: 'Invalid API key. Please check your credentials.' };
+        }
+        
         await db.runAsync(
           'UPDATE sync_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?',
-          [error.message || String(error), row.id]
+          [errorMsg, row.id]
         );
       }
     }

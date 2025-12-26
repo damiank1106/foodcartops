@@ -1,29 +1,60 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { X, Wifi, WifiOff, CheckCircle, AlertTriangle, RefreshCw, Trash2, Database } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { Stack } from 'expo-router';
+import { CheckCircle, AlertTriangle, RefreshCw, Trash2, Database, Eye, EyeOff, Edit3, Save, X as XIcon } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import * as SyncService from '@/lib/services/sync.service';
 import { SyncStatus } from '@/lib/services/sync.service';
-import { isSyncEnabled } from '@/lib/supabase/client';
+import { 
+  isSyncEnabled, 
+  getSupabaseCredentials, 
+  validateSupabaseUrl, 
+  validateSupabaseKey,
+  saveSupabaseCredentials,
+  clearSupabaseCredentials 
+} from '@/lib/supabase/client';
 
 export default function BackupDataScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const router = useRouter();
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [showOutboxModal, setShowOutboxModal] = useState(false);
   const [outboxRows, setOutboxRows] = useState<any[]>([]);
+  const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState('');
+  const [currentKey, setCurrentKey] = useState('');
+  const [editMode, setEditMode] = useState(false);
+  const [showUrl, setShowUrl] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [editedUrl, setEditedUrl] = useState('');
+  const [editedKey, setEditedKey] = useState('');
 
   useEffect(() => {
     loadStatus();
+    loadCredentials();
     const unsubscribe = SyncService.subscribeSyncStatus((status) => {
       setSyncStatus(status);
     });
     return unsubscribe;
   }, []);
+
+  const loadCredentials = async () => {
+    try {
+      const enabled = await isSyncEnabled();
+      setCredentialsLoaded(enabled);
+      const creds = await getSupabaseCredentials();
+      if (creds) {
+        setCurrentUrl(creds.url);
+        setCurrentKey(creds.key);
+        setEditedUrl(creds.url);
+        setEditedKey(creds.key);
+      }
+    } catch (error) {
+      console.error('[BackupData] Failed to load credentials:', error);
+    }
+  };
 
   const loadStatus = async () => {
     try {
@@ -88,40 +119,163 @@ export default function BackupDataScreen() {
     );
   };
 
-  const credentialsLoaded = isSyncEnabled();
+  const handleSaveCredentials = async () => {
+    const urlValidation = validateSupabaseUrl(editedUrl);
+    const keyValidation = validateSupabaseKey(editedKey);
+
+    if (!urlValidation.isValid) {
+      Alert.alert('Invalid URL', urlValidation.reason);
+      return;
+    }
+
+    if (!keyValidation.isValid) {
+      Alert.alert('Invalid Key', keyValidation.reason);
+      return;
+    }
+
+    try {
+      await saveSupabaseCredentials(editedUrl, editedKey);
+      setCurrentUrl(editedUrl);
+      setCurrentKey(editedKey);
+      setEditMode(false);
+      await loadCredentials();
+      Alert.alert('Success', 'Supabase credentials updated');
+    } catch (error) {
+      console.error('[BackupData] Failed to save credentials:', error);
+      Alert.alert('Error', 'Failed to save credentials');
+    }
+  };
+
+  const handleClearCredentials = () => {
+    Alert.alert(
+      'Clear Overrides',
+      'This will reset to environment credentials. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearSupabaseCredentials();
+              await loadCredentials();
+              setEditMode(false);
+              Alert.alert('Success', 'Credentials reset to environment values');
+            } catch (error) {
+              console.error('[BackupData] Failed to clear credentials:', error);
+              Alert.alert('Error', 'Failed to clear credentials');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const urlValidation = validateSupabaseUrl(editedUrl);
+  const keyValidation = validateSupabaseKey(editedKey);
+  const currentUrlValidation = validateSupabaseUrl(currentUrl);
+  const currentKeyValidation = validateSupabaseKey(currentKey);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <X size={24} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Backup Data</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <Stack.Screen options={{ title: 'Backup Data' }} />
 
       <ScrollView style={styles.content}>
+        <View style={[styles.statusCard, { backgroundColor: theme.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>Credentials</Text>
+            <TouchableOpacity onPress={() => {
+              setEditMode(!editMode);
+              if (!editMode) {
+                setEditedUrl(currentUrl);
+                setEditedKey(currentKey);
+              }
+            }}>
+              <Edit3 size={20} color={theme.primary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.credentialRow}>
+            <View style={styles.credentialLeft}>
+              <Text style={[styles.credentialLabel, { color: theme.textSecondary }]}>EXPO_PUBLIC_SUPABASE_URL</Text>
+              <View style={styles.credentialInputContainer}>
+                <TextInput
+                  style={[styles.credentialInput, { color: theme.text, borderColor: theme.border }]}
+                  value={editMode ? editedUrl : currentUrl}
+                  onChangeText={setEditedUrl}
+                  editable={editMode}
+                  secureTextEntry={!showUrl}
+                  placeholder="https://xxx.supabase.co"
+                  placeholderTextColor={theme.textSecondary}
+                />
+                <TouchableOpacity onPress={() => setShowUrl(!showUrl)} style={styles.eyeIcon}>
+                  {showUrl ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
+                </TouchableOpacity>
+              </View>
+            </View>
+            {currentUrlValidation.isValid ? (
+              <CheckCircle size={20} color={theme.success} />
+            ) : (
+              <XIcon size={20} color={theme.error} />
+            )}
+          </View>
+
+          <View style={styles.credentialRow}>
+            <View style={styles.credentialLeft}>
+              <Text style={[styles.credentialLabel, { color: theme.textSecondary }]}>EXPO_PUBLIC_SUPABASE_ANON_KEY</Text>
+              <View style={styles.credentialInputContainer}>
+                <TextInput
+                  style={[styles.credentialInput, { color: theme.text, borderColor: theme.border }]}
+                  value={editMode ? editedKey : currentKey}
+                  onChangeText={setEditedKey}
+                  editable={editMode}
+                  secureTextEntry={!showKey}
+                  placeholder="eyJ..."
+                  placeholderTextColor={theme.textSecondary}
+                />
+                <TouchableOpacity onPress={() => setShowKey(!showKey)} style={styles.eyeIcon}>
+                  {showKey ? <EyeOff size={18} color={theme.textSecondary} /> : <Eye size={18} color={theme.textSecondary} />}
+                </TouchableOpacity>
+              </View>
+            </View>
+            {currentKeyValidation.isValid ? (
+              <CheckCircle size={20} color={theme.success} />
+            ) : (
+              <XIcon size={20} color={theme.error} />
+            )}
+          </View>
+
+          {editMode && (
+            <View style={styles.credentialActions}>
+              <TouchableOpacity
+                style={[styles.credentialButton, { backgroundColor: theme.primary }]}
+                onPress={handleSaveCredentials}
+                disabled={!urlValidation.isValid || !keyValidation.isValid}
+              >
+                <Save size={18} color="#FFF" />
+                <Text style={styles.credentialButtonText}>Save Credentials</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.credentialButtonOutline, { borderColor: theme.error }]}
+                onPress={handleClearCredentials}
+              >
+                <Text style={[styles.credentialButtonTextOutline, { color: theme.error }]}>Clear Overrides</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
         <View style={[styles.statusCard, { backgroundColor: theme.card }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Status</Text>
           
           <View style={styles.statusRow}>
             <View style={styles.statusLeft}>
               <Database size={20} color={theme.text} />
-              <Text style={[styles.statusLabel, { color: theme.text }]}>Supabase Credentials</Text>
+              <Text style={[styles.statusLabel, { color: theme.text }]}>Credentials</Text>
             </View>
             <View style={[styles.badge, { backgroundColor: credentialsLoaded ? theme.success : theme.error }]}>
-              <Text style={styles.badgeText}>{credentialsLoaded ? 'Loaded' : 'Missing'}</Text>
+              <Text style={styles.badgeText}>{credentialsLoaded ? 'Valid' : 'Invalid'}</Text>
             </View>
-          </View>
-
-          <View style={styles.statusRow}>
-            <View style={styles.statusLeft}>
-              {syncStatus?.lastSyncAt ? <Wifi size={20} color={theme.success} /> : <WifiOff size={20} color={theme.textSecondary} />}
-              <Text style={[styles.statusLabel, { color: theme.text }]}>Network</Text>
-            </View>
-            <Text style={[styles.statusValue, { color: theme.textSecondary }]}>
-              {syncStatus?.isRunning ? 'Syncing...' : 'Online'}
-            </Text>
           </View>
 
           {syncStatus?.lastSyncAt && (
@@ -161,7 +315,7 @@ export default function BackupDataScreen() {
           <View style={[styles.warningCard, { backgroundColor: theme.warning || '#F59E0B' }]}>
             <AlertTriangle size={20} color="#FFF" />
             <Text style={styles.warningText}>
-              Supabase credentials are missing. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to enable sync.
+              Supabase credentials are missing or invalid. Edit credentials above or set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to enable sync.
             </Text>
           </View>
         )}
@@ -213,9 +367,9 @@ export default function BackupDataScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Building report…</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Syncing…</Text>
               <TouchableOpacity onPress={() => setShowProgressModal(false)}>
-                <X size={24} color={theme.text} />
+                <XIcon size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
 
@@ -252,7 +406,7 @@ export default function BackupDataScreen() {
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>Outbox ({outboxRows.length})</Text>
               <TouchableOpacity onPress={() => setShowOutboxModal(false)}>
-                <X size={24} color={theme.text} />
+                <XIcon size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
 
@@ -289,21 +443,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-  },
   content: {
     flex: 1,
     padding: 16,
@@ -318,10 +457,75 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: '600' as const,
-    marginBottom: 16,
+  },
+  credentialRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  credentialLeft: {
+    flex: 1,
+  },
+  credentialLabel: {
+    fontSize: 12,
+    marginBottom: 8,
+    fontWeight: '500' as const,
+  },
+  credentialInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  credentialInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 12,
+  },
+  credentialActions: {
+    marginTop: 16,
+    gap: 12,
+  },
+  credentialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  credentialButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  credentialButtonOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  credentialButtonTextOutline: {
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   statusRow: {
     flexDirection: 'row',

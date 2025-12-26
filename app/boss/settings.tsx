@@ -30,16 +30,27 @@ export default function SettingsScreen() {
   const [pendingDestructiveAction, setPendingDestructiveAction] = useState<'reset' | 'wipe' | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [syncEnabled, setSyncEnabled] = useState(false);
 
   const auditRepo = new AuditRepository();
 
   useEffect(() => {
     if (user?.role === 'developer') {
+      checkSyncEnabled();
       loadSyncStatus();
       const interval = setInterval(loadSyncStatus, 5000);
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  const checkSyncEnabled = async () => {
+    try {
+      const enabled = await isSyncEnabled();
+      setSyncEnabled(enabled);
+    } catch (error) {
+      console.error('[Settings] Failed to check sync enabled:', error);
+    }
+  };
 
   const loadSyncStatus = async () => {
     try {
@@ -357,7 +368,7 @@ export default function SettingsScreen() {
         {user?.role === 'developer' && (
           <View style={[styles.section, { backgroundColor: theme.card }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Developer Actions</Text>
-            {isSyncEnabled() && (
+            {syncEnabled && (
               <>
                 <View style={styles.listItem}>
                   <View style={styles.listItemLeft}>
