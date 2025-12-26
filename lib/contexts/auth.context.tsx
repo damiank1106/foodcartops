@@ -230,6 +230,25 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
+  const updateUser = async (): Promise<void> => {
+    if (!state.user) {
+      throw new Error('No user logged in');
+    }
+
+    try {
+      const userRepo = new UserRepository();
+      const updatedUser = await userRepo.findById(state.user.id);
+      
+      if (updatedUser) {
+        setState((prev) => ({ ...prev, user: updatedUser }));
+        console.log('[Auth] User data refreshed:', updatedUser.name);
+      }
+    } catch (error) {
+      console.error('[Auth] Failed to refresh user data:', error);
+      throw error;
+    }
+  };
+
   const canAccessCart = (cartId: string): boolean => {
     if (!state.user) return false;
     if (state.user.role === 'boss' || state.user.role === 'boss2') return true;
@@ -252,6 +271,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     startShift,
     endShift,
     changePin,
+    updateUser,
     canAccessCart,
     hasPermission,
     isAuthenticated: !!state.user,

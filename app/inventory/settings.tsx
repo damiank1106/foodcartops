@@ -8,15 +8,18 @@ import {
   TextInput,
   Alert,
   Switch,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { Eye, EyeOff, Lock, Database, ChevronRight } from 'lucide-react-native';
+import { Eye, EyeOff, Lock, Database, ChevronRight, Edit, X } from 'lucide-react-native';
+import { UserRepository } from '@/lib/repositories';
 
 export default function InventorySettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
-  const { changePin } = useAuth();
+  const { user, changePin, updateUser } = useAuth();
   const router = useRouter();
 
   const [currentPin, setCurrentPin] = useState<string>('');
@@ -25,6 +28,9 @@ export default function InventorySettingsScreen() {
   const [showCurrentPin, setShowCurrentPin] = useState<boolean>(false);
   const [showNewPin, setShowNewPin] = useState<boolean>(false);
   const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
 
 
 
@@ -68,11 +74,54 @@ export default function InventorySettingsScreen() {
     setThemeMode(isDark ? 'light' : 'dark');
   };
 
+  const handleChangeName = async () => {
+    if (!newName.trim()) {
+      Alert.alert('Error', 'Please enter a name');
+      return;
+    }
+
+    if (newName.trim() === user?.name) {
+      Alert.alert('Error', 'Please enter a different name');
+      return;
+    }
+
+    setIsUpdatingName(true);
+    try {
+      const userRepo = new UserRepository();
+      if (user?.id) {
+        await userRepo.updateWithAudit(user.id, { name: newName.trim() }, user.id);
+        await updateUser();
+        Alert.alert('Success', 'Name updated successfully.');
+        setShowNameModal(false);
+        setNewName('');
+      }
+    } catch (error) {
+      console.error('[Settings] Failed to update name:', error);
+      Alert.alert('Error', 'Failed to update name');
+    } finally {
+      setIsUpdatingName(false);
+    }
+  };
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
     >
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
+          <TouchableOpacity style={styles.accountRow} onPress={() => {
+            setNewName(user?.name || '');
+            setShowNameModal(true);
+          }}>
+            <View style={styles.accountLeft}>
+              <Edit size={20} color={theme.text} />
+              <Text style={[styles.accountLabel, { color: theme.text }]}>Name</Text>
+            </View>
+            <Text style={[styles.accountValue, { color: theme.textSecondary }]}>{user?.name}</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Security</Text>
 
@@ -184,6 +233,49 @@ export default function InventorySettingsScreen() {
           <ChevronRight size={20} color={theme.textSecondary} />
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={showNameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNameModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Change Name</Text>
+              <TouchableOpacity onPress={() => setShowNameModal(false)}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.modalInputLabel, { color: theme.textSecondary }]}>New Name</Text>
+              <TextInput
+                style={[styles.modalInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="Enter new name"
+                placeholderTextColor={theme.textSecondary}
+                autoCapitalize="words"
+                autoFocus
+              />
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handleChangeName}
+                disabled={isUpdatingName}
+              >
+                {isUpdatingName ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Update Name</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -265,5 +357,75 @@ const styles = StyleSheet.create({
   },
   dataLabel: {
     fontSize: 16,
+  },
+  accountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  accountLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  accountLabel: {
+    fontSize: 16,
+  },
+  accountValue: {
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalInputLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+  },
+  modalButton: {
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
 });

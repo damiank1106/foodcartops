@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit, RotateCcw, Trash2, AlertTriangle, Eye, EyeOff, BookOpen, Shield, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import { getRoleLabel } from '@/lib/utils/role-labels';
 import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
 import { resetDatabase } from '@/lib/database/init';
 import { seedDatabase } from '@/lib/utils/seed';
@@ -13,7 +14,7 @@ import { isSyncEnabled } from '@/lib/supabase/client';
 
 export default function SettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const router = useRouter();
   const [showPinModal, setShowPinModal] = useState(false);
   const [newPin, setNewPin] = useState('');
@@ -150,14 +151,11 @@ export default function SettingsScreen() {
     try {
       const userRepo = new UserRepository();
       if (user?.id) {
-        await userRepo.update(user.id, { name: newName.trim() });
-        Alert.alert('Success', 'Name updated successfully. Please re-login to see changes.');
+        await userRepo.updateWithAudit(user.id, { name: newName.trim() }, user.id);
+        await updateUser();
+        Alert.alert('Success', 'Name updated successfully.');
         setShowNameModal(false);
         setNewName('');
-        setTimeout(() => {
-          logout();
-          router.replace('/');
-        }, 1500);
       }
     } catch (error) {
       console.error('[Settings] Failed to update name:', error);
@@ -322,7 +320,7 @@ export default function SettingsScreen() {
           <View style={styles.listItem}>
             <Text style={[styles.label, { color: theme.text }]}>Role</Text>
             <Text style={[styles.value, { color: theme.textSecondary }]}>
-              {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'N/A'}
+              {user?.role ? getRoleLabel(user.role) : 'N/A'}
             </Text>
           </View>
         </View>
