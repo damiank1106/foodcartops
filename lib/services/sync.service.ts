@@ -1,266 +1,252 @@
 import * as Network from 'expo-network';
-import { getSupabaseClient, isSyncEnabled } from '../supabase/client';
-import { SyncOutboxRepository, SyncTableName } from '../repositories/sync-outbox.repository';
-import { BaseRepository } from '../repositories/base';
+import { getSupabaseClient } from '../supabase/client';
+import { getDatabase } from '../database/init';
 
-let isSyncing = false;
-let lastSyncError: string | null = null;
+interface SyncOutboxRow {
+  id: string;
+  table_name: string;
+  row_id: string;
+  op: 'upsert' | 'delete';
+  payload_json: string;
+  created_at: number;
+  attempts: number;
+  last_error: string | null;
+}
 
-export class SyncService extends BaseRepository {
-  private outboxRepo = new SyncOutboxRepository();
+interface SyncStateRow {
+  table_name: string;
+  last_sync_at: string | null;
+}
 
-  async syncNow(): Promise<void> {
-    if (isSyncing) {
-      console.log('[Sync] Already syncing, skipping');
-      return;
-    }
+let syncInProgress = false;
+let syncListeners: ((status: SyncStatus) => void)[] = [];
 
-    if (!isSyncEnabled()) {
-      console.log('[Sync] Sync is disabled (no Supabase credentials)');
-      return;
-    }
+export interface SyncStatus {
+  isRunning: boolean;
+  currentStep: string;
+  progress: {
+    total: number;
+    current: number;
+    table?: string;
+  };
+  lastError: string | null;
+  lastSyncAt: string | null;
+  pendingCount: number;
+}
 
-    try {
-      const networkState = await Network.getNetworkStateAsync();
-      if (!networkState.isConnected || !networkState.isInternetReachable) {
-        console.log('[Sync] No internet connection, skipping sync');
-        return;
-      }
-    } catch (error) {
-      console.warn('[Sync] Could not check network state:', error);
-    }
+let currentStatus: SyncStatus = {
+  isRunning: false,
+  currentStep: 'idle',
+  progress: { total: 0, current: 0 },
+  lastError: null,
+  lastSyncAt: null,
+  pendingCount: 0,
+};
 
-    isSyncing = true;
-    console.log('[Sync] Starting sync...');
+export function subscribeSyncStatus(listener: (status: SyncStatus) => void): () => void {
+  syncListeners.push(listener);
+  listener(currentStatus);
+  return () => {
+    syncListeners = syncListeners.filter(l => l !== listener);
+  };
+}
 
-    try {
-      await this.pushChanges();
-      await this.pullChanges();
-      lastSyncError = null;
-      console.log('[Sync] Sync completed successfully');
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      lastSyncError = errorMsg;
-      console.error('[Sync] Sync failed:', errorMsg);
-    } finally {
-      isSyncing = false;
-    }
-  }
+function updateStatus(updates: Partial<SyncStatus>) {
+  currentStatus = { ...currentStatus, ...updates };
+  syncListeners.forEach(listener => listener(currentStatus));
+}
 
-  private async pushChanges(): Promise<void> {
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-
-    const pending = await this.outboxRepo.getPending(50);
-    console.log(`[Sync] Pushing ${pending.length} pending changes`);
-
-    for (const item of pending) {
-      try {
-        const payload = JSON.parse(item.payload_json);
-
-        if (item.op === 'upsert') {
-          const { error } = await supabase
-            .from(item.table_name)
-            .upsert(payload, { onConflict: 'id' });
-
-          if (error) {
-            throw new Error(error.message);
-          }
-        } else if (item.op === 'delete') {
-          const { error } = await supabase
-            .from(item.table_name)
-            .update({ deleted_at: new Date().toISOString() })
-            .eq('id', item.row_id);
-
-          if (error) {
-            throw new Error(error.message);
-          }
-        }
-
-        await this.outboxRepo.delete(item.id);
-        console.log(`[Sync] Pushed ${item.op} for ${item.table_name}:${item.row_id}`);
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`[Sync] Failed to push ${item.table_name}:${item.row_id}:`, errorMsg);
-        await this.outboxRepo.incrementAttempts(item.id, errorMsg);
-      }
-    }
-  }
-
-  private async pullChanges(): Promise<void> {
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
-
-    const tables: SyncTableName[] = ['product_categories', 'products'];
-
-    for (const tableName of tables) {
-      try {
-        const lastSyncAt = await this.getLastSyncAt(tableName);
-        console.log(`[Sync] Pulling ${tableName} since ${lastSyncAt || 'beginning'}`);
-
-        let query = supabase.from(tableName).select('*');
-
-        if (lastSyncAt) {
-          query = query.gt('updated_at_iso', lastSyncAt);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-          throw new Error(error.message);
-        }
-
-        if (data && data.length > 0) {
-          console.log(`[Sync] Pulled ${data.length} rows from ${tableName}`);
-          await this.applyPulledData(tableName, data);
-        }
-
-        await this.updateLastSyncAt(tableName, new Date().toISOString());
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`[Sync] Failed to pull ${tableName}:`, errorMsg);
-      }
-    }
-  }
-
-  private async applyPulledData(tableName: SyncTableName, rows: any[]): Promise<void> {
-    const db = await this.getDb();
-
-    for (const row of rows) {
-      const hasPending = await this.outboxRepo.hasPendingForRow(tableName, row.id);
-      if (hasPending) {
-        console.log(`[Sync] Skipping ${tableName}:${row.id} (local changes pending)`);
-        continue;
-      }
-
-      try {
-        if (tableName === 'product_categories') {
-          await this.upsertCategory(db, row);
-        } else if (tableName === 'products') {
-          await this.upsertProduct(db, row);
-        }
-      } catch (error) {
-        console.error(`[Sync] Failed to apply ${tableName}:${row.id}:`, error);
-      }
-    }
-  }
-
-  private async upsertCategory(db: any, row: any): Promise<void> {
-    await db.runAsync(
-      `INSERT INTO product_categories 
-       (id, name, sort_order, is_active, created_at, updated_at, business_id, device_id, deleted_at, created_at_iso, updated_at_iso)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name,
-         sort_order = excluded.sort_order,
-         is_active = excluded.is_active,
-         updated_at = excluded.updated_at,
-         business_id = excluded.business_id,
-         device_id = excluded.device_id,
-         deleted_at = excluded.deleted_at,
-         updated_at_iso = excluded.updated_at_iso`,
-      [
-        row.id,
-        row.name,
-        row.sort_order ?? 0,
-        row.deleted_at ? 0 : (row.is_active ?? 1),
-        this.parseTimestamp(row.created_at_iso),
-        this.parseTimestamp(row.updated_at_iso),
-        row.business_id,
-        row.device_id,
-        row.deleted_at,
-        row.created_at_iso,
-        row.updated_at_iso,
-      ]
+export async function getSyncStatus(): Promise<SyncStatus> {
+  try {
+    const db = await getDatabase();
+    const pendingResult = await db.getAllAsync<{ count: number }>(
+      'SELECT COUNT(*) as count FROM sync_outbox'
     );
-  }
+    const pendingCount = pendingResult[0]?.count || 0;
 
-  private async upsertProduct(db: any, row: any): Promise<void> {
-    await db.runAsync(
-      `INSERT INTO products 
-       (id, category_id, name, description, price, price_cents, cost_cents, sku, icon_image_uri, category, is_active, created_at, updated_at, business_id, device_id, deleted_at, created_at_iso, updated_at_iso)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         category_id = excluded.category_id,
-         name = excluded.name,
-         description = excluded.description,
-         price = excluded.price,
-         price_cents = excluded.price_cents,
-         cost_cents = excluded.cost_cents,
-         sku = excluded.sku,
-         icon_image_uri = excluded.icon_image_uri,
-         category = excluded.category,
-         is_active = excluded.is_active,
-         updated_at = excluded.updated_at,
-         business_id = excluded.business_id,
-         device_id = excluded.device_id,
-         deleted_at = excluded.deleted_at,
-         updated_at_iso = excluded.updated_at_iso`,
-      [
-        row.id,
-        row.category_id,
-        row.name,
-        row.description,
-        row.price ?? 0,
-        row.price_cents ?? 0,
-        row.cost_cents,
-        row.sku,
-        row.icon_image_uri,
-        row.category,
-        row.deleted_at ? 0 : (row.is_active ?? 1),
-        this.parseTimestamp(row.created_at_iso),
-        this.parseTimestamp(row.updated_at_iso),
-        row.business_id,
-        row.device_id,
-        row.deleted_at,
-        row.created_at_iso,
-        row.updated_at_iso,
-      ]
+    const stateResult = await db.getAllAsync<SyncStateRow>(
+      "SELECT last_sync_at FROM sync_state ORDER BY last_sync_at DESC LIMIT 1"
     );
-  }
+    const lastSyncAt = stateResult[0]?.last_sync_at || null;
 
-  private parseTimestamp(isoString: string | undefined | null): number {
-    if (!isoString) return Date.now();
-    try {
-      return new Date(isoString).getTime();
-    } catch {
-      return Date.now();
-    }
-  }
-
-  private async getLastSyncAt(tableName: SyncTableName): Promise<string | null> {
-    const db = await this.getDb();
-    const result = await db.getFirstAsync<{ last_sync_at: string | null }>(
-      'SELECT last_sync_at FROM sync_state WHERE table_name = ?',
-      [tableName]
-    );
-    return result?.last_sync_at || null;
-  }
-
-  private async updateLastSyncAt(tableName: SyncTableName, timestamp: string): Promise<void> {
-    const db = await this.getDb();
-    await db.runAsync(
-      'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
-      [timestamp, tableName]
-    );
-  }
-
-  async getSyncStatus(): Promise<{
-    lastSync: string | null;
-    pendingCount: number;
-    lastError: string | null;
-    isSyncing: boolean;
-  }> {
-    const pendingCount = await this.outboxRepo.count();
-    const lastSync = await this.getLastSyncAt('product_categories');
-    
     return {
-      lastSync,
+      ...currentStatus,
       pendingCount,
-      lastError: lastSyncError,
-      isSyncing,
+      lastSyncAt,
     };
+  } catch (error) {
+    console.error('[Sync] Error getting status:', error);
+    return currentStatus;
   }
 }
 
-export const syncService = new SyncService();
+export async function syncNow(reason: string = 'manual'): Promise<{ success: boolean; error?: string }> {
+  if (syncInProgress) {
+    console.log('[Sync] Already in progress, skipping');
+    return { success: false, error: 'Sync already in progress' };
+  }
+
+  console.log(`[Sync] Starting (reason=${reason})`);
+  syncInProgress = true;
+  updateStatus({ isRunning: true, currentStep: 'Preparing...', progress: { total: 0, current: 0 }, lastError: null });
+
+  try {
+    const networkState = await Network.getNetworkStateAsync();
+    if (!networkState.isConnected || !networkState.isInternetReachable) {
+      console.log('[Sync] Offline, skipping');
+      updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Offline' });
+      syncInProgress = false;
+      return { success: false, error: 'No internet connection' };
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      console.log('[Sync] Supabase not configured');
+      updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Supabase not configured' });
+      syncInProgress = false;
+      return { success: false, error: 'Supabase not configured' };
+    }
+
+    const db = await getDatabase();
+    const outboxRows = await db.getAllAsync<SyncOutboxRow>(
+      'SELECT * FROM sync_outbox ORDER BY created_at ASC'
+    );
+    console.log(`[Sync] Pending outbox: ${outboxRows.length}`);
+
+    updateStatus({ progress: { total: outboxRows.length, current: 0 } });
+
+    for (let i = 0; i < outboxRows.length; i++) {
+      const row = outboxRows[i];
+      updateStatus({ 
+        currentStep: `Pushing ${row.table_name} (${i + 1}/${outboxRows.length})`,
+        progress: { total: outboxRows.length, current: i, table: row.table_name }
+      });
+
+      try {
+        const payload = JSON.parse(row.payload_json);
+
+        if (row.op === 'upsert') {
+          const { error } = await supabase
+            .from(row.table_name)
+            .upsert(payload, { onConflict: 'id' });
+
+          if (error) {
+            throw error;
+          }
+
+          console.log(`[Sync] Pushed ${row.table_name} upsert: ${row.row_id}`);
+        } else {
+          const now = new Date().toISOString();
+          const { error } = await supabase
+            .from(row.table_name)
+            .update({ deleted_at: now, updated_at_iso: now })
+            .eq('id', row.row_id);
+
+          if (error) {
+            throw error;
+          }
+
+          console.log(`[Sync] Pushed ${row.table_name} delete: ${row.row_id}`);
+        }
+
+        await db.runAsync('DELETE FROM sync_outbox WHERE id = ?', [row.id]);
+      } catch (error: any) {
+        console.error(`[Sync] Failed to push ${row.table_name}:`, error);
+        await db.runAsync(
+          'UPDATE sync_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?',
+          [error.message || String(error), row.id]
+        );
+      }
+    }
+
+    updateStatus({ currentStep: 'Pulling updates...' });
+
+    const tables = ['product_categories', 'products'];
+    for (const tableName of tables) {
+      try {
+        const stateRows = await db.getAllAsync<SyncStateRow>(
+          'SELECT last_sync_at FROM sync_state WHERE table_name = ?',
+          [tableName]
+        );
+        const lastSyncAt = stateRows[0]?.last_sync_at || '1970-01-01T00:00:00Z';
+
+        console.log(`[Sync] Pulling ${tableName} since ${lastSyncAt}`);
+
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('*')
+          .gt('updated_at_iso', lastSyncAt);
+
+        if (error) {
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          console.log(`[Sync] Received ${data.length} ${tableName} rows`);
+
+          updateStatus({ currentStep: `Applying ${tableName} updates...` });
+
+          for (const remoteRow of data) {
+            const pendingChanges = await db.getAllAsync<SyncOutboxRow>(
+              'SELECT id FROM sync_outbox WHERE table_name = ? AND row_id = ?',
+              [tableName, remoteRow.id]
+            );
+
+            if (pendingChanges.length > 0) {
+              console.log(`[Sync] Skip ${tableName} ${remoteRow.id} - local changes pending`);
+              continue;
+            }
+
+            const columns = Object.keys(remoteRow);
+            const placeholders = columns.map(() => '?').join(', ');
+
+            const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+            const values = columns.map(col => remoteRow[col]);
+
+            await db.runAsync(insertSQL, values);
+          }
+        }
+
+        const now = new Date().toISOString();
+        await db.runAsync(
+          'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
+          [now, tableName]
+        );
+      } catch (error: any) {
+        console.error(`[Sync] Failed to pull ${tableName}:`, error);
+        updateStatus({ lastError: error.message || String(error) });
+      }
+    }
+
+    console.log('[Sync] Completed');
+    const status = await getSyncStatus();
+    updateStatus({ 
+      isRunning: false, 
+      currentStep: 'Completed ✅',
+      lastSyncAt: new Date().toISOString(),
+      pendingCount: status.pendingCount
+    });
+
+    syncInProgress = false;
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Sync] Error:', error);
+    updateStatus({ 
+      isRunning: false, 
+      currentStep: 'idle', 
+      lastError: error.message || String(error) 
+    });
+    syncInProgress = false;
+    return { success: false, error: error.message || String(error) };
+  }
+}
+
+export async function clearOutbox(): Promise<void> {
+  try {
+    const db = await getDatabase();
+    await db.runAsync('DELETE FROM sync_outbox');
+    console.log('[Sync] Outbox cleared');
+  } catch (error) {
+    console.error('[Sync] Error clearing outbox:', error);
+  }
+}

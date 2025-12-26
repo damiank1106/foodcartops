@@ -8,7 +8,7 @@ import * as Network from 'expo-network';
 import { AuthProvider } from '@/lib/contexts/auth.context';
 import { ThemeProvider } from '@/lib/contexts/theme.context';
 import { seedDatabase } from '@/lib/utils/seed';
-import { syncService } from '@/lib/services/sync.service';
+import { syncNow } from '@/lib/services/sync.service';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,7 +38,7 @@ export default function RootLayout() {
       setIsReady(true);
       await SplashScreen.hideAsync();
       
-      syncService.syncNow().catch(err => {
+      syncNow('app_start').catch((err: any) => {
         console.log('[App] Initial sync failed:', err);
       });
     } catch (error) {
@@ -52,7 +52,7 @@ export default function RootLayout() {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
         console.log('[App] App became active, triggering sync');
-        syncService.syncNow().catch(err => {
+        syncNow('app_resume').catch((err: any) => {
           console.log('[App] Resume sync failed:', err);
         });
       }
@@ -69,7 +69,7 @@ export default function RootLayout() {
         const networkState = await Network.getNetworkStateAsync();
         if (networkState.isConnected && networkState.isInternetReachable) {
           console.log('[App] Network became reachable, triggering sync');
-          await syncService.syncNow();
+          await syncNow('network_check');
         }
       } catch (error) {
         console.log('[App] Network check failed:', error);

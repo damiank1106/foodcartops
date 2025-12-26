@@ -13,11 +13,14 @@ export function getSupabaseClient(): SupabaseClient | null {
     return supabaseClient;
   }
 
-  const supabaseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY || 
+                         Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_KEY ||
+                         process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+                         process.env.EXPO_PUBLIC_SUPABASE_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('[Supabase] Missing credentials. Sync is disabled.');
+    console.warn('[Supabase] Missing credentials');
     console.warn('[Supabase] Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your environment.');
     syncDisabled = true;
     return null;
@@ -29,7 +32,7 @@ export function getSupabaseClient(): SupabaseClient | null {
         persistSession: false,
       },
     });
-    console.log('[Supabase] Client initialized successfully');
+    console.log('[Supabase] Client ready');
     return supabaseClient;
   } catch (error) {
     console.error('[Supabase] Failed to initialize client:', error);

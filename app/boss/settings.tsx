@@ -7,7 +7,8 @@ import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
 import { resetDatabase } from '@/lib/database/init';
 import { seedDatabase } from '@/lib/utils/seed';
-import { syncService } from '@/lib/services/sync.service';
+import * as SyncService from '@/lib/services/sync.service';
+import { SyncStatus } from '@/lib/services/sync.service';
 import { isSyncEnabled } from '@/lib/supabase/client';
 
 export default function SettingsScreen() {
@@ -27,12 +28,7 @@ export default function SettingsScreen() {
   const [showSecondConfirmModal, setShowSecondConfirmModal] = useState(false);
   const [pinConfirmValue, setPinConfirmValue] = useState('');
   const [pendingDestructiveAction, setPendingDestructiveAction] = useState<'reset' | 'wipe' | null>(null);
-  const [syncStatus, setSyncStatus] = useState<{
-    lastSync: string | null;
-    pendingCount: number;
-    lastError: string | null;
-    isSyncing: boolean;
-  } | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
 
   const auditRepo = new AuditRepository();
@@ -47,7 +43,7 @@ export default function SettingsScreen() {
 
   const loadSyncStatus = async () => {
     try {
-      const status = await syncService.getSyncStatus();
+      const status = await SyncService.getSyncStatus();
       setSyncStatus(status);
     } catch (error) {
       console.error('[Settings] Failed to load sync status:', error);
@@ -57,7 +53,7 @@ export default function SettingsScreen() {
   const handleManualSync = async () => {
     setIsManualSyncing(true);
     try {
-      await syncService.syncNow();
+      await SyncService.syncNow('manual');
       await loadSyncStatus();
       Alert.alert('Success', 'Sync completed successfully');
     } catch (error) {
@@ -346,12 +342,15 @@ export default function SettingsScreen() {
 
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Data</Text>
-          <TouchableOpacity style={styles.listItem}>
+          <TouchableOpacity 
+            style={styles.listItem}
+            onPress={() => router.push('/backup-data' as any)}
+          >
             <View style={styles.listItemLeft}>
               <Download size={20} color={theme.text} />
               <Text style={[styles.label, { color: theme.text }]}>Backup Data</Text>
             </View>
-            <Text style={[styles.value, { color: theme.textSecondary }]}>Coming Soon</Text>
+            <ChevronRight size={20} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -366,17 +365,17 @@ export default function SettingsScreen() {
                     <Text style={[styles.label, { color: theme.text }]}>Sync Status</Text>
                   </View>
                   <Text style={[styles.value, { color: theme.textSecondary }]}>
-                    {syncStatus?.isSyncing ? 'Syncing...' : syncStatus?.pendingCount ? `${syncStatus.pendingCount} pending` : 'Up to date'}
+                    {syncStatus?.isRunning ? 'Syncing...' : syncStatus?.pendingCount ? `${syncStatus.pendingCount} pending` : 'Up to date'}
                   </Text>
                 </View>
-                {syncStatus?.lastSync && (
+                {syncStatus?.lastSyncAt && (
                   <View style={styles.listItem}>
                     <View style={styles.listItemLeft}>
                       <Info size={20} color={theme.text} />
                       <Text style={[styles.label, { color: theme.text }]}>Last Sync</Text>
                     </View>
                     <Text style={[styles.value, { color: theme.textSecondary, fontSize: 12 }]}>
-                      {new Date(syncStatus.lastSync).toLocaleString()}
+                      {new Date(syncStatus.lastSyncAt).toLocaleString()}
                     </Text>
                   </View>
                 )}

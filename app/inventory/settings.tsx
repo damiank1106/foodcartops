@@ -9,13 +9,15 @@ import {
   Alert,
   Switch,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { Eye, EyeOff, Lock } from 'lucide-react-native';
+import { Eye, EyeOff, Lock, Database, ChevronRight } from 'lucide-react-native';
 
 export default function InventorySettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
   const { changePin } = useAuth();
+  const router = useRouter();
 
   const [currentPin, setCurrentPin] = useState<string>('');
   const [newPin, setNewPin] = useState<string>('');
@@ -168,6 +170,20 @@ export default function InventorySettingsScreen() {
           />
         </View>
       </View>
+
+      <View style={[styles.section, { backgroundColor: theme.card }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Data</Text>
+        <TouchableOpacity 
+          style={styles.dataRow}
+          onPress={() => router.push('/backup-data' as any)}
+        >
+          <View style={styles.dataLeft}>
+            <Database size={20} color={theme.text} />
+            <Text style={[styles.dataLabel, { color: theme.text }]}>Backup Data</Text>
+          </View>
+          <ChevronRight size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -235,5 +251,19 @@ const styles = StyleSheet.create({
   preferenceLabel: {
     fontSize: 16,
     fontWeight: '500' as const,
+  },
+  dataRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  dataLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dataLabel: {
+    fontSize: 16,
   },
 });
