@@ -400,7 +400,7 @@ export default function BossSavedScreen() {
       </Modal>
 
       <Modal visible={showSettlementDetailsModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <View style={styles.settlementDetailsOverlay}>
           <View style={[styles.settlementDetailsModal, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>Settlement Details</Text>
@@ -778,10 +778,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
   },
+  settlementDetailsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
   settlementDetailsModal: {
-    width: '96%',
-    maxWidth: 800,
-    maxHeight: '85%',
+    width: '98%',
+    maxWidth: 900,
+    maxHeight: '90%',
     borderRadius: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
