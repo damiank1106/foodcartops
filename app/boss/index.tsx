@@ -98,6 +98,9 @@ export default function BossDashboard() {
         return { payment_method: method, revenue_cents: revenue };
       });
 
+      const activeShifts = await shiftRepo.getActiveShifts();
+      const lastShift = await shiftRepo.getLastCompletedShift();
+
       return {
         today_sales: todaySales.length,
         today_revenue_cents: todayRevenueCents,
@@ -112,6 +115,10 @@ export default function BossDashboard() {
         revenue_by_payment: revenueByPayment,
         unsettled_shifts: unsettledShifts,
         cash_differences: cashDifferences,
+        today_sales_list: todaySales,
+        today_expenses_list: todayExpenses,
+        active_shifts: activeShifts,
+        last_shift: lastShift,
       };
     },
     refetchInterval: 10000,
@@ -1605,10 +1612,37 @@ export default function BossDashboard() {
             <ScrollView style={styles.overviewModalBody} contentContainerStyle={styles.overviewModalBodyContent}>
               {overviewModalType === 'sales' && (
                 <View>
-                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16 }]}>
+                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, marginBottom: 16 }]}>
+                    All sales recorded today across all carts and users. This includes items sold and their prices.
+                  </Text>
+                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16, fontWeight: '700' }]}>
                     Total Sales Today: ₱{((stats?.today_revenue_cents || 0) / 100).toFixed(2)}
                   </Text>
-                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Sales by Payment Method:</Text>
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Items Sold:</Text>
+                  {stats?.today_sales_list && stats.today_sales_list.length > 0 ? (
+                    stats.today_sales_list.map((sale) => (
+                      <View key={sale.id} style={[styles.overviewModalSaleCard, { backgroundColor: theme.background, marginBottom: 12, padding: 12, borderRadius: 8 }]}>
+                        <View style={styles.overviewModalRow}>
+                          <Text style={[styles.overviewModalLabel, { color: theme.text, fontWeight: '600' }]}>{sale.cart_name}</Text>
+                          <Text style={[styles.overviewModalValue, { color: theme.primary, fontWeight: '600' }]}>₱{(sale.total_cents / 100).toFixed(2)}</Text>
+                        </View>
+                        {sale.items.map((item: any) => (
+                          <View key={item.id} style={[styles.overviewModalRow, { paddingVertical: 4 }]}>
+                            <Text style={[styles.overviewModalLabel, { color: theme.textSecondary, fontSize: 14 }]}>
+                              {item.product_name} x{item.quantity}
+                            </Text>
+                            <Text style={[styles.overviewModalValue, { color: theme.textSecondary, fontSize: 14 }]}>₱{(item.line_total_cents / 100).toFixed(2)}</Text>
+                          </View>
+                        ))}
+                        <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12, marginTop: 4 }]}>
+                          {format(sale.created_at, 'h:mm a')} • {sale.worker_name}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No sales today</Text>
+                  )}
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text, marginTop: 16 }]}>By Payment Method:</Text>
                   {stats?.revenue_by_payment.map((item, index) => (
                     <View key={index} style={styles.overviewModalRow}>
                       <Text style={[styles.overviewModalLabel, { color: theme.textSecondary }]}>{item.payment_method}</Text>
@@ -1620,12 +1654,28 @@ export default function BossDashboard() {
 
               {overviewModalType === 'expenses' && (
                 <View>
-                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16 }]}>
+                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, marginBottom: 16 }]}>
+                    All approved expenses from the Cash Drawer recorded today. This includes expenses submitted by users that have been approved.
+                  </Text>
+                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16, fontWeight: '700' }]}>
                     Total Expenses Today: ₱{((stats?.today_expenses_cents || 0) / 100).toFixed(2)}
                   </Text>
-                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>
-                    This includes all approved expenses from the Cash Drawer for today.
-                  </Text>
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Expense List:</Text>
+                  {stats?.today_expenses_list && stats.today_expenses_list.length > 0 ? (
+                    stats.today_expenses_list.map((expense: any) => (
+                      <View key={expense.id} style={[styles.overviewModalRow, { paddingVertical: 8 }]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.overviewModalLabel, { color: theme.text }]}>{expense.name}</Text>
+                          <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12 }]}>
+                            {format(expense.created_at, 'h:mm a')}
+                          </Text>
+                        </View>
+                        <Text style={[styles.overviewModalValue, { color: theme.error }]}>₱{(expense.amount_cents / 100).toFixed(2)}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No expenses today</Text>
+                  )}
                 </View>
               )}
 
@@ -1656,30 +1706,81 @@ export default function BossDashboard() {
 
               {overviewModalType === 'transactions' && (
                 <View>
-                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16 }]}>
+                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, marginBottom: 16 }]}>
+                    Individual sales transactions recorded today. Each transaction represents a completed sale at a cart.
+                  </Text>
+                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16, fontWeight: '700' }]}>
                     Total Transactions Today: {stats?.today_sales || 0}
                   </Text>
-                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>
-                    This represents the number of individual sales recorded today across all carts.
-                  </Text>
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Transaction List:</Text>
+                  {stats?.today_sales_list && stats.today_sales_list.length > 0 ? (
+                    stats.today_sales_list.map((sale) => (
+                      <View key={sale.id} style={[styles.overviewModalRow, { paddingVertical: 8 }]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.overviewModalLabel, { color: theme.text }]}>{sale.cart_name}</Text>
+                          <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12 }]}>
+                            {format(sale.created_at, 'h:mm a')} • {sale.worker_name}
+                          </Text>
+                        </View>
+                        <Text style={[styles.overviewModalValue, { color: theme.primary, fontWeight: '600' }]}>₱{(sale.total_cents / 100).toFixed(2)}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No transactions today</Text>
+                  )}
                 </View>
               )}
 
               {overviewModalType === 'active' && (
                 <View>
+                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, marginBottom: 16 }]}>
+                    Active status is determined by users who are currently clocked in with an active shift. Last active info shows the most recent completed shift.
+                  </Text>
                   {stats?.active_workers && stats.active_workers > 0 ? (
                     <>
-                      <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 8 }]}>
+                      <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16, fontWeight: '700' }]}>
                         Active Users: {stats.active_workers}
                       </Text>
-                      <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>
-                        Users currently clocked in and working.
-                      </Text>
+                      <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Currently Active:</Text>
+                      {stats?.active_shifts && stats.active_shifts.length > 0 ? (
+                        stats.active_shifts.map((shift: any) => (
+                          <View key={shift.id} style={[styles.overviewModalRow, { paddingVertical: 8 }]}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.overviewModalLabel, { color: theme.text }]}>{shift.worker_name}</Text>
+                              <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12 }]}>
+                                Clocked in: {format(shift.clock_in, 'h:mm a')}
+                              </Text>
+                            </View>
+                          </View>
+                        ))
+                      ) : null}
                     </>
                   ) : (
-                    <Text style={[styles.overviewModalText, { color: theme.textSecondary }]}>
-                      0 active users
-                    </Text>
+                    <>
+                      <Text style={[styles.overviewModalText, { color: theme.textSecondary, marginBottom: 16 }]}>
+                        0 active users
+                      </Text>
+                      {stats?.last_shift ? (
+                        <>
+                          <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Last Active User:</Text>
+                          <View style={[styles.overviewModalRow, { paddingVertical: 8 }]}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.overviewModalLabel, { color: theme.text }]}>{stats.last_shift.worker_name}</Text>
+                              <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12 }]}>
+                                Check-in: {format(stats.last_shift.clock_in, 'MMM d, h:mm a')}
+                              </Text>
+                              {stats.last_shift.clock_out && (
+                                <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12 }]}>
+                                  Check-out: {format(stats.last_shift.clock_out, 'MMM d, h:mm a')}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        </>
+                      ) : (
+                        <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No recent shift activity</Text>
+                      )}
+                    </>
                   )}
                 </View>
               )}
@@ -2410,6 +2511,9 @@ const styles = StyleSheet.create({
   overviewModalInfo: {
     fontSize: 13,
     fontStyle: 'italic',
+  },
+  overviewModalSaleCard: {
+    marginBottom: 12,
   },
 
 });

@@ -197,6 +197,21 @@ export class ShiftRepository extends BaseRepository {
     return shift || null;
   }
 
+  async getActiveShifts(): Promise<(WorkerShift & { worker_name: string })[]> {
+    const db = await this.getDb();
+    return await db.getAllAsync<WorkerShift & { worker_name: string }>(
+      "SELECT ws.*, u.name as worker_name FROM worker_shifts ws JOIN users u ON ws.worker_id = u.id WHERE ws.status = 'active' ORDER BY ws.created_at DESC"
+    );
+  }
+
+  async getLastCompletedShift(): Promise<(WorkerShift & { worker_name: string }) | null> {
+    const db = await this.getDb();
+    const shift = await db.getFirstAsync<WorkerShift & { worker_name: string }>(
+      "SELECT ws.*, u.name as worker_name FROM worker_shifts ws JOIN users u ON ws.worker_id = u.id WHERE ws.status = 'ended' AND ws.clock_out IS NOT NULL ORDER BY ws.clock_out DESC LIMIT 1"
+    );
+    return shift || null;
+  }
+
   async getAssignedShifts(worker_id: string): Promise<WorkerShift[]> {
     const db = await this.getDb();
     return await db.getAllAsync<WorkerShift>(

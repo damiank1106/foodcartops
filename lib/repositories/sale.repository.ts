@@ -339,4 +339,28 @@ export class SaleRepository extends BaseRepository {
     await db.runAsync('DELETE FROM sales WHERE id = ?', [saleId]);
     console.log('[SaleRepo] Sale deleted:', saleId);
   }
+
+  async deleteSalesForDay(date: Date): Promise<number> {
+    const db = await this.getDb();
+    const startOfDayTime = startOfDay(date).getTime();
+    const endOfDayTime = endOfDay(date).getTime();
+
+    const salesToDelete = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM sales WHERE created_at >= ? AND created_at <= ?',
+      [startOfDayTime, endOfDayTime]
+    );
+
+    for (const sale of salesToDelete) {
+      await db.runAsync('DELETE FROM sale_items WHERE sale_id = ?', [sale.id]);
+      await db.runAsync('DELETE FROM payments WHERE sale_id = ?', [sale.id]);
+    }
+
+    await db.runAsync(
+      'DELETE FROM sales WHERE created_at >= ? AND created_at <= ?',
+      [startOfDayTime, endOfDayTime]
+    );
+
+    console.log('[SaleRepo] Deleted', salesToDelete.length, 'sales for date:', date);
+    return salesToDelete.length;
+  }
 }
