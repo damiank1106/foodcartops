@@ -303,20 +303,20 @@ export default function InventoryScreen() {
                         onPress={() => handleQuantityChange(item.id, -1)}
                         disabled={displayQty === 0}
                       >
-                        <Minus size={14} color={displayQty === 0 ? theme.textSecondary : theme.error} />
+                        <Minus size={18} color={displayQty === 0 ? theme.textSecondary : theme.error} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.qtyButton, { backgroundColor: theme.success + '20' }]}
                         onPress={() => handleQuantityChange(item.id, 1)}
                       >
-                        <Plus size={14} color={theme.success} />
+                        <Plus size={18} color={theme.success} />
                       </TouchableOpacity>
                       {isEditing && (
                         <TouchableOpacity
                           style={[styles.qtyButton, { backgroundColor: theme.primary }]}
                           onPress={() => handleSaveQuantity(item.id)}
                         >
-                          <Save size={14} color="#fff" />
+                          <Save size={18} color="#fff" />
                         </TouchableOpacity>
                       )}
                     </View>
@@ -610,9 +610,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   qtyButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },

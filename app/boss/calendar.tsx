@@ -127,42 +127,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     },
   });
 
-  const deleteDaySalesMutation = useMutation({
-    mutationFn: async (dateStr: string) => {
-      if (!user?.id) throw new Error('No user');
-      const dateObj = new Date(dateStr);
-      const { SaleRepository } = await import('@/lib/repositories/sale.repository');
-      const saleRepo = new SaleRepository();
-      const deletedCount = await saleRepo.deleteSalesForDay(dateObj);
-      
-      const { AuditRepository } = await import('@/lib/repositories/audit.repository');
-      const auditRepo = new AuditRepository();
-      await auditRepo.log({
-        user_id: user.id,
-        entity_type: 'sale',
-        entity_id: `calendar_day_sales_reset_${dateStr}`,
-        action: 'calendar_day_sales_reset',
-        new_data: { date: dateStr, sales_deleted_count: deletedCount, role: user.role },
-      });
 
-      return { deletedCount, dateStr };
-    },
-    onSuccess: ({ deletedCount, dateStr }) => {
-      queryClient.invalidateQueries({ queryKey: ['calendar-analytics'] });
-      queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
-      
-      const today = format(new Date(), 'yyyy-MM-dd');
-      if (dateStr === today) {
-        console.log('[Calendar] Today data reset - Overview will refresh');
-      }
-      
-      Alert.alert('Success', `Sales reset for this day (${deletedCount} sale${deletedCount !== 1 ? 's' : ''} deleted)`);
-    },
-    onError: (error: any) => {
-      console.error('[Calendar] Delete error:', error);
-      Alert.alert('Error', `Failed to delete: ${error?.message || error}`);
-    },
-  });
 
   const resetOtherExpenseForm = () => {
     setEditingOtherExpense(null);
@@ -227,31 +192,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     ]);
   };
 
-  const handleDeleteDaySales = () => {
-    if (!analytics) return;
-    if (deleteDaySalesMutation.isPending) return;
 
-    const dateStr = format(analytics.date_range.start, 'yyyy-MM-dd');
-    const formattedDate = format(analytics.date_range.start, 'MMM d, yyyy');
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const isDeletingToday = dateStr === today;
-
-    Alert.alert(
-      'Reset All Sales',
-      `Reset all sales for ${formattedDate}? This will delete all sales records, sale items, and payments for this day.${isDeletingToday ? ' Today\'s Overview will also be reset.' : ''} This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            console.log('[Calendar] Deleting sales for:', dateStr);
-            deleteDaySalesMutation.mutate(dateStr);
-          },
-        },
-      ]
-    );
-  };
 
   const navigatePeriod = (direction: 'prev' | 'next') => {
     if (direction === 'prev') {
@@ -922,23 +863,6 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No other expenses</Text>
               )}
             </View>
-
-            {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && periodType === 'day' && (
-              <TouchableOpacity
-                style={[styles.deleteDataButtonLarge, { backgroundColor: theme.error }]}
-                onPress={handleDeleteDaySales}
-                disabled={deleteDaySalesMutation.isPending}
-              >
-                {deleteDaySalesMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Trash2 size={20} color="#fff" />
-                    <Text style={styles.deleteDataButtonLargeText}>Delete Data</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
           </>
         )}
 

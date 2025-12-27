@@ -363,10 +363,10 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {user?.role === 'developer' && (
+        {(user?.role === 'boss' || user?.role === 'developer') && (
           <View style={[styles.section, { backgroundColor: theme.card }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Developer Actions</Text>
-            {syncEnabled && (
+            {user?.role === 'developer' && syncEnabled && (
               <>
                 <View style={styles.listItem}>
                   <View style={styles.listItemLeft}>
@@ -430,16 +430,18 @@ export default function SettingsScreen() {
               </View>
               <ChevronRight size={20} color={theme.textSecondary} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.listItem}
-              onPress={() => router.push('/boss/debug' as any)}
-            >
-              <View style={styles.listItemLeft}>
-                <Database size={20} color={theme.text} />
-                <Text style={[styles.label, { color: theme.text }]}>Database Debug</Text>
-              </View>
-              <ChevronRight size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
+            {user?.role === 'developer' && (
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => router.push('/boss/debug' as any)}
+              >
+                <View style={styles.listItemLeft}>
+                  <Database size={20} color={theme.text} />
+                  <Text style={[styles.label, { color: theme.text }]}>Database Debug</Text>
+                </View>
+                <ChevronRight size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
