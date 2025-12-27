@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LogOut, Moon, Sun, User as UserIcon, Key, ChevronRight, X, Info, ExternalLink } from 'lucide-react-native';
+import { LogOut, Moon, Sun, User as UserIcon, Key, ChevronRight, X, Info, ExternalLink, Edit, Database } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import { UserRepository } from '@/lib/repositories';
 
 export default function WorkerProfileScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
-  const { user, logout, changePin } = useAuth();
+  const { user, logout, changePin, updateUser } = useAuth();
   const router = useRouter();
   const [showPinModal, setShowPinModal] = useState(false);
   const [oldPin, setOldPin] = useState('');
@@ -15,6 +16,9 @@ export default function WorkerProfileScreen() {
   const [confirmPin, setConfirmPin] = useState('');
   const [isChanging, setIsChanging] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -74,6 +78,35 @@ export default function WorkerProfileScreen() {
     }
   };
 
+  const handleChangeName = async () => {
+    if (!newName.trim()) {
+      Alert.alert('Error', 'Please enter a name');
+      return;
+    }
+
+    if (newName.trim() === user?.name) {
+      Alert.alert('Error', 'Please enter a different name');
+      return;
+    }
+
+    setIsUpdatingName(true);
+    try {
+      const userRepo = new UserRepository();
+      if (user?.id) {
+        await userRepo.updateWithAudit(user.id, { name: newName.trim() }, user.id);
+        await updateUser();
+        Alert.alert('Success', 'Name updated successfully.');
+        setShowNameModal(false);
+        setNewName('');
+      }
+    } catch (error) {
+      console.error('[Profile] Failed to update name:', error);
+      Alert.alert('Error', 'Failed to update name');
+    } finally {
+      setIsUpdatingName(false);
+    }
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
@@ -82,6 +115,20 @@ export default function WorkerProfileScreen() {
             <UserIcon size={32} color={theme.primary} />
           </View>
           <Text style={[styles.name, { color: theme.text }]}>{user?.name || 'USER'}</Text>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
+          <TouchableOpacity style={styles.listItem} onPress={() => {
+            setNewName(user?.name || '');
+            setShowNameModal(true);
+          }}>
+            <View style={styles.listItemLeft}>
+              <Edit size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Name</Text>
+            </View>
+            <Text style={[styles.value, { color: theme.textSecondary }]}>{user?.name}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.card }]}>
@@ -121,6 +168,19 @@ export default function WorkerProfileScreen() {
             <View style={styles.listItemLeft}>
               <ExternalLink size={20} color={theme.text} />
               <Text style={[styles.label, { color: theme.text }]}>Privacy Policy</Text>
+            </View>
+            <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>          <Text style={[styles.sectionTitle, { color: theme.text }]}>Data</Text>
+          <TouchableOpacity 
+            style={styles.listItem}
+            onPress={() => router.push('/backup-data' as any)}
+          >
+            <View style={styles.listItemLeft}>
+              <Database size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Backup Data</Text>
             </View>
             <ChevronRight size={20} color={theme.textSecondary} />
           </TouchableOpacity>
@@ -196,6 +256,49 @@ export default function WorkerProfileScreen() {
                   <ActivityIndicator color="#FFF" />
                 ) : (
                   <Text style={styles.modalButtonText}>Change PIN</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showNameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNameModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Change Name</Text>
+              <TouchableOpacity onPress={() => setShowNameModal(false)}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>New Name</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="Enter new name"
+                placeholderTextColor={theme.textSecondary}
+                autoCapitalize="words"
+                autoFocus
+              />
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={handleChangeName}
+                disabled={isUpdatingName}
+              >
+                {isUpdatingName ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.modalButtonText}>Update Name</Text>
                 )}
               </TouchableOpacity>
             </View>

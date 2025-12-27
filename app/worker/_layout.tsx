@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { ShoppingCart, Clock, User, Receipt, Archive, Settings } from 'lucide-react-native';
+import { ShoppingCart, Clock, User, Receipt, Archive } from 'lucide-react-native';
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
@@ -73,13 +73,6 @@ export default function WorkerLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <User size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
         }}
       />
     </Tabs>

@@ -26,6 +26,7 @@ export default function BackupDataScreen() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [currentKey, setCurrentKey] = useState('');
   const [editMode, setEditMode] = useState(false);
+  const canEditCredentials = user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer';
   const [showUrl, setShowUrl] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [editedUrl, setEditedUrl] = useState('');
@@ -199,15 +200,17 @@ export default function BackupDataScreen() {
         <View style={[styles.statusCard, { backgroundColor: theme.card }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>Credentials</Text>
-            <TouchableOpacity onPress={() => {
-              setEditMode(!editMode);
-              if (!editMode) {
-                setEditedUrl(currentUrl);
-                setEditedKey(currentKey);
-              }
-            }}>
-              <Edit3 size={20} color={theme.primary} />
-            </TouchableOpacity>
+            {canEditCredentials && (
+              <TouchableOpacity onPress={() => {
+                setEditMode(!editMode);
+                if (!editMode) {
+                  setEditedUrl(currentUrl);
+                  setEditedKey(currentKey);
+                }
+              }}>
+                <Edit3 size={20} color={theme.primary} />
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.credentialRow}>
@@ -218,7 +221,7 @@ export default function BackupDataScreen() {
                   style={[styles.credentialInput, { color: theme.text, borderColor: theme.border }]}
                   value={editMode ? editedUrl : currentUrl}
                   onChangeText={setEditedUrl}
-                  editable={editMode}
+                  editable={canEditCredentials && editMode}
                   secureTextEntry={!showUrl}
                   placeholder="https://xxx.supabase.co"
                   placeholderTextColor={theme.textSecondary}
@@ -243,7 +246,7 @@ export default function BackupDataScreen() {
                   style={[styles.credentialInput, { color: theme.text, borderColor: theme.border }]}
                   value={editMode ? editedKey : currentKey}
                   onChangeText={setEditedKey}
-                  editable={editMode}
+                  editable={canEditCredentials && editMode}
                   secureTextEntry={!showKey}
                   placeholder="eyJ..."
                   placeholderTextColor={theme.textSecondary}

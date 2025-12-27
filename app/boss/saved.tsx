@@ -51,6 +51,8 @@ export default function BossSavedScreen() {
   const [editNotes, setEditNotes] = useState('');
   const [editSeverity, setEditSeverity] = useState<BossSavedItemSeverity>('MEDIUM');
   const [editStatus, setEditStatus] = useState<BossSavedItemStatus>('OPEN');
+  const [showSettlementDetailsModal, setShowSettlementDetailsModal] = useState(false);
+  const [settlementDetailsPayload, setSettlementDetailsPayload] = useState<any>(null);
 
   const loadItems = useCallback(async () => {
     if (!user) return;
@@ -144,15 +146,41 @@ export default function BossSavedScreen() {
     }
   }, [user, selectedItem, editTitle, editNotes, editSeverity, editStatus, loadItems]);
 
-  const handleOpenLinkedEntity = useCallback((item: BossSavedItemWithDetails) => {
+  const handleOpenLinkedEntity = useCallback(async (item: BossSavedItemWithDetails) => {
     if (!item.linked_entity_type || !item.linked_entity_id) return;
 
     switch (item.linked_entity_type) {
       case 'shift':
-        router.push(`/settlement/${item.linked_entity_id}` as any);
+        const repo = new (await import('@/lib/repositories/saved-record.repository')).SavedRecordRepository();
+        const savedRecord = await repo.findById(item.id);
+        if (savedRecord && savedRecord.payload_json) {
+          try {
+            const payload = JSON.parse(savedRecord.payload_json);
+            setSettlementDetailsPayload(payload);
+            setShowSettlementDetailsModal(true);
+          } catch (error) {
+            console.error('[BossSaved] Failed to parse settlement payload:', error);
+            Alert.alert('Error', 'Failed to load settlement details');
+          }
+        } else {
+          router.push(`/settlement/${item.linked_entity_id}` as any);
+        }
         break;
       case 'settlement':
-        router.push(`/settlement/${item.linked_entity_id}` as any);
+        const repoSettlement = new (await import('@/lib/repositories/saved-record.repository')).SavedRecordRepository();
+        const savedRecordSettlement = await repoSettlement.findById(item.id);
+        if (savedRecordSettlement && savedRecordSettlement.payload_json) {
+          try {
+            const payload = JSON.parse(savedRecordSettlement.payload_json);
+            setSettlementDetailsPayload(payload);
+            setShowSettlementDetailsModal(true);
+          } catch (error) {
+            console.error('[BossSaved] Failed to parse settlement payload:', error);
+            Alert.alert('Error', 'Failed to load settlement details');
+          }
+        } else {
+          router.push(`/settlement/${item.linked_entity_id}` as any);
+        }
         break;
       case 'expense':
         router.push('/boss/expenses' as any);
@@ -367,6 +395,73 @@ export default function BossSavedScreen() {
             >
               <Text style={styles.applyButtonText}>Apply Filters</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showSettlementDetailsModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.settlementDetailsModal, { backgroundColor: theme.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Settlement Details</Text>
+              <TouchableOpacity onPress={() => setShowSettlementDetailsModal(false)}>
+                <X size={24} color={theme.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.settlementDetailsScroll} showsVerticalScrollIndicator>
+              {settlementDetailsPayload && (
+                <>
+                  <View style={styles.settlementSection}>
+                    <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Shift Information</Text>
+                    <View style={styles.settlementRow}>
+                      <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Cart:</Text>
+                      <Text style={[styles.settlementValue, { color: theme.text }]}>{settlementDetailsPayload.cart_name}</Text>
+                    </View>
+                    <View style={styles.settlementRow}>
+                      <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Seller:</Text>
+                      <Text style={[styles.settlementValue, { color: theme.text }]}>{settlementDetailsPayload.seller_name}</Text>
+                    </View>
+                    <View style={styles.settlementRow}>
+                      <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Date:</Text>
+                      <Text style={[styles.settlementValue, { color: theme.text }]}>{settlementDetailsPayload.date}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.settlementSection}>
+                    <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Sales Summary</Text>
+                    <View style={styles.settlementRow}>
+                      <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Gross Sales:</Text>
+                      <Text style={[styles.settlementValue, { color: theme.text, fontWeight: '600' }]}>₱{settlementDetailsPayload.sales_summary?.total || '0.00'}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.settlementSection}>
+                    <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Products Sold</Text>
+                    {settlementDetailsPayload.products_sold && settlementDetailsPayload.products_sold.length > 0 ? (
+                      settlementDetailsPayload.products_sold.map((product: any, index: number) => (
+                        <View key={index} style={styles.productSoldRow}>
+                          <View style={styles.productSoldLeft}>
+                            <Text style={[styles.productSoldName, { color: theme.text }]}>{product.name}</Text>
+                            <Text style={[styles.productSoldQty, { color: theme.textSecondary }]}>Qty: {product.qty}</Text>
+                          </View>
+                          <Text style={[styles.productSoldPrice, { color: theme.text }]}>₱{product.price}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No products sold</Text>
+                    )}
+                  </View>
+
+                  {settlementDetailsPayload.notes && (
+                    <View style={styles.settlementSection}>
+                      <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Notes</Text>
+                      <Text style={[styles.settlementNotes, { color: theme.textSecondary }]}>{settlementDetailsPayload.notes}</Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -682,5 +777,69 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  settlementDetailsModal: {
+    width: '90%',
+    maxWidth: 600,
+    maxHeight: '85%',
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  settlementDetailsScroll: {
+    padding: 20,
+  },
+  settlementSection: {
+    marginBottom: 24,
+  },
+  settlementSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginBottom: 12,
+  },
+  settlementRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  settlementLabel: {
+    fontSize: 14,
+  },
+  settlementValue: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+  },
+  productSoldRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  productSoldLeft: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  productSoldName: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    marginBottom: 4,
+  },
+  productSoldQty: {
+    fontSize: 13,
+  },
+  productSoldPrice: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    minWidth: 80,
+    textAlign: 'right',
+  },
+  settlementNotes: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

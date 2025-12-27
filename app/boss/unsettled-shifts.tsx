@@ -1,21 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter, Stack } from 'expo-router';
-import { Clock, ChevronRight, Bookmark, ArrowLeft } from 'lucide-react-native';
+import { Clock, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
-import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
 
 export default function UnsettledShiftsScreen() {
   const { theme } = useTheme();
   const { user, assignedCartIds, isBoss, isDeveloper } = useAuth();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const settlementRepo = new SettlementRepository();
-  const savedItemsRepo = new BossSavedItemsRepository();
 
   const handleBackToExceptions = () => {
     router.replace('/boss' as any);
@@ -32,32 +29,7 @@ export default function UnsettledShiftsScreen() {
     enabled: !!(isBoss || isDeveloper),
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async ({ shiftId, workerName, cartName }: { shiftId: string; workerName: string; cartName: string }) => {
-      if (!user) throw new Error('Not authenticated');
-      const existing = await savedItemsRepo.findByLinkedEntity('shift', shiftId);
-      if (existing) {
-        Alert.alert('Already Saved', 'This shift is already in your saved items');
-        return;
-      }
-      await savedItemsRepo.create({
-        type: 'EXCEPTION',
-        title: `Unsettled Shift: ${workerName}`,
-        notes: `Cart: ${cartName}. Shift needs settlement.`,
-        severity: 'MEDIUM',
-        linked_entity_type: 'shift',
-        linked_entity_id: shiftId,
-        created_by_user_id: user.id,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-items'] });
-      Alert.alert('Success', 'Shift saved to your Saved tab');
-    },
-    onError: () => {
-      Alert.alert('Error', 'Failed to save shift');
-    },
-  });
+
 
   const handleShiftPress = (shiftId: string) => {
     router.push(`/settlement/${shiftId}` as any);
@@ -106,34 +78,19 @@ export default function UnsettledShiftsScreen() {
             <TouchableOpacity
               key={shift.shift_id}
               style={[styles.shiftCard, { backgroundColor: theme.card }]}
+              onPress={() => handleShiftPress(shift.shift_id)}
             >
-              <TouchableOpacity
-                style={styles.mainContent}
-                onPress={() => handleShiftPress(shift.shift_id)}
-              >
-                <View style={[styles.iconContainer, { backgroundColor: theme.warning + '20' }]}>
-                  <Clock size={24} color={theme.warning} />
-                </View>
-                <View style={styles.shiftInfo}>
-                  <Text style={[styles.workerName, { color: theme.text }]}>{shift.worker_name}</Text>
-                  <Text style={[styles.cartName, { color: theme.textSecondary }]}>{shift.cart_name}</Text>
-                  <Text style={[styles.shiftTime, { color: theme.textSecondary }]}>
-                    Ended: {format(shift.clock_out, 'MMM d, yyyy • h:mm a')}
-                  </Text>
-                </View>
-                <ChevronRight size={20} color={theme.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveButton, { backgroundColor: theme.primary + '20' }]}
-                onPress={() => saveMutation.mutate({ 
-                  shiftId: shift.shift_id, 
-                  workerName: shift.worker_name,
-                  cartName: shift.cart_name 
-                })}
-                disabled={saveMutation.isPending}
-              >
-                <Bookmark size={18} color={theme.primary} />
-              </TouchableOpacity>
+              <View style={[styles.iconContainer, { backgroundColor: theme.warning + '20' }]}>
+                <Clock size={24} color={theme.warning} />
+              </View>
+              <View style={styles.shiftInfo}>
+                <Text style={[styles.workerName, { color: theme.text }]}>{shift.worker_name}</Text>
+                <Text style={[styles.cartName, { color: theme.textSecondary }]}>{shift.cart_name}</Text>
+                <Text style={[styles.shiftTime, { color: theme.textSecondary }]}>
+                  Ended: {format(shift.clock_out, 'MMM d, yyyy • h:mm a')}
+                </Text>
+              </View>
+              <ChevronRight size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           ))
         ) : (
@@ -181,19 +138,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
-  },
-  mainContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  saveButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
   },
   iconContainer: {
     width: 48,
