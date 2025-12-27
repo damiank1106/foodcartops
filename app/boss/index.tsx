@@ -534,7 +534,12 @@ export default function BossDashboard() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScrollContent}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.tabsScrollContent}
+          decelerationRate="fast"
+        >
           <TouchableOpacity
             style={styles.tab}
             onPress={() => setSelectedTab('overview')}
@@ -1388,92 +1393,70 @@ export default function BossDashboard() {
                     <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
                       <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Shift Information</Text>
                       <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Shift ID</Text>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Cart:</Text>
                         <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.shift_id || payload.shiftId || '—'}
+                          {payload.cart_name || '—'}
                         </Text>
                       </View>
                       <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Cart</Text>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Seller:</Text>
                         <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.cart_name || payload.cartName || '—'}
+                          {payload.seller_name || 'Operation Manager'}
                         </Text>
                       </View>
                       <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Worker</Text>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Date:</Text>
                         <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.worker_name || payload.workerName || '—'}
+                          {payload.date || '—'}
                         </Text>
                       </View>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Date</Text>
-                        <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.settlement_day || payload.settlementDay || (payload.clock_in ? format(new Date(payload.clock_in), 'MMM d, yyyy') : '—')}
-                        </Text>
-                      </View>
-                      {payload.clock_in && (
-                        <View style={styles.settlementRow}>
-                          <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Clock In</Text>
-                          <Text style={[styles.settlementValue, { color: theme.text }]}>
-                            {format(new Date(payload.clock_in), 'h:mm a')}
-                          </Text>
-                        </View>
-                      )}
-                      {payload.clock_out && (
-                        <View style={styles.settlementRow}>
-                          <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Clock Out</Text>
-                          <Text style={[styles.settlementValue, { color: theme.text }]}>
-                            {format(new Date(payload.clock_out), 'h:mm a')}
-                          </Text>
-                        </View>
-                      )}
                     </View>
 
                     <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
                       <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Sales Summary</Text>
                       <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Gross Sales</Text>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>By Payment Method:</Text>
+                      </View>
+                      <View style={styles.settlementRow}>
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary, paddingLeft: 12 }]}>Cash:</Text>
                         <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.total_sales_cents !== undefined ? `₱${(payload.total_sales_cents / 100).toFixed(2)}` : '—'}
+                          ₱{payload.sales_summary?.cash || '0.00'}
                         </Text>
                       </View>
                       <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Expenses</Text>
-                        <Text style={[styles.settlementValue, { color: theme.error }]}>
-                          {payload.approved_expenses_cash_drawer_cents !== undefined || payload.expenses_cents !== undefined
-                            ? `₱${((payload.approved_expenses_cash_drawer_cents || payload.expenses_cents || 0) / 100).toFixed(2)}`
-                            : '—'}
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary, paddingLeft: 12 }]}>GCash:</Text>
+                        <Text style={[styles.settlementValue, { color: theme.text }]}>
+                          ₱{payload.sales_summary?.gcash || '0.00'}
                         </Text>
                       </View>
                       <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.text, fontWeight: '600' }]}>Daily Net Sales</Text>
-                        <Text style={[styles.settlementValue, { color: theme.primary, fontWeight: '700' }]}>
-                          {payload.daily_net_sales_cents !== undefined || payload.dailyNetSalesCents !== undefined
-                            ? `₱${((payload.daily_net_sales_cents || payload.dailyNetSalesCents || 0) / 100).toFixed(2)}`
-                            : '—'}
+                        <Text style={[styles.settlementLabel, { color: theme.textSecondary, paddingLeft: 12 }]}>Card:</Text>
+                        <Text style={[styles.settlementValue, { color: theme.text }]}>
+                          ₱{payload.sales_summary?.card || '0.00'}
+                        </Text>
+                      </View>
+                      <View style={[styles.settlementRow, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.border }]}>
+                        <Text style={[styles.settlementLabel, { color: theme.text, fontWeight: '600' }]}>Gross Sales:</Text>
+                        <Text style={[styles.settlementValue, { color: theme.primary, fontWeight: '700', fontSize: 18 }]}>
+                          ₱{payload.sales_summary?.total || '0.00'}
                         </Text>
                       </View>
                     </View>
 
-                    <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
-                      <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Daily Net Sales Split (70/30)</Text>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Operation Manager (70%)</Text>
-                        <Text style={[styles.settlementValue, { color: theme.success, fontWeight: '600' }]}>
-                          {payload.manager_share_cents !== undefined || payload.managerShareCents !== undefined
-                            ? `₱${((payload.manager_share_cents || payload.managerShareCents || 0) / 100).toFixed(2)}`
-                            : '—'}
-                        </Text>
+                    {payload.products_sold && payload.products_sold.length > 0 && (
+                      <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
+                        <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Products Sold</Text>
+                        {payload.products_sold.map((product: any, index: number) => (
+                          <View key={index} style={styles.settlementRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.settlementLabel, { color: theme.text }]}>{product.name}</Text>
+                              <Text style={[styles.settlementValue, { color: theme.textSecondary, fontSize: 12 }]}>Qty: {product.qty}</Text>
+                            </View>
+                            <Text style={[styles.settlementValue, { color: theme.text }]}>₱{product.price}</Text>
+                          </View>
+                        ))}
                       </View>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Owner (30%)</Text>
-                        <Text style={[styles.settlementValue, { color: theme.primary, fontWeight: '600' }]}>
-                          {payload.owner_share_cents !== undefined || payload.ownerShareCents !== undefined
-                            ? `₱${((payload.owner_share_cents || payload.ownerShareCents || 0) / 100).toFixed(2)}`
-                            : '—'}
-                        </Text>
-                      </View>
-                    </View>
+                    )}
 
                     {payload.notes && (
                       <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
@@ -1822,11 +1805,21 @@ const styles = StyleSheet.create({
   tabsContainer: {
     height: 44,
     borderBottomWidth: 1,
+    position: 'relative' as const,
+  },
+  tabsScrollIndicator: {
+    position: 'absolute' as const,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 40,
+    pointerEvents: 'none' as const,
   },
   tabsScrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
+    paddingRight: 48,
     gap: 8,
   },
   tab: {
