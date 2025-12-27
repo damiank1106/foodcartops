@@ -127,6 +127,32 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     },
   });
 
+  const deleteDayOtherExpensesMutation = useMutation({
+    mutationFn: async (dateStr: string) => {
+      if (!user?.id) throw new Error('No user');
+      const dayExpenses = analytics?.other_expenses.filter(e => e.date === dateStr) || [];
+      for (const expense of dayExpenses) {
+        await otherExpenseRepo.softDelete(expense.id, user.id);
+      }
+      const { AuditRepository } = await import('@/lib/repositories/audit.repository');
+      const auditRepo = new AuditRepository();
+      await auditRepo.log({
+        user_id: user.id,
+        entity_type: 'other_expense',
+        entity_id: `day_delete_${dateStr}`,
+        action: 'other_expenses_day_deleted',
+        new_data: { date: dateStr, count: dayExpenses.length },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar-analytics'] });
+      Alert.alert('Success', 'Other expenses for this day have been deleted');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to delete: ${error}`);
+    },
+  });
+
   const resetOtherExpenseForm = () => {
     setEditingOtherExpense(null);
     setOtherExpenseName('');
@@ -188,6 +214,33 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         onPress: () => deleteOtherExpenseMutation.mutate(id),
       },
     ]);
+  };
+
+  const handleDeleteDayOtherExpenses = () => {
+    if (!analytics?.other_expenses || analytics.other_expenses.length === 0) {
+      Alert.alert('No Data', 'No other expenses found for this day');
+      return;
+    }
+    const dateStr = format(analytics.date_range.start, 'yyyy-MM-dd');
+    const count = analytics.other_expenses.filter(e => e.date === dateStr).length;
+    
+    if (count === 0) {
+      Alert.alert('No Data', 'No other expenses found for this day');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Other Expenses',
+      `Delete all ${count} other expense${count !== 1 ? 's' : ''} for ${format(analytics.date_range.start, 'MMM d, yyyy')}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteDayOtherExpensesMutation.mutate(dateStr),
+        },
+      ]
+    );
   };
 
   const navigatePeriod = (direction: 'prev' | 'next') => {
@@ -819,12 +872,23 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
             <View style={[styles.card, { backgroundColor: theme.card }]}>
               <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>Other Expenses</Text>
-                <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: theme.primary }]}
-                  onPress={() => openOtherExpenseModal()}
-                >
-                  <Plus size={18} color="#fff" />
-                </TouchableOpacity>
+                <View style={styles.cardHeaderActions}>
+                  {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && periodType === 'day' && (
+                    <TouchableOpacity
+                      style={[styles.deleteDataButton, { backgroundColor: theme.error + '15' }]}
+                      onPress={handleDeleteDayOtherExpenses}
+                    >
+                      <Trash2 size={16} color={theme.error} />
+                      <Text style={[styles.deleteDataButtonText, { color: theme.error }]}>Delete Data</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: theme.primary }]}
+                    onPress={() => openOtherExpenseModal()}
+                  >
+                    <Plus size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </View>
               {analytics.other_expenses.length > 0 ? (
                 analytics.other_expenses.map((oe) => (
@@ -1266,6 +1330,23 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 13,
+  },
+  cardHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteDataButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  deleteDataButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,

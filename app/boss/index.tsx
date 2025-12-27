@@ -39,6 +39,8 @@ export default function BossDashboard() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [datesWithEntries, setDatesWithEntries] = useState<Set<string>>(new Set());
+  const [overviewModalVisible, setOverviewModalVisible] = useState(false);
+  const [overviewModalType, setOverviewModalType] = useState<'sales' | 'expenses' | 'profit' | 'transactions' | 'active' | null>(null);
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -623,7 +625,13 @@ export default function BossDashboard() {
               </View>
 
               <View style={styles.statsRow}>
-                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                <TouchableOpacity
+                  style={[styles.statCard, { backgroundColor: theme.card }]}
+                  onPress={() => {
+                    setOverviewModalType('sales');
+                    setOverviewModalVisible(true);
+                  }}
+                >
                   <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
                     <Coins size={24} color={theme.primary} />
                   </View>
@@ -631,9 +639,15 @@ export default function BossDashboard() {
                     ₱{((stats?.today_revenue_cents || 0) / 100).toFixed(2)}
                   </Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Sales</Text>
-                </View>
+                </TouchableOpacity>
 
-                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                <TouchableOpacity
+                  style={[styles.statCard, { backgroundColor: theme.card }]}
+                  onPress={() => {
+                    setOverviewModalType('expenses');
+                    setOverviewModalVisible(true);
+                  }}
+                >
                   <View style={[styles.iconContainer, { backgroundColor: theme.error + '20' }]}>
                     <TrendingDown size={24} color={theme.error} />
                   </View>
@@ -641,32 +655,50 @@ export default function BossDashboard() {
                     ₱{((stats?.today_expenses_cents || 0) / 100).toFixed(2)}
                   </Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Expenses</Text>
-                </View>
+                </TouchableOpacity>
               </View>
 
-              <View style={[styles.profitCard, { backgroundColor: theme.card }]}>
+              <TouchableOpacity
+                style={[styles.profitCard, { backgroundColor: theme.card }]}
+                onPress={() => {
+                  setOverviewModalType('profit');
+                  setOverviewModalVisible(true);
+                }}
+              >
                 <Text style={[styles.profitLabel, { color: theme.textSecondary }]}>Estimated Profit</Text>
                 <Text style={[styles.profitValue, { color: (stats?.estimated_profit_cents || 0) >= 0 ? theme.success : theme.error }]}>
                   ₱{((stats?.estimated_profit_cents || 0) / 100).toFixed(2)}
                 </Text>
-              </View>
+              </TouchableOpacity>
 
               <View style={styles.statsRow}>
-                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                <TouchableOpacity
+                  style={[styles.statCard, { backgroundColor: theme.card }]}
+                  onPress={() => {
+                    setOverviewModalType('transactions');
+                    setOverviewModalVisible(true);
+                  }}
+                >
                   <View style={[styles.iconContainer, { backgroundColor: theme.success + '20' }]}>
                     <ShoppingBag size={24} color={theme.success} />
                   </View>
                   <Text style={[styles.statValue, { color: theme.text }]}>{stats?.today_sales}</Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Transactions</Text>
-                </View>
+                </TouchableOpacity>
 
-                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                <TouchableOpacity
+                  style={[styles.statCard, { backgroundColor: theme.card }]}
+                  onPress={() => {
+                    setOverviewModalType('active');
+                    setOverviewModalVisible(true);
+                  }}
+                >
                   <View style={[styles.iconContainer, { backgroundColor: theme.warning + '20' }]}>
                     <Users size={24} color={theme.warning} />
                   </View>
                   <Text style={[styles.statValue, { color: theme.text }]}>{stats?.active_workers}</Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Active</Text>
-                </View>
+                </TouchableOpacity>
               </View>
 
               <View style={[styles.section, { backgroundColor: theme.card }]}>
@@ -1548,6 +1580,113 @@ export default function BossDashboard() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <Modal
+        visible={overviewModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOverviewModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.overviewModalContent, { backgroundColor: theme.card }]}>
+            <View style={[styles.overviewModalHeader, { backgroundColor: '#000' }]}>
+              <Text style={[styles.modalTitle, { color: '#FFF' }]}>
+                {overviewModalType === 'sales' && 'Sales Details'}
+                {overviewModalType === 'expenses' && 'Expenses Details'}
+                {overviewModalType === 'profit' && 'Profit Calculation'}
+                {overviewModalType === 'transactions' && 'Transactions'}
+                {overviewModalType === 'active' && 'Active Users'}
+              </Text>
+              <TouchableOpacity onPress={() => setOverviewModalVisible(false)}>
+                <X size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.overviewModalBody} contentContainerStyle={styles.overviewModalBodyContent}>
+              {overviewModalType === 'sales' && (
+                <View>
+                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16 }]}>
+                    Total Sales Today: ₱{((stats?.today_revenue_cents || 0) / 100).toFixed(2)}
+                  </Text>
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Sales by Payment Method:</Text>
+                  {stats?.revenue_by_payment.map((item, index) => (
+                    <View key={index} style={styles.overviewModalRow}>
+                      <Text style={[styles.overviewModalLabel, { color: theme.textSecondary }]}>{item.payment_method}</Text>
+                      <Text style={[styles.overviewModalValue, { color: theme.text }]}>₱{(item.revenue_cents / 100).toFixed(2)}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {overviewModalType === 'expenses' && (
+                <View>
+                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16 }]}>
+                    Total Expenses Today: ₱{((stats?.today_expenses_cents || 0) / 100).toFixed(2)}
+                  </Text>
+                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>
+                    This includes all approved expenses from the Cash Drawer for today.
+                  </Text>
+                </View>
+              )}
+
+              {overviewModalType === 'profit' && (
+                <View>
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>How Estimated Profit is Calculated:</Text>
+                  <View style={[styles.overviewModalCalculation, { backgroundColor: theme.background }]}>
+                    <View style={styles.overviewModalRow}>
+                      <Text style={[styles.overviewModalLabel, { color: theme.textSecondary }]}>Total Sales</Text>
+                      <Text style={[styles.overviewModalValue, { color: theme.success }]}>+₱{((stats?.today_revenue_cents || 0) / 100).toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.overviewModalRow}>
+                      <Text style={[styles.overviewModalLabel, { color: theme.textSecondary }]}>Expenses</Text>
+                      <Text style={[styles.overviewModalValue, { color: theme.error }]}>-₱{((stats?.today_expenses_cents || 0) / 100).toFixed(2)}</Text>
+                    </View>
+                    <View style={[styles.overviewModalRow, styles.overviewModalTotal]}>
+                      <Text style={[styles.overviewModalLabel, { color: theme.text, fontWeight: '700' }]}>Estimated Profit</Text>
+                      <Text style={[styles.overviewModalValue, { color: (stats?.estimated_profit_cents || 0) >= 0 ? theme.success : theme.error, fontWeight: '700', fontSize: 18 }]}>
+                        ₱{((stats?.estimated_profit_cents || 0) / 100).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, marginTop: 12 }]}>
+                    Formula: Total Sales - Expenses = Estimated Profit
+                  </Text>
+                </View>
+              )}
+
+              {overviewModalType === 'transactions' && (
+                <View>
+                  <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16 }]}>
+                    Total Transactions Today: {stats?.today_sales || 0}
+                  </Text>
+                  <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>
+                    This represents the number of individual sales recorded today across all carts.
+                  </Text>
+                </View>
+              )}
+
+              {overviewModalType === 'active' && (
+                <View>
+                  {stats?.active_workers && stats.active_workers > 0 ? (
+                    <>
+                      <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 8 }]}>
+                        Active Users: {stats.active_workers}
+                      </Text>
+                      <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>
+                        Users currently clocked in and working.
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={[styles.overviewModalText, { color: theme.textSecondary }]}>
+                      0 active users
+                    </Text>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2217,6 +2356,60 @@ const styles = StyleSheet.create({
   calendarCloseText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  overviewModalContent: {
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  overviewModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+  },
+  overviewModalBody: {
+    maxHeight: 500,
+  },
+  overviewModalBodyContent: {
+    padding: 20,
+  },
+  overviewModalText: {
+    fontSize: 16,
+  },
+  overviewModalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  overviewModalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  overviewModalLabel: {
+    fontSize: 15,
+  },
+  overviewModalValue: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  overviewModalCalculation: {
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  overviewModalTotal: {
+    borderTopWidth: 2,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+    marginTop: 8,
+    paddingTop: 12,
+  },
+  overviewModalInfo: {
+    fontSize: 13,
+    fontStyle: 'italic',
   },
 
 });

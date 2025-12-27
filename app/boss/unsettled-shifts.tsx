@@ -11,7 +11,7 @@ import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.re
 
 export default function UnsettledShiftsScreen() {
   const { theme } = useTheme();
-  const { user, assignedCartIds, isBoss } = useAuth();
+  const { user, assignedCartIds, isBoss, isDeveloper } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const settlementRepo = new SettlementRepository();
@@ -22,14 +22,14 @@ export default function UnsettledShiftsScreen() {
   };
 
   const { data: unsettledShifts, isLoading } = useQuery({
-    queryKey: ['unsettled-shifts', assignedCartIds, isBoss],
+    queryKey: ['unsettled-shifts', assignedCartIds, isBoss, isDeveloper],
     queryFn: () => {
-      if (isBoss) {
+      if (isBoss || isDeveloper) {
         return settlementRepo.getUnsettledShifts();
       }
       return Promise.resolve([]);
     },
-    enabled: !!isBoss,
+    enabled: !!(isBoss || isDeveloper),
   });
 
   const saveMutation = useMutation({
@@ -63,7 +63,7 @@ export default function UnsettledShiftsScreen() {
     router.push(`/settlement/${shiftId}` as any);
   };
 
-  if (!user || !isBoss) {
+  if (!user || (!isBoss && !isDeveloper)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Text style={[styles.errorText, { color: theme.error }]}>Access Denied</Text>

@@ -26,7 +26,7 @@ import { SettlementService } from '@/lib/services/settlement.service';
 
 export default function SettlementEditorScreen() {
   const { theme } = useTheme();
-  const { user, isBoss } = useAuth();
+  const { user, isBoss, isDeveloper } = useAuth();
   const { shiftId } = useLocalSearchParams<{ shiftId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -153,7 +153,7 @@ export default function SettlementEditorScreen() {
         cartName,
       };
     },
-    enabled: !!shiftId && !!isBoss,
+    enabled: !!shiftId && !!(isBoss || isDeveloper),
   });
 
   const saveSettlementMutation = useMutation({
@@ -289,7 +289,7 @@ export default function SettlementEditorScreen() {
     );
   };
 
-  if (!user || !isBoss) {
+  if (!user || (!isBoss && !isDeveloper)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Stack.Screen options={{ title: 'Access Denied' }} />
