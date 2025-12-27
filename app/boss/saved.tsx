@@ -779,8 +779,8 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   settlementDetailsModal: {
-    width: '92%',
-    maxWidth: 700,
+    width: '96%',
+    maxWidth: 800,
     maxHeight: '85%',
     borderRadius: 24,
     shadowColor: '#000',
@@ -835,7 +835,7 @@ const styles = StyleSheet.create({
   productSoldPrice: {
     fontSize: 15,
     fontWeight: '600' as const,
-    minWidth: 80,
+    minWidth: 90,
     textAlign: 'right',
   },
   settlementNotes: {

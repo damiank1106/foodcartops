@@ -783,21 +783,6 @@ export default function BossDashboard() {
                       </View>
                     ))}
                   </TouchableOpacity>
-                  <View style={styles.exceptionButtonRow}>
-                    <TouchableOpacity
-                      style={[styles.saveButton, { backgroundColor: theme.primary + '15' }]}
-                      onPress={() => handleSaveException(
-                        'EXCEPTION',
-                        'Unsettled Shifts',
-                        `${stats.unsettled_shifts_count} shift(s) pending settlement`,
-                        'unsettled_shifts',
-                        'all'
-                      )}
-                    >
-                      <Bookmark size={16} color={theme.primary} />
-                      <Text style={[styles.saveButtonText, { color: theme.primary }]}>Save</Text>
-                    </TouchableOpacity>
-                  </View>
                 </View>
               )}
 
