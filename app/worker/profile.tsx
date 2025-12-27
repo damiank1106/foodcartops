@@ -173,7 +173,8 @@ export default function WorkerProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.section, { backgroundColor: theme.card }]}>          <Text style={[styles.sectionTitle, { color: theme.text }]}>Data</Text>
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Data</Text>
           <TouchableOpacity 
             style={styles.listItem}
             onPress={() => router.push('/backup-data' as any)}

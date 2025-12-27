@@ -779,8 +779,8 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   settlementDetailsModal: {
-    width: '90%',
-    maxWidth: 600,
+    width: '92%',
+    maxWidth: 700,
     maxHeight: '85%',
     borderRadius: 24,
     shadowColor: '#000',
