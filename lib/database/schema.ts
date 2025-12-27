@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 26;
+export const SCHEMA_VERSION = 27;
 
 export const MIGRATIONS = [
   {
@@ -1024,6 +1024,59 @@ export const MIGRATIONS = [
 
       INSERT INTO inventory_items_new (id, name, unit, reorder_level_qty, storage_group, price_cents, is_active, created_at, updated_at)
       SELECT id, name, unit, reorder_level_qty, storage_group, price_cents, is_active, created_at, updated_at FROM inventory_items;
+
+      DROP TABLE inventory_items;
+      ALTER TABLE inventory_items_new RENAME TO inventory_items;
+
+      CREATE INDEX idx_inventory_items_is_active ON inventory_items(is_active);
+      CREATE INDEX idx_inventory_items_name ON inventory_items(name);
+    `,
+  },
+  {
+    version: 27,
+    up: `
+      CREATE TABLE inventory_items_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL CHECK(unit IN ('pcs', 'kg', 'g', 'L', 'mL', 'bundle', 'pack')),
+        reorder_level_qty REAL NOT NULL DEFAULT 0,
+        storage_group TEXT NOT NULL DEFAULT 'FREEZER' CHECK(storage_group IN ('FREEZER', 'CART', 'PACKAGING_SUPPLY', 'CONDIMENTS')),
+        price_cents INTEGER NOT NULL DEFAULT 0,
+        current_qty REAL NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO inventory_items_new (id, name, unit, reorder_level_qty, storage_group, price_cents, current_qty, is_active, created_at, updated_at)
+      SELECT id, name, unit, reorder_level_qty, storage_group, price_cents, current_qty, is_active, created_at, updated_at FROM inventory_items;
+
+      DROP TABLE inventory_items;
+      ALTER TABLE inventory_items_new RENAME TO inventory_items;
+
+      CREATE INDEX idx_inventory_items_is_active ON inventory_items(is_active);
+      CREATE INDEX idx_inventory_items_name ON inventory_items(name);
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added bundle and pack units to inventory_items table', ${Date.now()});
+    `,
+    down: `
+      CREATE TABLE inventory_items_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL CHECK(unit IN ('pcs', 'kg', 'g', 'L', 'mL')),
+        reorder_level_qty REAL NOT NULL DEFAULT 0,
+        storage_group TEXT NOT NULL DEFAULT 'FREEZER' CHECK(storage_group IN ('FREEZER', 'CART', 'PACKAGING_SUPPLY', 'CONDIMENTS')),
+        price_cents INTEGER NOT NULL DEFAULT 0,
+        current_qty REAL NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO inventory_items_new (id, name, unit, reorder_level_qty, storage_group, price_cents, current_qty, is_active, created_at, updated_at)
+      SELECT id, name, unit, reorder_level_qty, storage_group, price_cents, current_qty, is_active, created_at, updated_at FROM inventory_items
+      WHERE unit IN ('pcs', 'kg', 'g', 'L', 'mL');
 
       DROP TABLE inventory_items;
       ALTER TABLE inventory_items_new RENAME TO inventory_items;

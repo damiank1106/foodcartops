@@ -22,7 +22,7 @@ export type BossSavedItemSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type BossSavedItemStatus = 'OPEN' | 'RESOLVED';
 
-export type InventoryUnit = 'pcs' | 'kg' | 'g' | 'L' | 'mL';
+export type InventoryUnit = 'pcs' | 'kg' | 'g' | 'L' | 'mL' | 'bundle' | 'pack';
 
 export type StockLocationType = 'WAREHOUSE' | 'CART';
 

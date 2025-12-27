@@ -433,6 +433,17 @@ export default function InventoryScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+              <View style={styles.unitRow}>
+                {(['bundle', 'pack'] as InventoryUnit[]).map((u) => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.unitButton, { backgroundColor: itemUnit === u ? theme.primary : theme.background }]}
+                    onPress={() => setItemUnit(u)}
+                  >
+                    <Text style={[styles.unitButtonText, { color: itemUnit === u ? '#fff' : theme.text }]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
                 placeholder="Reorder level"
