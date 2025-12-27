@@ -26,6 +26,7 @@ export default function InventoryScreen() {
   const [itemUnit, setItemUnit] = useState<InventoryUnit>('pcs');
   const [itemReorder, setItemReorder] = useState<string>('0');
   const [itemGroup, setItemGroup] = useState<StorageGroup>('FREEZER');
+  const [itemPrice, setItemPrice] = useState<string>('0');
 
   const itemRepo = useMemo(() => new InventoryItemRepository(), []);
 
@@ -61,12 +62,14 @@ export default function InventoryScreen() {
       setItemUnit(item.unit);
       setItemReorder(item.reorder_level_qty.toString());
       setItemGroup((item as any).storage_group || 'FREEZER');
+      setItemPrice((item.price_cents / 100).toFixed(2));
     } else {
       setEditingItem(null);
       setItemName('');
       setItemUnit('pcs');
       setItemReorder('0');
       setItemGroup('FREEZER');
+      setItemPrice('0');
     }
     setShowItemModal(true);
   };
@@ -78,6 +81,8 @@ export default function InventoryScreen() {
     }
     if (!user?.id) return;
 
+    const priceCents = Math.round((parseFloat(itemPrice) || 0) * 100);
+
     try {
       if (editingItem) {
         await itemRepo.update({
@@ -86,6 +91,7 @@ export default function InventoryScreen() {
           unit: itemUnit,
           reorder_level_qty: parseFloat(itemReorder) || 0,
           storage_group: itemGroup,
+          price_cents: priceCents,
           user_id: user.id,
         });
         Alert.alert('Success', 'Item updated');
@@ -95,6 +101,7 @@ export default function InventoryScreen() {
           unit: itemUnit,
           reorder_level_qty: parseFloat(itemReorder) || 0,
           storage_group: itemGroup,
+          price_cents: priceCents,
           user_id: user.id,
         });
         Alert.alert('Success', 'Item created');
@@ -241,6 +248,9 @@ export default function InventoryScreen() {
                   </View>
                 </View>
                 <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
+                <Text style={[styles.itemPrice, { color: theme.success, fontWeight: '600' as const }]}>
+                  ₱{(item.price_cents / 100).toFixed(2)}
+                </Text>
                 <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
                   Reorder: {item.reorder_level_qty} {item.unit}
                 </Text>
@@ -356,6 +366,15 @@ export default function InventoryScreen() {
                 keyboardType="numeric"
                 value={itemReorder}
                 onChangeText={setItemReorder}
+              />
+              <Text style={[styles.label, { color: theme.text }]}>Price (₱):</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
+                placeholder="Price in pesos"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="decimal-pad"
+                value={itemPrice}
+                onChangeText={setItemPrice}
               />
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -484,6 +503,10 @@ const styles = StyleSheet.create({
   },
   itemUnit: {
     fontSize: 14,
+    marginBottom: 2,
+  },
+  itemPrice: {
+    fontSize: 15,
     marginBottom: 2,
   },
   itemReorder: {

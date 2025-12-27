@@ -352,6 +352,7 @@ export interface InventoryItem {
   unit: InventoryUnit;
   reorder_level_qty: number;
   storage_group: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
+  price_cents: number;
   is_active: number;
   created_at: number;
   updated_at: number;

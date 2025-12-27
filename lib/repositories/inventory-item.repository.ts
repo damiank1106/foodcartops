@@ -39,6 +39,7 @@ export class InventoryItemRepository extends BaseRepository {
     unit: InventoryUnit;
     reorder_level_qty?: number;
     storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
+    price_cents?: number;
     user_id: string;
   }): Promise<InventoryItem> {
     console.log('[InventoryItemRepository] Creating inventory item:', data.name);
@@ -52,15 +53,16 @@ export class InventoryItemRepository extends BaseRepository {
       unit: data.unit,
       reorder_level_qty: data.reorder_level_qty || 0,
       storage_group: data.storage_group || 'FREEZER',
+      price_cents: data.price_cents || 0,
       is_active: 1,
       created_at: now,
       updated_at: now,
     };
 
     await db.runAsync(
-      `INSERT INTO inventory_items (id, name, unit, reorder_level_qty, storage_group, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.id, item.name, item.unit, item.reorder_level_qty, item.storage_group, item.is_active, item.created_at, item.updated_at]
+      `INSERT INTO inventory_items (id, name, unit, reorder_level_qty, storage_group, price_cents, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.id, item.name, item.unit, item.reorder_level_qty, item.storage_group, item.price_cents, item.is_active, item.created_at, item.updated_at]
     );
 
     await this.auditRepo.log({
@@ -81,6 +83,7 @@ export class InventoryItemRepository extends BaseRepository {
     unit?: InventoryUnit;
     reorder_level_qty?: number;
     storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
+    price_cents?: number;
     user_id: string;
   }): Promise<InventoryItem> {
     console.log(`[InventoryItemRepository] Updating inventory item: ${data.id}`);
@@ -98,14 +101,15 @@ export class InventoryItemRepository extends BaseRepository {
       unit: data.unit !== undefined ? data.unit : existing.unit,
       reorder_level_qty: data.reorder_level_qty !== undefined ? data.reorder_level_qty : existing.reorder_level_qty,
       storage_group: data.storage_group !== undefined ? data.storage_group : existing.storage_group,
+      price_cents: data.price_cents !== undefined ? data.price_cents : existing.price_cents,
       updated_at: now,
     };
 
     await db.runAsync(
       `UPDATE inventory_items 
-       SET name = ?, unit = ?, reorder_level_qty = ?, storage_group = ?, updated_at = ?
+       SET name = ?, unit = ?, reorder_level_qty = ?, storage_group = ?, price_cents = ?, updated_at = ?
        WHERE id = ?`,
-      [updated.name, updated.unit, updated.reorder_level_qty, updated.storage_group, updated.updated_at, updated.id]
+      [updated.name, updated.unit, updated.reorder_level_qty, updated.storage_group, updated.price_cents, updated.updated_at, updated.id]
     );
 
     await this.auditRepo.log({
