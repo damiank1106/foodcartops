@@ -142,18 +142,25 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         entity_type: 'sale',
         entity_id: `calendar_day_sales_reset_${dateStr}`,
         action: 'calendar_day_sales_reset',
-        new_data: { date: dateStr, sales_deleted_count: deletedCount },
+        new_data: { date: dateStr, sales_deleted_count: deletedCount, role: user.role },
       });
 
-      return deletedCount;
+      return { deletedCount, dateStr };
     },
-    onSuccess: (deletedCount) => {
+    onSuccess: ({ deletedCount, dateStr }) => {
       queryClient.invalidateQueries({ queryKey: ['calendar-analytics'] });
       queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
+      
+      const today = format(new Date(), 'yyyy-MM-dd');
+      if (dateStr === today) {
+        console.log('[Calendar] Today data reset - Overview will refresh');
+      }
+      
       Alert.alert('Success', `Sales reset for this day (${deletedCount} sale${deletedCount !== 1 ? 's' : ''} deleted)`);
     },
-    onError: (error) => {
-      Alert.alert('Error', `Failed to delete: ${error}`);
+    onError: (error: any) => {
+      console.error('[Calendar] Delete error:', error);
+      Alert.alert('Error', `Failed to delete: ${error?.message || error}`);
     },
   });
 
@@ -222,19 +229,25 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
 
   const handleDeleteDaySales = () => {
     if (!analytics) return;
+    if (deleteDaySalesMutation.isPending) return;
 
     const dateStr = format(analytics.date_range.start, 'yyyy-MM-dd');
     const formattedDate = format(analytics.date_range.start, 'MMM d, yyyy');
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const isDeletingToday = dateStr === today;
 
     Alert.alert(
       'Reset All Sales',
-      `Reset all sales for ${formattedDate}? This will delete all sales records, sale items, and payments for this day. This cannot be undone.`,
+      `Reset all sales for ${formattedDate}? This will delete all sales records, sale items, and payments for this day.${isDeletingToday ? ' Today\'s Overview will also be reset.' : ''} This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deleteDaySalesMutation.mutate(dateStr),
+          onPress: () => {
+            console.log('[Calendar] Deleting sales for:', dateStr);
+            deleteDaySalesMutation.mutate(dateStr);
+          },
         },
       ]
     );

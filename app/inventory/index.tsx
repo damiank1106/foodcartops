@@ -297,31 +297,29 @@ export default function InventoryScreen() {
                     <Text style={[styles.itemQty, { color: theme.text, fontWeight: '600' as const }]}>
                       Qty: {displayQty} {item.unit}
                     </Text>
-                    {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && (
-                      <View style={styles.qtyControls}>
+                    <View style={styles.qtyControls}>
+                      <TouchableOpacity
+                        style={[styles.qtyButton, { backgroundColor: theme.error + '20' }]}
+                        onPress={() => handleQuantityChange(item.id, -1)}
+                        disabled={displayQty === 0}
+                      >
+                        <Minus size={14} color={displayQty === 0 ? theme.textSecondary : theme.error} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.qtyButton, { backgroundColor: theme.success + '20' }]}
+                        onPress={() => handleQuantityChange(item.id, 1)}
+                      >
+                        <Plus size={14} color={theme.success} />
+                      </TouchableOpacity>
+                      {isEditing && (
                         <TouchableOpacity
-                          style={[styles.qtyButton, { backgroundColor: theme.error + '20' }]}
-                          onPress={() => handleQuantityChange(item.id, -1)}
-                          disabled={displayQty === 0}
+                          style={[styles.qtyButton, { backgroundColor: theme.primary }]}
+                          onPress={() => handleSaveQuantity(item.id)}
                         >
-                          <Minus size={14} color={displayQty === 0 ? theme.textSecondary : theme.error} />
+                          <Save size={14} color="#fff" />
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.qtyButton, { backgroundColor: theme.success + '20' }]}
-                          onPress={() => handleQuantityChange(item.id, 1)}
-                        >
-                          <Plus size={14} color={theme.success} />
-                        </TouchableOpacity>
-                        {isEditing && (
-                          <TouchableOpacity
-                            style={[styles.qtyButton, { backgroundColor: theme.primary }]}
-                            onPress={() => handleSaveQuantity(item.id)}
-                          >
-                            <Save size={14} color="#fff" />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    )}
+                      )}
+                    </View>
                   </View>
                   <Text style={[styles.itemPrice, { color: theme.success, fontWeight: '600' as const }]}>
                     Price: ₱{totalPrice.toFixed(2)}
