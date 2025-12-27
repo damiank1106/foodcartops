@@ -44,7 +44,10 @@ export default function UsersScreen() {
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users-with-carts'],
-    queryFn: () => userRepo.getAllWithCartCounts(),
+    queryFn: async () => {
+      const allUsers = await userRepo.getAllWithCartCounts();
+      return allUsers.filter(u => u.is_active === 1 && !u.deleted_at);
+    },
   });
 
   useFocusEffect(
@@ -166,10 +169,11 @@ export default function UsersScreen() {
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
       if (!currentUser) throw new Error('Not authenticated');
-      await userRepo.deactivateWithAudit(userId, currentUser.id);
+      await userRepo.deleteWithAudit(userId, currentUser.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
+      queryClient.refetchQueries({ queryKey: ['users-with-carts'] });
       Alert.alert('Success', 'User deleted successfully');
     },
     onError: (error: Error) => {

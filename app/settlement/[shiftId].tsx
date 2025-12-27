@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { CheckCircle, Lock, TrendingUp } from 'lucide-react-native';
+import { CheckCircle, Lock } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -50,6 +50,13 @@ export default function SettlementEditorScreen() {
 
       const shift = await shiftRepo.getShiftById(shiftId);
       if (!shift) throw new Error('Shift not found');
+
+      const userRepo = new (await import('@/lib/repositories')).UserRepository();
+      const workerUser = await userRepo.findById(shift.worker_id);
+      const workerName = workerUser?.name || 'Operation Manager';
+
+      const cart = await cartRepo.findById(shift.cart_id);
+      const cartName = cart?.name || 'Unknown Cart';
 
       const existingSettlement = await settlementRepo.findByShiftId(shiftId);
 
@@ -142,6 +149,8 @@ export default function SettlementEditorScreen() {
         ownerShareCents,
         paymentsByMethod,
         productsSold,
+        workerName,
+        cartName,
       };
     },
     enabled: !!shiftId && !!isBoss,
@@ -151,62 +160,22 @@ export default function SettlementEditorScreen() {
     mutationFn: async () => {
       if (!user || !shiftData) throw new Error('Missing data');
 
-      const cart = await cartRepo.findById(shiftData.shift.cart_id);
-      const cartName = cart?.name || shiftData.shift.cart_id;
-
-      const expensesWithDetails = await Promise.all(
-        shiftData.expenses.map(async (expense) => {
-          const submittedBy = await (async () => {
-            try {
-              const userRepo = new (await import('@/lib/repositories')).UserRepository();
-              const u = await userRepo.findById(expense.submitted_by_user_id);
-              return u?.name || expense.submitted_by_user_id;
-            } catch {
-              return expense.submitted_by_user_id;
-            }
-          })();
-
-          return {
-            id: expense.id,
-            date: expense.created_at,
-            category: expense.category,
-            amount_cents: expense.amount_cents,
-            notes: expense.notes,
-            status: expense.status,
-            receipt_image_uri: expense.receipt_image_uri,
-            created_by: submittedBy,
-          };
-        })
-      );
-
-      const expenses_total_cents = shiftData.expenses.reduce(
-        (sum, e) => sum + e.amount_cents,
-        0
-      );
-
       const payload = {
-        shift_id: shiftId,
-        cart_id: shiftData.shift.cart_id,
-        cart_name: cartName,
-        worker_id: shiftData.shift.worker_id,
-        shift_start: shiftData.shift.clock_in,
-        shift_end: shiftData.shift.clock_out,
-        settlement_day: shiftData.settlementDay,
-        total_sales_cents: shiftData.computation.total_sales_cents,
-        cash_sales_cents: shiftData.computation.cash_sales_cents,
-        non_cash_sales_cents: shiftData.computation.non_cash_sales_cents,
-        approved_expenses_cents: shiftData.computation.approved_expenses_cash_drawer_cents,
-        cash_expected_cents: shiftData.computation.cash_expected_cents,
-        daily_net_sales_cents: shiftData.dailyNetSalesCents,
-        manager_share_cents: shiftData.managerShareCents,
-        owner_share_cents: shiftData.ownerShareCents,
-        net_due_to_worker_cents: shiftData.computation.net_due_to_worker_cents,
-        net_due_to_boss_cents: shiftData.computation.net_due_to_boss_cents,
-        payments_by_method: shiftData.paymentsByMethod,
+        cart_name: shiftData.cartName,
+        seller_name: shiftData.workerName,
+        date: format(shiftData.shift.clock_out || shiftData.shift.clock_in, 'MM-dd-yyyy'),
+        products_sold: shiftData.productsSold.map((p: any) => ({
+          name: p.product_name,
+          qty: p.quantity,
+          price: (p.total_cents / 100).toFixed(2),
+        })),
+        sales_summary: {
+          cash: (shiftData.paymentsByMethod.CASH / 100).toFixed(2),
+          gcash: (shiftData.paymentsByMethod.GCASH / 100).toFixed(2),
+          card: (shiftData.paymentsByMethod.CARD / 100).toFixed(2),
+          total: (shiftData.computation.total_sales_cents / 100).toFixed(2),
+        },
         notes: notes || null,
-        computation: shiftData.computation,
-        expenses_total_cents,
-        expenses: expensesWithDetails,
       };
 
       await savedRecordRepo.saveSnapshot('settlement', shiftId!, payload, user.id, notes || undefined);
@@ -378,15 +347,15 @@ export default function SettlementEditorScreen() {
         <View style={[styles.card, { backgroundColor: theme.card }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Shift Information</Text>
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Worker:</Text>
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Seller:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>
-              {shiftData.shift.worker_id}
+              {shiftData.workerName}
             </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Cart:</Text>
             <Text style={[styles.infoValue, { color: theme.text }]}>
-              {shiftData.shift.cart_id}
+              {shiftData.cartName}
             </Text>
           </View>
           <View style={styles.infoRow}>
@@ -459,12 +428,12 @@ export default function SettlementEditorScreen() {
           <View style={styles.divider} />
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, { color: theme.text, fontWeight: '600' }]}>
-              Expected Cash:
+              Total:
             </Text>
             <Text
               style={[styles.summaryValue, { color: theme.text, fontWeight: '600', fontSize: 18 }]}
             >
-              ₱{(shiftData.computation.cash_expected_cents / 100).toFixed(2)}
+              ₱{(shiftData.computation.total_sales_cents / 100).toFixed(2)}
             </Text>
           </View>
         </View>
@@ -488,47 +457,7 @@ export default function SettlementEditorScreen() {
           )}
         </View>
 
-        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.primary, borderWidth: 2 }]}>
-          <View style={styles.splitHeader}>
-            <TrendingUp size={24} color={theme.primary} />
-            <Text style={[styles.cardTitle, { color: theme.text, marginLeft: 8 }]}>
-              Daily Net Sales Split
-            </Text>
-          </View>
-          <Text style={[styles.splitSubtitle, { color: theme.textSecondary }]}>
-            Cart: {shiftData.shift.cart_id} • Day: {shiftData.settlementDay}
-          </Text>
-          <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.text, fontWeight: '600' }]}>
-              Daily Net Sales:
-            </Text>
-            <Text
-              style={[styles.summaryValue, { color: theme.primary, fontWeight: '600', fontSize: 18 }]}
-            >
-              ₱{(shiftData.dailyNetSalesCents / 100).toFixed(2)}
-            </Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-              Operation Manager (70%):
-            </Text>
-            <Text style={[styles.summaryValue, { color: theme.success, fontWeight: '600' }]}>
-              ₱{(shiftData.managerShareCents / 100).toFixed(2)}
-            </Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-              General Manager (30%):
-            </Text>
-            <Text style={[styles.summaryValue, { color: theme.text, fontWeight: '600' }]}>
-              ₱{(shiftData.ownerShareCents / 100).toFixed(2)}
-            </Text>
-          </View>
-          <Text style={[styles.noteText, { color: theme.textSecondary }]}>
-            * The manager who finalizes this settlement will be credited the General Manager share.
-          </Text>
-        </View>
+
 
         {!isFinalized ? (
           <>

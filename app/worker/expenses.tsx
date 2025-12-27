@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Camera, X, Receipt, FileText, AlertCircle, Trash2 } from 'lucide-react-native';
@@ -417,7 +418,11 @@ export default function WorkerExpensesScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+          keyboardVerticalOffset={0}
+        >
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.text }]}>Add Expense</Text>
@@ -570,7 +575,7 @@ export default function WorkerExpensesScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -778,7 +783,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalScrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 180,
   },
   label: {
     fontSize: 14,

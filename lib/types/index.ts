@@ -44,6 +44,7 @@ export interface User {
   created_at: number;
   updated_at: number;
   is_active: number;
+  deleted_at?: string;
 }
 
 export interface Cart {

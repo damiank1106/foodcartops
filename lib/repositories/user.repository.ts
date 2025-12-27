@@ -236,6 +236,22 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Activated user with audit:', id);
   }
 
+  async deleteWithAudit(id: string, deletedByUserId: string): Promise<void> {
+    const oldUser = await this.findById(id);
+    if (!oldUser) throw new Error('User not found');
+    
+    await this.update(id, { 
+      is_active: 0,
+      pin: undefined
+    });
+
+    const newUser = await this.findById(id);
+
+    await this.auditLog(deletedByUserId, 'users', id, 'user_deleted', oldUser, newUser);
+
+    console.log('[UserRepo] Deleted user with audit:', id);
+  }
+
   async updateProfileImage(userId: string, imageUri: string | null, actorUserId: string): Promise<void> {
     const db = await this.getDb();
     const oldUser = await this.findById(userId);
