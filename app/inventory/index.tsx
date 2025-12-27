@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { Package, Plus, Edit2, Snowflake, ShoppingCart, Trash2, Box, UtensilsCrossed } from 'lucide-react-native';
+import { Package, Plus, Edit2, Snowflake, ShoppingCart, Trash2, Box, UtensilsCrossed, Minus, Save } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repository';
 import type { InventoryItem, InventoryUnit } from '@/lib/types';
@@ -27,6 +27,9 @@ export default function InventoryScreen() {
   const [itemReorder, setItemReorder] = useState<string>('0');
   const [itemGroup, setItemGroup] = useState<StorageGroup>('FREEZER');
   const [itemPrice, setItemPrice] = useState<string>('0');
+  const [itemCurrentQty, setItemCurrentQty] = useState<string>('0');
+
+  const [editingQuantities, setEditingQuantities] = useState<Record<string, number>>({});
 
   const itemRepo = useMemo(() => new InventoryItemRepository(), []);
 
@@ -63,6 +66,7 @@ export default function InventoryScreen() {
       setItemReorder(item.reorder_level_qty.toString());
       setItemGroup((item as any).storage_group || 'FREEZER');
       setItemPrice((item.price_cents / 100).toFixed(2));
+      setItemCurrentQty(item.current_qty.toString());
     } else {
       setEditingItem(null);
       setItemName('');
@@ -70,6 +74,7 @@ export default function InventoryScreen() {
       setItemReorder('0');
       setItemGroup('FREEZER');
       setItemPrice('0');
+      setItemCurrentQty('0');
     }
     setShowItemModal(true);
   };
@@ -82,6 +87,7 @@ export default function InventoryScreen() {
     if (!user?.id) return;
 
     const priceCents = Math.round((parseFloat(itemPrice) || 0) * 100);
+    const currentQty = parseFloat(itemCurrentQty) || 0;
 
     try {
       if (editingItem) {
@@ -89,6 +95,7 @@ export default function InventoryScreen() {
           id: editingItem.id,
           name: itemName.trim(),
           unit: itemUnit,
+          current_qty: currentQty,
           reorder_level_qty: parseFloat(itemReorder) || 0,
           storage_group: itemGroup,
           price_cents: priceCents,
@@ -99,6 +106,7 @@ export default function InventoryScreen() {
         await itemRepo.create({
           name: itemName.trim(),
           unit: itemUnit,
+          current_qty: currentQty,
           reorder_level_qty: parseFloat(itemReorder) || 0,
           storage_group: itemGroup,
           price_cents: priceCents,
@@ -135,6 +143,38 @@ export default function InventoryScreen() {
         },
       ]
     );
+  };
+
+  const handleQuantityChange = (itemId: string, delta: number) => {
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+
+    const currentEditQty = editingQuantities[itemId] ?? item.current_qty;
+    const newQty = Math.max(0, currentEditQty + delta);
+    setEditingQuantities(prev => ({ ...prev, [itemId]: newQty }));
+  };
+
+  const handleSaveQuantity = async (itemId: string) => {
+    if (!user?.id) return;
+    const newQty = editingQuantities[itemId];
+    if (newQty === undefined) return;
+
+    try {
+      await itemRepo.updateQuantity({
+        id: itemId,
+        current_qty: newQty,
+        user_id: user.id,
+      });
+      setEditingQuantities(prev => {
+        const updated = { ...prev };
+        delete updated[itemId];
+        return updated;
+      });
+      Alert.alert('Success', 'Inventory updated');
+      await loadData();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update quantity');
+    }
   };
 
   const filteredItems = useMemo(() => {
@@ -211,67 +251,103 @@ export default function InventoryScreen() {
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No items in this group</Text>
         </View>
       ) : (
-        filteredItems.map((item) => (
-          <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.card }]}>
-            <View style={styles.itemContent}>
-              <TouchableOpacity
-                style={styles.itemLeft}
-                onPress={() => openItemModal(item)}
-              >
-                <View style={styles.itemHeader}>
-                  <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-                  <View style={[styles.groupBadge, { 
-                    backgroundColor: 
-                      (item as any).storage_group === 'FREEZER' ? theme.primary + '20' :
-                      (item as any).storage_group === 'CART' ? theme.success + '20' :
-                      (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' + '20' :
-                      '#F7931E' + '20'
-                  }]}>
-                    {(item as any).storage_group === 'FREEZER' ? (
-                      <Snowflake size={12} color={theme.primary} />
-                    ) : (item as any).storage_group === 'CART' ? (
-                      <ShoppingCart size={12} color={theme.success} />
-                    ) : (item as any).storage_group === 'PACKAGING_SUPPLY' ? (
-                      <Box size={12} color="#FF6B35" />
-                    ) : (
-                      <UtensilsCrossed size={12} color="#F7931E" />
-                    )}
-                    <Text style={[styles.groupBadgeText, { 
-                      color: 
-                        (item as any).storage_group === 'FREEZER' ? theme.primary :
-                        (item as any).storage_group === 'CART' ? theme.success :
-                        (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' :
-                        '#F7931E'
-                    }]}>
-                      {(item as any).storage_group || 'FREEZER'}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
-                <Text style={[styles.itemPrice, { color: theme.success, fontWeight: '600' as const }]}>
-                  ₱{(item.price_cents / 100).toFixed(2)}
-                </Text>
-                <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
-                  Reorder: {item.reorder_level_qty} {item.unit}
-                </Text>
-              </TouchableOpacity>
-              <View style={styles.itemActions}>
+        filteredItems.map((item) => {
+          const isEditing = editingQuantities[item.id] !== undefined;
+          const displayQty = isEditing ? editingQuantities[item.id] : item.current_qty;
+          const totalPrice = (item.price_cents / 100) * displayQty;
+
+          return (
+            <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.card }]}>
+              <View style={styles.itemContent}>
                 <TouchableOpacity
-                  style={[styles.actionIcon, { backgroundColor: theme.primary + '20' }]}
+                  style={styles.itemLeft}
                   onPress={() => openItemModal(item)}
                 >
-                  <Edit2 size={18} color={theme.primary} />
+                  <View style={styles.itemHeader}>
+                    <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+                    <View style={[styles.groupBadge, { 
+                      backgroundColor: 
+                        (item as any).storage_group === 'FREEZER' ? theme.primary + '20' :
+                        (item as any).storage_group === 'CART' ? theme.success + '20' :
+                        (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' + '20' :
+                        '#F7931E' + '20'
+                    }]}>
+                      {(item as any).storage_group === 'FREEZER' ? (
+                        <Snowflake size={12} color={theme.primary} />
+                      ) : (item as any).storage_group === 'CART' ? (
+                        <ShoppingCart size={12} color={theme.success} />
+                      ) : (item as any).storage_group === 'PACKAGING_SUPPLY' ? (
+                        <Box size={12} color="#FF6B35" />
+                      ) : (
+                        <UtensilsCrossed size={12} color="#F7931E" />
+                      )}
+                      <Text style={[styles.groupBadgeText, { 
+                        color: 
+                          (item as any).storage_group === 'FREEZER' ? theme.primary :
+                          (item as any).storage_group === 'CART' ? theme.success :
+                          (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' :
+                          '#F7931E'
+                      }]}>
+                        {(item as any).storage_group || 'FREEZER'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
+                  <View style={styles.qtyRow}>
+                    <Text style={[styles.itemQty, { color: theme.text, fontWeight: '600' as const }]}>
+                      Qty: {displayQty} {item.unit}
+                    </Text>
+                    {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && (
+                      <View style={styles.qtyControls}>
+                        <TouchableOpacity
+                          style={[styles.qtyButton, { backgroundColor: theme.error + '20' }]}
+                          onPress={() => handleQuantityChange(item.id, -1)}
+                          disabled={displayQty === 0}
+                        >
+                          <Minus size={14} color={displayQty === 0 ? theme.textSecondary : theme.error} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.qtyButton, { backgroundColor: theme.success + '20' }]}
+                          onPress={() => handleQuantityChange(item.id, 1)}
+                        >
+                          <Plus size={14} color={theme.success} />
+                        </TouchableOpacity>
+                        {isEditing && (
+                          <TouchableOpacity
+                            style={[styles.qtyButton, { backgroundColor: theme.primary }]}
+                            onPress={() => handleSaveQuantity(item.id)}
+                          >
+                            <Save size={14} color="#fff" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.itemPrice, { color: theme.success, fontWeight: '600' as const }]}>
+                    Price: ₱{totalPrice.toFixed(2)}
+                  </Text>
+                  <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
+                    Reorder: {item.reorder_level_qty} {item.unit}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.actionIcon, { backgroundColor: theme.error + '20' }]}
-                  onPress={() => handleDeleteItem(item)}
-                >
-                  <Trash2 size={18} color={theme.error} />
-                </TouchableOpacity>
+                <View style={styles.itemActions}>
+                  <TouchableOpacity
+                    style={[styles.actionIcon, { backgroundColor: theme.primary + '20' }]}
+                    onPress={() => openItemModal(item)}
+                  >
+                    <Edit2 size={18} color={theme.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionIcon, { backgroundColor: theme.error + '20' }]}
+                    onPress={() => handleDeleteItem(item)}
+                  >
+                    <Trash2 size={18} color={theme.error} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        ))
+          );
+        })
       )}
     </View>
   );
@@ -375,6 +451,15 @@ export default function InventoryScreen() {
                 keyboardType="decimal-pad"
                 value={itemPrice}
                 onChangeText={setItemPrice}
+              />
+              <Text style={[styles.label, { color: theme.text }]}>Current Quantity:</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
+                placeholder="Current quantity"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={itemCurrentQty}
+                onChangeText={setItemCurrentQty}
               />
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -511,6 +596,27 @@ const styles = StyleSheet.create({
   },
   itemReorder: {
     fontSize: 12,
+  },
+  itemQty: {
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: 4,
+  },
+  qtyControls: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  qtyButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   modalOverlay: {

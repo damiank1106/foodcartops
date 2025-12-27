@@ -350,6 +350,7 @@ export interface InventoryItem {
   id: string;
   name: string;
   unit: InventoryUnit;
+  current_qty: number;
   reorder_level_qty: number;
   storage_group: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
   price_cents: number;

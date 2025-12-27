@@ -40,6 +40,7 @@ export class InventoryItemRepository extends BaseRepository {
     reorder_level_qty?: number;
     storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
     price_cents?: number;
+    current_qty?: number;
     user_id: string;
   }): Promise<InventoryItem> {
     console.log('[InventoryItemRepository] Creating inventory item:', data.name);
@@ -51,6 +52,7 @@ export class InventoryItemRepository extends BaseRepository {
       id,
       name: data.name,
       unit: data.unit,
+      current_qty: data.current_qty || 0,
       reorder_level_qty: data.reorder_level_qty || 0,
       storage_group: data.storage_group || 'FREEZER',
       price_cents: data.price_cents || 0,
@@ -60,9 +62,9 @@ export class InventoryItemRepository extends BaseRepository {
     };
 
     await db.runAsync(
-      `INSERT INTO inventory_items (id, name, unit, reorder_level_qty, storage_group, price_cents, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.id, item.name, item.unit, item.reorder_level_qty, item.storage_group, item.price_cents, item.is_active, item.created_at, item.updated_at]
+      `INSERT INTO inventory_items (id, name, unit, current_qty, reorder_level_qty, storage_group, price_cents, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.id, item.name, item.unit, item.current_qty, item.reorder_level_qty, item.storage_group, item.price_cents, item.is_active, item.created_at, item.updated_at]
     );
 
     await this.auditRepo.log({
@@ -81,6 +83,7 @@ export class InventoryItemRepository extends BaseRepository {
     id: string;
     name?: string;
     unit?: InventoryUnit;
+    current_qty?: number;
     reorder_level_qty?: number;
     storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
     price_cents?: number;
@@ -99,6 +102,7 @@ export class InventoryItemRepository extends BaseRepository {
       ...existing,
       name: data.name !== undefined ? data.name : existing.name,
       unit: data.unit !== undefined ? data.unit : existing.unit,
+      current_qty: data.current_qty !== undefined ? data.current_qty : existing.current_qty,
       reorder_level_qty: data.reorder_level_qty !== undefined ? data.reorder_level_qty : existing.reorder_level_qty,
       storage_group: data.storage_group !== undefined ? data.storage_group : existing.storage_group,
       price_cents: data.price_cents !== undefined ? data.price_cents : existing.price_cents,
@@ -107,9 +111,9 @@ export class InventoryItemRepository extends BaseRepository {
 
     await db.runAsync(
       `UPDATE inventory_items 
-       SET name = ?, unit = ?, reorder_level_qty = ?, storage_group = ?, price_cents = ?, updated_at = ?
+       SET name = ?, unit = ?, current_qty = ?, reorder_level_qty = ?, storage_group = ?, price_cents = ?, updated_at = ?
        WHERE id = ?`,
-      [updated.name, updated.unit, updated.reorder_level_qty, updated.storage_group, updated.price_cents, updated.updated_at, updated.id]
+      [updated.name, updated.unit, updated.current_qty, updated.reorder_level_qty, updated.storage_group, updated.price_cents, updated.updated_at, updated.id]
     );
 
     await this.auditRepo.log({
@@ -122,6 +126,46 @@ export class InventoryItemRepository extends BaseRepository {
     });
 
     console.log(`[InventoryItemRepository] Updated inventory item: ${data.id}`);
+    return updated;
+  }
+
+  async updateQuantity(data: {
+    id: string;
+    current_qty: number;
+    user_id: string;
+  }): Promise<InventoryItem> {
+    console.log(`[InventoryItemRepository] Updating quantity for inventory item: ${data.id}`);
+    const db = await this.getDb();
+    
+    const existing = await this.getById(data.id);
+    if (!existing) {
+      throw new Error('Inventory item not found');
+    }
+
+    const now = this.now();
+    const updated: InventoryItem = {
+      ...existing,
+      current_qty: data.current_qty,
+      updated_at: now,
+    };
+
+    await db.runAsync(
+      `UPDATE inventory_items 
+       SET current_qty = ?, updated_at = ?
+       WHERE id = ?`,
+      [updated.current_qty, updated.updated_at, updated.id]
+    );
+
+    await this.auditRepo.log({
+      user_id: data.user_id,
+      entity_type: 'inventory_item',
+      entity_id: data.id,
+      action: 'inventory_item_quantity_updated',
+      old_data: JSON.stringify({ current_qty: existing.current_qty }),
+      new_data: JSON.stringify({ current_qty: updated.current_qty }),
+    });
+
+    console.log(`[InventoryItemRepository] Updated quantity for inventory item: ${data.id}`);
     return updated;
   }
 

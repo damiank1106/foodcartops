@@ -870,15 +870,6 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
               <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.text }]}>Other Expenses</Text>
                 <View style={styles.cardHeaderActions}>
-                  {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && periodType === 'day' && (
-                    <TouchableOpacity
-                      style={[styles.deleteDataButton, { backgroundColor: theme.error + '15' }]}
-                      onPress={handleDeleteDaySales}
-                    >
-                      <Trash2 size={16} color={theme.error} />
-                      <Text style={[styles.deleteDataButtonText, { color: theme.error }]}>Delete Data</Text>
-                    </TouchableOpacity>
-                  )}
                   <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: theme.primary }]}
                     onPress={() => openOtherExpenseModal()}
@@ -918,6 +909,23 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No other expenses</Text>
               )}
             </View>
+
+            {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && periodType === 'day' && (
+              <TouchableOpacity
+                style={[styles.deleteDataButtonLarge, { backgroundColor: theme.error }]}
+                onPress={handleDeleteDaySales}
+                disabled={deleteDaySalesMutation.isPending}
+              >
+                {deleteDaySalesMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Trash2 size={20} color="#fff" />
+                    <Text style={styles.deleteDataButtonLargeText}>Delete Data</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </>
         )}
 
@@ -1344,6 +1352,23 @@ const styles = StyleSheet.create({
   deleteDataButtonText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  deleteDataButtonLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 16,
+    marginHorizontal: 16,
+  },
+  deleteDataButtonLargeText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700' as const,
   },
   modalOverlay: {
     flex: 1,
