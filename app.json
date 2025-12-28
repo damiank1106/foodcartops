@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "FoodCartOps",
-    "slug": "foodcartops",
+    "name": "MY Food Cart",
+    "slug": "MYfoodCart",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
