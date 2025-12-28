@@ -84,29 +84,7 @@ export default function InventoryScreen() {
     }
   };
 
-  const handleCreateGroupFromTab = async () => {
-    if (!user?.id) return;
 
-    Alert.prompt(
-      'New Storage Group',
-      'Enter group name:',
-      async (text) => {
-        if (!text?.trim()) return;
-        try {
-          const newGroup = await groupRepo.create({
-            name: text.trim(),
-            user_id: user.id,
-          });
-          await loadData();
-          setSelectedGroupId(newGroup.id);
-          Alert.alert('Success', 'Storage group created');
-        } catch (error: any) {
-          Alert.alert('Error', error.message || 'Failed to create group');
-        }
-      },
-      'plain-text'
-    );
-  };
 
   const handleLongPressGroup = (group: InventoryStorageGroup) => {
     if (!user?.id) return;
@@ -366,12 +344,6 @@ export default function InventoryScreen() {
         <Text style={[styles.groupButtonText, { color: selectedGroupId === 'ALL' ? '#fff' : theme.text }]}>
           All
         </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.createGroupButton, { backgroundColor: theme.primary + '20' }]}
-        onPress={handleCreateGroupFromTab}
-      >
-        <Plus size={16} color={theme.primary} />
       </TouchableOpacity>
       {storageGroups.map((group) => (
         <TouchableOpacity
@@ -670,13 +642,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
   },
-  createGroupButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   scrollContent: {
     flex: 1,
   },
