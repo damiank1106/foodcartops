@@ -39,6 +39,7 @@ export class InventoryItemRepository extends BaseRepository {
     unit: InventoryUnit;
     reorder_level_qty?: number;
     storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
+    storage_group_id?: string;
     price_cents?: number;
     current_qty?: number;
     user_id: string;
@@ -55,6 +56,7 @@ export class InventoryItemRepository extends BaseRepository {
       current_qty: data.current_qty || 0,
       reorder_level_qty: data.reorder_level_qty || 0,
       storage_group: data.storage_group || 'FREEZER',
+      storage_group_id: data.storage_group_id || null,
       price_cents: data.price_cents || 0,
       is_active: 1,
       created_at: now,
@@ -62,9 +64,9 @@ export class InventoryItemRepository extends BaseRepository {
     };
 
     await db.runAsync(
-      `INSERT INTO inventory_items (id, name, unit, current_qty, reorder_level_qty, storage_group, price_cents, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.id, item.name, item.unit, item.current_qty, item.reorder_level_qty, item.storage_group, item.price_cents, item.is_active, item.created_at, item.updated_at]
+      `INSERT INTO inventory_items (id, name, unit, current_qty, reorder_level_qty, storage_group, storage_group_id, price_cents, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.id, item.name, item.unit, item.current_qty, item.reorder_level_qty, item.storage_group, item.storage_group_id ?? null, item.price_cents, item.is_active, item.created_at, item.updated_at]
     );
 
     await this.auditRepo.log({
@@ -86,6 +88,7 @@ export class InventoryItemRepository extends BaseRepository {
     current_qty?: number;
     reorder_level_qty?: number;
     storage_group?: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
+    storage_group_id?: string | null;
     price_cents?: number;
     user_id: string;
   }): Promise<InventoryItem> {
@@ -105,15 +108,16 @@ export class InventoryItemRepository extends BaseRepository {
       current_qty: data.current_qty !== undefined ? data.current_qty : existing.current_qty,
       reorder_level_qty: data.reorder_level_qty !== undefined ? data.reorder_level_qty : existing.reorder_level_qty,
       storage_group: data.storage_group !== undefined ? data.storage_group : existing.storage_group,
+      storage_group_id: data.storage_group_id !== undefined ? data.storage_group_id : existing.storage_group_id,
       price_cents: data.price_cents !== undefined ? data.price_cents : existing.price_cents,
       updated_at: now,
     };
 
     await db.runAsync(
       `UPDATE inventory_items 
-       SET name = ?, unit = ?, current_qty = ?, reorder_level_qty = ?, storage_group = ?, price_cents = ?, updated_at = ?
+       SET name = ?, unit = ?, current_qty = ?, reorder_level_qty = ?, storage_group = ?, storage_group_id = ?, price_cents = ?, updated_at = ?
        WHERE id = ?`,
-      [updated.name, updated.unit, updated.current_qty, updated.reorder_level_qty, updated.storage_group, updated.price_cents, updated.updated_at, updated.id]
+      [updated.name, updated.unit, updated.current_qty, updated.reorder_level_qty, updated.storage_group, updated.storage_group_id ?? null, updated.price_cents, updated.updated_at, updated.id]
     );
 
     await this.auditRepo.log({
@@ -219,5 +223,16 @@ export class InventoryItemRepository extends BaseRepository {
     });
 
     console.log(`[InventoryItemRepository] Restored inventory item: ${id}`);
+  }
+
+  async listByGroup(storage_group_id: string): Promise<InventoryItem[]> {
+    console.log(`[InventoryItemRepository] Fetching items by group: ${storage_group_id}`);
+    const db = await this.getDb();
+    const result = await db.getAllAsync<InventoryItem>(
+      `SELECT * FROM inventory_items WHERE is_active = 1 AND storage_group_id = ? ORDER BY name ASC`,
+      [storage_group_id]
+    );
+    console.log(`[InventoryItemRepository] Found ${result.length} items in group`);
+    return result;
   }
 }

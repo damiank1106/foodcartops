@@ -1,13 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { Package, Plus, Edit2, Snowflake, ShoppingCart, Trash2, Box, UtensilsCrossed, Minus, Save } from 'lucide-react-native';
+import { Package, Plus, Edit2, Trash2, Minus, Save, Check, X } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repository';
-import type { InventoryItem, InventoryUnit } from '@/lib/types';
-
-type StorageGroup = 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
+import { InventoryStorageGroupRepository } from '@/lib/repositories/inventory-storage-group.repository';
+import type { InventoryItem, InventoryUnit, InventoryStorageGroup } from '@/lib/types';
 
 export default function InventoryScreen() {
   const { theme } = useTheme();
@@ -17,7 +16,8 @@ export default function InventoryScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<StorageGroup | 'ALL'>('ALL');
+  const [storageGroups, setStorageGroups] = useState<InventoryStorageGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | 'ALL'>('ALL');
 
   const [showItemModal, setShowItemModal] = useState<boolean>(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -25,26 +25,34 @@ export default function InventoryScreen() {
   const [itemName, setItemName] = useState<string>('');
   const [itemUnit, setItemUnit] = useState<InventoryUnit>('pcs');
   const [itemReorder, setItemReorder] = useState<string>('0');
-  const [itemGroup, setItemGroup] = useState<StorageGroup>('FREEZER');
+  const [itemGroupId, setItemGroupId] = useState<string | null>(null);
   const [itemPrice, setItemPrice] = useState<string>('0');
   const [itemCurrentQty, setItemCurrentQty] = useState<string>('0');
+
+  const [showCreateGroupInModal, setShowCreateGroupInModal] = useState<boolean>(false);
+  const [newGroupNameInModal, setNewGroupNameInModal] = useState<string>('');
 
   const [editingQuantities, setEditingQuantities] = useState<Record<string, number>>({});
 
   const itemRepo = useMemo(() => new InventoryItemRepository(), []);
+  const groupRepo = useMemo(() => new InventoryStorageGroupRepository(), []);
 
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const itemsData = await itemRepo.listActive();
+      const [itemsData, groupsData] = await Promise.all([
+        itemRepo.listActive(),
+        groupRepo.listActive(),
+      ]);
       setItems(itemsData);
+      setStorageGroups(groupsData);
     } catch (error) {
       console.error('[Inventory] Load error:', error);
       Alert.alert('Error', 'Failed to load data');
     } finally {
       setIsLoading(false);
     }
-  }, [itemRepo]);
+  }, [itemRepo, groupRepo]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -58,13 +66,175 @@ export default function InventoryScreen() {
     }, [loadData])
   );
 
+  const handleCreateGroupInModal = async () => {
+    if (!newGroupNameInModal.trim() || !user?.id) return;
+
+    try {
+      const newGroup = await groupRepo.create({
+        name: newGroupNameInModal.trim(),
+        user_id: user.id,
+      });
+      await loadData();
+      setItemGroupId(newGroup.id);
+      setNewGroupNameInModal('');
+      setShowCreateGroupInModal(false);
+      Alert.alert('Success', 'Storage group created');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create group');
+    }
+  };
+
+  const handleCreateGroupFromTab = async () => {
+    if (!user?.id) return;
+
+    Alert.prompt(
+      'New Storage Group',
+      'Enter group name:',
+      async (text) => {
+        if (!text?.trim()) return;
+        try {
+          const newGroup = await groupRepo.create({
+            name: text.trim(),
+            user_id: user.id,
+          });
+          await loadData();
+          setSelectedGroupId(newGroup.id);
+          Alert.alert('Success', 'Storage group created');
+        } catch (error: any) {
+          Alert.alert('Error', error.message || 'Failed to create group');
+        }
+      },
+      'plain-text'
+    );
+  };
+
+  const handleLongPressGroup = (group: InventoryStorageGroup) => {
+    if (!user?.id) return;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Rename', 'Delete'],
+          destructiveButtonIndex: 2,
+          cancelButtonIndex: 0,
+        },
+        async (buttonIndex) => {
+          if (buttonIndex === 1) {
+            Alert.prompt(
+              'Rename Group',
+              'Enter new name:',
+              async (text) => {
+                if (!text?.trim()) return;
+                try {
+                  await groupRepo.rename({
+                    id: group.id,
+                    name: text.trim(),
+                    user_id: user.id,
+                  });
+                  await loadData();
+                  Alert.alert('Success', 'Group renamed');
+                } catch (error: any) {
+                  Alert.alert('Error', error.message || 'Failed to rename group');
+                }
+              },
+              'plain-text',
+              group.name
+            );
+          } else if (buttonIndex === 2) {
+            Alert.alert(
+              'Delete Group',
+              `Delete "${group.name}"? Items in this group will move to "All".`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await groupRepo.deactivate({ id: group.id, user_id: user.id });
+                      if (selectedGroupId === group.id) {
+                        setSelectedGroupId('ALL');
+                      }
+                      await loadData();
+                      Alert.alert('Success', 'Group deleted');
+                    } catch (error: any) {
+                      Alert.alert('Error', error.message || 'Failed to delete group');
+                    }
+                  },
+                },
+              ]
+            );
+          }
+        }
+      );
+    } else {
+      Alert.alert('Group Actions', `Manage "${group.name}"`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Rename',
+          onPress: () => {
+            Alert.prompt(
+              'Rename Group',
+              'Enter new name:',
+              async (text) => {
+                if (!text?.trim()) return;
+                try {
+                  await groupRepo.rename({
+                    id: group.id,
+                    name: text.trim(),
+                    user_id: user.id,
+                  });
+                  await loadData();
+                  Alert.alert('Success', 'Group renamed');
+                } catch (error: any) {
+                  Alert.alert('Error', error.message || 'Failed to rename group');
+                }
+              },
+              'plain-text',
+              group.name
+            );
+          },
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Delete Group',
+              `Delete "${group.name}"? Items in this group will move to "All".`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await groupRepo.deactivate({ id: group.id, user_id: user.id });
+                      if (selectedGroupId === group.id) {
+                        setSelectedGroupId('ALL');
+                      }
+                      await loadData();
+                      Alert.alert('Success', 'Group deleted');
+                    } catch (error: any) {
+                      Alert.alert('Error', error.message || 'Failed to delete group');
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]);
+    }
+  };
+
   const openItemModal = (item?: InventoryItem) => {
     if (item) {
       setEditingItem(item);
       setItemName(item.name);
       setItemUnit(item.unit);
       setItemReorder(item.reorder_level_qty.toString());
-      setItemGroup((item as any).storage_group || 'FREEZER');
+      setItemGroupId(item.storage_group_id || null);
       setItemPrice((item.price_cents / 100).toFixed(2));
       setItemCurrentQty(item.current_qty.toString());
     } else {
@@ -72,7 +242,7 @@ export default function InventoryScreen() {
       setItemName('');
       setItemUnit('pcs');
       setItemReorder('0');
-      setItemGroup('FREEZER');
+      setItemGroupId(selectedGroupId !== 'ALL' ? selectedGroupId : null);
       setItemPrice('0');
       setItemCurrentQty('0');
     }
@@ -97,7 +267,7 @@ export default function InventoryScreen() {
           unit: itemUnit,
           current_qty: currentQty,
           reorder_level_qty: parseFloat(itemReorder) || 0,
-          storage_group: itemGroup,
+          storage_group_id: itemGroupId,
           price_cents: priceCents,
           user_id: user.id,
         });
@@ -108,7 +278,7 @@ export default function InventoryScreen() {
           unit: itemUnit,
           current_qty: currentQty,
           reorder_level_qty: parseFloat(itemReorder) || 0,
-          storage_group: itemGroup,
+          storage_group_id: itemGroupId || undefined,
           price_cents: priceCents,
           user_id: user.id,
         });
@@ -178,9 +348,9 @@ export default function InventoryScreen() {
   };
 
   const filteredItems = useMemo(() => {
-    if (selectedGroup === 'ALL') return items;
-    return items.filter(item => (item as any).storage_group === selectedGroup);
-  }, [items, selectedGroup]);
+    if (selectedGroupId === 'ALL') return items;
+    return items.filter(item => item.storage_group_id === selectedGroupId);
+  }, [items, selectedGroupId]);
 
   const renderGroupFilter = () => (
     <ScrollView
@@ -190,49 +360,31 @@ export default function InventoryScreen() {
       contentContainerStyle={styles.groupFilterContent}
     >
       <TouchableOpacity
-        style={[styles.groupButton, selectedGroup === 'ALL' && { backgroundColor: theme.primary }]}
-        onPress={() => setSelectedGroup('ALL')}
+        style={[styles.groupButton, selectedGroupId === 'ALL' && { backgroundColor: theme.primary }]}
+        onPress={() => setSelectedGroupId('ALL')}
       >
-        <Text style={[styles.groupButtonText, { color: selectedGroup === 'ALL' ? '#fff' : theme.text }]}>
+        <Text style={[styles.groupButtonText, { color: selectedGroupId === 'ALL' ? '#fff' : theme.text }]}>
           All
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[styles.groupButton, selectedGroup === 'FREEZER' && { backgroundColor: theme.primary }]}
-        onPress={() => setSelectedGroup('FREEZER')}
+        style={[styles.createGroupButton, { backgroundColor: theme.primary + '20' }]}
+        onPress={handleCreateGroupFromTab}
       >
-        <Snowflake size={16} color={selectedGroup === 'FREEZER' ? '#fff' : theme.text} />
-        <Text style={[styles.groupButtonText, { color: selectedGroup === 'FREEZER' ? '#fff' : theme.text }]}>
-          Freezer
-        </Text>
+        <Plus size={16} color={theme.primary} />
       </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.groupButton, selectedGroup === 'CART' && { backgroundColor: theme.primary }]}
-        onPress={() => setSelectedGroup('CART')}
-      >
-        <ShoppingCart size={16} color={selectedGroup === 'CART' ? '#fff' : theme.text} />
-        <Text style={[styles.groupButtonText, { color: selectedGroup === 'CART' ? '#fff' : theme.text }]}>
-          Cart
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.groupButton, selectedGroup === 'PACKAGING_SUPPLY' && { backgroundColor: theme.primary }]}
-        onPress={() => setSelectedGroup('PACKAGING_SUPPLY')}
-      >
-        <Box size={16} color={selectedGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text} />
-        <Text style={[styles.groupButtonText, { color: selectedGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text }]}>
-          Packaging Supply
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.groupButton, selectedGroup === 'CONDIMENTS' && { backgroundColor: theme.primary }]}
-        onPress={() => setSelectedGroup('CONDIMENTS')}
-      >
-        <UtensilsCrossed size={16} color={selectedGroup === 'CONDIMENTS' ? '#fff' : theme.text} />
-        <Text style={[styles.groupButtonText, { color: selectedGroup === 'CONDIMENTS' ? '#fff' : theme.text }]}>
-          Condiments
-        </Text>
-      </TouchableOpacity>
+      {storageGroups.map((group) => (
+        <TouchableOpacity
+          key={group.id}
+          style={[styles.groupButton, selectedGroupId === group.id && { backgroundColor: theme.primary }]}
+          onPress={() => setSelectedGroupId(group.id)}
+          onLongPress={() => handleLongPressGroup(group)}
+        >
+          <Text style={[styles.groupButtonText, { color: selectedGroupId === group.id ? '#fff' : theme.text }]}>
+            {group.name}
+          </Text>
+        </TouchableOpacity>
+      ))}
     </ScrollView>
   );
 
@@ -255,6 +407,7 @@ export default function InventoryScreen() {
           const isEditing = editingQuantities[item.id] !== undefined;
           const displayQty = isEditing ? editingQuantities[item.id] : item.current_qty;
           const totalPrice = (item.price_cents / 100) * displayQty;
+          const itemGroup = storageGroups.find(g => g.id === item.storage_group_id);
 
           return (
             <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.card }]}>
@@ -265,32 +418,13 @@ export default function InventoryScreen() {
                 >
                   <View style={styles.itemHeader}>
                     <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-                    <View style={[styles.groupBadge, { 
-                      backgroundColor: 
-                        (item as any).storage_group === 'FREEZER' ? theme.primary + '20' :
-                        (item as any).storage_group === 'CART' ? theme.success + '20' :
-                        (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' + '20' :
-                        '#F7931E' + '20'
-                    }]}>
-                      {(item as any).storage_group === 'FREEZER' ? (
-                        <Snowflake size={12} color={theme.primary} />
-                      ) : (item as any).storage_group === 'CART' ? (
-                        <ShoppingCart size={12} color={theme.success} />
-                      ) : (item as any).storage_group === 'PACKAGING_SUPPLY' ? (
-                        <Box size={12} color="#FF6B35" />
-                      ) : (
-                        <UtensilsCrossed size={12} color="#F7931E" />
-                      )}
-                      <Text style={[styles.groupBadgeText, { 
-                        color: 
-                          (item as any).storage_group === 'FREEZER' ? theme.primary :
-                          (item as any).storage_group === 'CART' ? theme.success :
-                          (item as any).storage_group === 'PACKAGING_SUPPLY' ? '#FF6B35' :
-                          '#F7931E'
-                      }]}>
-                        {(item as any).storage_group || 'FREEZER'}
-                      </Text>
-                    </View>
+                    {itemGroup && (
+                      <View style={[styles.groupBadge, { backgroundColor: theme.primary + '20' }]}>
+                        <Text style={[styles.groupBadgeText, { color: theme.primary }]}>
+                          {itemGroup.name}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
                   <View style={styles.qtyRow}>
@@ -350,8 +484,6 @@ export default function InventoryScreen() {
     </View>
   );
 
-
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {renderGroupFilter()}
@@ -381,38 +513,60 @@ export default function InventoryScreen() {
               </Text>
               
               <Text style={[styles.label, { color: theme.text }]}>Storage Group:</Text>
-              <View style={styles.groupRow}>
+              <View style={styles.groupSelectorRow}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.groupScroll}>
+                  <TouchableOpacity
+                    style={[styles.groupSelectChip, { backgroundColor: itemGroupId === null ? theme.primary : theme.background }]}
+                    onPress={() => setItemGroupId(null)}
+                  >
+                    <Text style={[styles.groupSelectChipText, { color: itemGroupId === null ? '#fff' : theme.text }]}>None</Text>
+                  </TouchableOpacity>
+                  {storageGroups.map((group) => (
+                    <TouchableOpacity
+                      key={group.id}
+                      style={[styles.groupSelectChip, { backgroundColor: itemGroupId === group.id ? theme.primary : theme.background }]}
+                      onPress={() => setItemGroupId(group.id)}
+                    >
+                      <Text style={[styles.groupSelectChipText, { color: itemGroupId === group.id ? '#fff' : theme.text }]}>
+                        {group.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
                 <TouchableOpacity
-                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'FREEZER' ? theme.primary : theme.background }]}
-                  onPress={() => setItemGroup('FREEZER')}
+                  style={[styles.addGroupButton, { backgroundColor: theme.primary }]}
+                  onPress={() => setShowCreateGroupInModal(true)}
                 >
-                  <Snowflake size={18} color={itemGroup === 'FREEZER' ? '#fff' : theme.text} />
-                  <Text style={[styles.groupSelectText, { color: itemGroup === 'FREEZER' ? '#fff' : theme.text }]}>Freezer</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'CART' ? theme.primary : theme.background }]}
-                  onPress={() => setItemGroup('CART')}
-                >
-                  <ShoppingCart size={18} color={itemGroup === 'CART' ? '#fff' : theme.text} />
-                  <Text style={[styles.groupSelectText, { color: itemGroup === 'CART' ? '#fff' : theme.text }]}>Cart</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.groupRow}>
-                <TouchableOpacity
-                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'PACKAGING_SUPPLY' ? theme.primary : theme.background }]}
-                  onPress={() => setItemGroup('PACKAGING_SUPPLY')}
-                >
-                  <Box size={18} color={itemGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text} />
-                  <Text style={[styles.groupSelectText, { color: itemGroup === 'PACKAGING_SUPPLY' ? '#fff' : theme.text }]}>Packaging</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.groupSelectButton, { backgroundColor: itemGroup === 'CONDIMENTS' ? theme.primary : theme.background }]}
-                  onPress={() => setItemGroup('CONDIMENTS')}
-                >
-                  <UtensilsCrossed size={18} color={itemGroup === 'CONDIMENTS' ? '#fff' : theme.text} />
-                  <Text style={[styles.groupSelectText, { color: itemGroup === 'CONDIMENTS' ? '#fff' : theme.text }]}>Condiments</Text>
+                  <Plus size={18} color="#fff" />
                 </TouchableOpacity>
               </View>
+
+              {showCreateGroupInModal && (
+                <View style={[styles.createGroupInline, { backgroundColor: theme.background }]}>
+                  <TextInput
+                    style={[styles.createGroupInput, { color: theme.text }]}
+                    placeholder="New group name"
+                    placeholderTextColor={theme.textSecondary}
+                    value={newGroupNameInModal}
+                    onChangeText={setNewGroupNameInModal}
+                  />
+                  <TouchableOpacity
+                    style={[styles.createGroupCheckButton, { backgroundColor: theme.success }]}
+                    onPress={handleCreateGroupInModal}
+                  >
+                    <Check size={18} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.createGroupCancelButton, { backgroundColor: theme.error }]}
+                    onPress={() => {
+                      setShowCreateGroupInModal(false);
+                      setNewGroupNameInModal('');
+                    }}
+                  >
+                    <X size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <TextInput
                 style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
@@ -515,6 +669,13 @@ const styles = StyleSheet.create({
   groupButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
+  },
+  createGroupButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     flex: 1,
@@ -653,6 +814,59 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
+  groupSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  groupScroll: {
+    flex: 1,
+  },
+  groupSelectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  groupSelectChipText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  addGroupButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createGroupInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    gap: 8,
+    marginBottom: 12,
+  },
+  createGroupInput: {
+    flex: 1,
+    padding: 8,
+    fontSize: 14,
+  },
+  createGroupCheckButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  createGroupCancelButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   input: {
     padding: 12,
     borderRadius: 8,
@@ -670,24 +884,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   unitButtonText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-  },
-  groupRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  groupSelectButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  groupSelectText: {
     fontSize: 14,
     fontWeight: '600' as const,
   },

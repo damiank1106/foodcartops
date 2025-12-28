@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 27;
+export const SCHEMA_VERSION = 28;
 
 export const MIGRATIONS = [
   {
@@ -1083,6 +1083,107 @@ export const MIGRATIONS = [
 
       CREATE INDEX idx_inventory_items_is_active ON inventory_items(is_active);
       CREATE INDEX idx_inventory_items_name ON inventory_items(name);
+    `,
+  },
+  {
+    version: 28,
+    up: `
+      CREATE TABLE IF NOT EXISTS inventory_storage_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX idx_inventory_storage_groups_is_active ON inventory_storage_groups(is_active);
+      CREATE INDEX idx_inventory_storage_groups_sort_order ON inventory_storage_groups(sort_order);
+
+      INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
+      SELECT 
+        lower(hex(randomblob(16))),
+        'Freezer',
+        0,
+        1,
+        ${Date.now()},
+        ${Date.now()}
+      WHERE NOT EXISTS (SELECT 1 FROM inventory_storage_groups WHERE name = 'Freezer');
+
+      INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
+      SELECT 
+        lower(hex(randomblob(16))),
+        'Cart',
+        1,
+        1,
+        ${Date.now()},
+        ${Date.now()}
+      WHERE NOT EXISTS (SELECT 1 FROM inventory_storage_groups WHERE name = 'Cart');
+
+      INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
+      SELECT 
+        lower(hex(randomblob(16))),
+        'Packaging Supply',
+        2,
+        1,
+        ${Date.now()},
+        ${Date.now()}
+      WHERE NOT EXISTS (SELECT 1 FROM inventory_storage_groups WHERE name = 'Packaging Supply');
+
+      INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
+      SELECT 
+        lower(hex(randomblob(16))),
+        'Condiments',
+        3,
+        1,
+        ${Date.now()},
+        ${Date.now()}
+      WHERE NOT EXISTS (SELECT 1 FROM inventory_storage_groups WHERE name = 'Condiments');
+
+      ALTER TABLE inventory_items ADD COLUMN storage_group_id TEXT;
+
+      UPDATE inventory_items 
+      SET storage_group_id = (
+        SELECT id FROM inventory_storage_groups 
+        WHERE 
+          (inventory_items.storage_group = 'FREEZER' AND name = 'Freezer') OR
+          (inventory_items.storage_group = 'CART' AND name = 'Cart') OR
+          (inventory_items.storage_group = 'PACKAGING_SUPPLY' AND name = 'Packaging Supply') OR
+          (inventory_items.storage_group = 'CONDIMENTS' AND name = 'Condiments')
+        LIMIT 1
+      );
+
+      CREATE INDEX idx_inventory_items_storage_group_id ON inventory_items(storage_group_id);
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Created inventory_storage_groups table and added storage_group_id to inventory_items', ${Date.now()});
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_inventory_items_storage_group_id;
+      
+      CREATE TABLE inventory_items_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL CHECK(unit IN ('pcs', 'kg', 'g', 'L', 'mL', 'bundle', 'pack')),
+        reorder_level_qty REAL NOT NULL DEFAULT 0,
+        storage_group TEXT NOT NULL DEFAULT 'FREEZER' CHECK(storage_group IN ('FREEZER', 'CART', 'PACKAGING_SUPPLY', 'CONDIMENTS')),
+        price_cents INTEGER NOT NULL DEFAULT 0,
+        current_qty REAL NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO inventory_items_new (id, name, unit, reorder_level_qty, storage_group, price_cents, current_qty, is_active, created_at, updated_at)
+      SELECT id, name, unit, reorder_level_qty, storage_group, price_cents, current_qty, is_active, created_at, updated_at FROM inventory_items;
+
+      DROP TABLE inventory_items;
+      ALTER TABLE inventory_items_new RENAME TO inventory_items;
+
+      CREATE INDEX idx_inventory_items_is_active ON inventory_items(is_active);
+      CREATE INDEX idx_inventory_items_name ON inventory_items(name);
+
+      DROP TABLE IF EXISTS inventory_storage_groups;
     `,
   },
 ];

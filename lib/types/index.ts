@@ -346,6 +346,15 @@ export interface BossSavedItemWithDetails extends BossSavedItem {
   created_by_name: string;
 }
 
+export interface InventoryStorageGroup {
+  id: string;
+  name: string;
+  sort_order: number;
+  is_active: number;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -353,6 +362,7 @@ export interface InventoryItem {
   current_qty: number;
   reorder_level_qty: number;
   storage_group: 'FREEZER' | 'CART' | 'PACKAGING_SUPPLY' | 'CONDIMENTS';
+  storage_group_id?: string | null;
   price_cents: number;
   is_active: number;
   created_at: number;
