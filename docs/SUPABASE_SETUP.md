@@ -85,6 +85,82 @@ CREATE INDEX IF NOT EXISTS idx_products_updated_at_iso ON public.products(update
 CREATE INDEX IF NOT EXISTS idx_products_deleted_at ON public.products(deleted_at);
 ```
 
+### Create carts table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.carts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  location TEXT,
+  notes TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by_user_id TEXT,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_carts_business_id ON public.carts(business_id);
+CREATE INDEX IF NOT EXISTS idx_carts_updated_at_iso ON public.carts(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_carts_deleted_at ON public.carts(deleted_at);
+```
+
+### Create inventory_storage_groups table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.inventory_storage_groups (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  normalized_name TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_storage_groups_business_id ON public.inventory_storage_groups(business_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_storage_groups_updated_at_iso ON public.inventory_storage_groups(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_inventory_storage_groups_deleted_at ON public.inventory_storage_groups(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_inventory_storage_groups_normalized_name ON public.inventory_storage_groups(normalized_name) WHERE is_active = 1;
+```
+
+### Create inventory_items table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.inventory_items (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  reorder_level_qty REAL NOT NULL DEFAULT 0,
+  storage_group TEXT NOT NULL DEFAULT 'FREEZER',
+  storage_group_id TEXT,
+  price_cents INTEGER NOT NULL DEFAULT 0,
+  current_qty REAL NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_items_business_id ON public.inventory_items(business_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_storage_group_id ON public.inventory_items(storage_group_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_updated_at_iso ON public.inventory_items(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_deleted_at ON public.inventory_items(deleted_at);
+```
+
 ## 3. Row Level Security (RLS)
 
 ### Option A: Temporary - Allow All (for demo/testing)
@@ -102,6 +178,25 @@ CREATE POLICY "Allow all operations on product_categories"
 
 CREATE POLICY "Allow all operations on products"
   ON public.products
+  FOR ALL
+  USING (business_id = 'default_business');
+
+ALTER TABLE public.carts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_storage_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on carts"
+  ON public.carts
+  FOR ALL
+  USING (business_id = 'default_business');
+
+CREATE POLICY "Allow all operations on inventory_storage_groups"
+  ON public.inventory_storage_groups
+  FOR ALL
+  USING (business_id = 'default_business');
+
+CREATE POLICY "Allow all operations on inventory_items"
+  ON public.inventory_items
   FOR ALL
   USING (business_id = 'default_business');
 ```
@@ -122,6 +217,28 @@ CREATE POLICY "Authenticated users can manage product_categories"
 
 CREATE POLICY "Authenticated users can manage products"
   ON public.products
+  FOR ALL
+  TO authenticated
+  USING (business_id = 'default_business');
+
+ALTER TABLE public.carts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_storage_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can manage carts"
+  ON public.carts
+  FOR ALL
+  TO authenticated
+  USING (business_id = 'default_business');
+
+CREATE POLICY "Authenticated users can manage inventory_storage_groups"
+  ON public.inventory_storage_groups
+  FOR ALL
+  TO authenticated
+  USING (business_id = 'default_business');
+
+CREATE POLICY "Authenticated users can manage inventory_items"
+  ON public.inventory_items
   FOR ALL
   TO authenticated
   USING (business_id = 'default_business');
@@ -202,9 +319,17 @@ For production with multiple businesses:
 3. Update RLS policies to filter by authenticated user's business
 4. Add device registration and device-specific policies if needed
 
-## 9. Future Enhancements
+## 9. Current Synced Tables
 
-- Sync more tables (users, carts, sales, etc.)
+- `product_categories` - Product categories
+- `products` - Products
+- `carts` - Food carts
+- `inventory_storage_groups` - Inventory storage groups (Freezer, Cart, Packaging Supply, Condiments, etc.)
+- `inventory_items` - Inventory items with quantities and prices
+
+## 10. Future Enhancements
+
+- Sync more tables (users, sales, shifts, expenses, etc.)
 - Real-time sync using Supabase Realtime
 - Conflict resolution UI
 - Selective sync (choose what to sync)
