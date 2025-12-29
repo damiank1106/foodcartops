@@ -35,6 +35,24 @@ export interface SyncStatus {
   pendingCount: number;
 }
 
+function stripLocalOnlyColumns(tableName: string, payload: any): any {
+  const localOnlyColumns: Record<string, string[]> = {
+    inventory_items: ['current_qty', 'reorder_level_qty'],
+  };
+
+  const columnsToStrip = localOnlyColumns[tableName] || [];
+  if (columnsToStrip.length === 0) {
+    return payload;
+  }
+
+  const cleaned = { ...payload };
+  columnsToStrip.forEach(col => {
+    delete cleaned[col];
+  });
+
+  return cleaned;
+}
+
 let currentStatus: SyncStatus = {
   isRunning: false,
   currentStep: 'idle',
@@ -143,11 +161,12 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
       try {
         const payload = JSON.parse(row.payload_json);
+        const syncPayload = stripLocalOnlyColumns(row.table_name, payload);
 
         if (row.op === 'upsert') {
           const { error } = await supabase
             .from(row.table_name)
-            .upsert(payload, { onConflict: 'id' });
+            .upsert(syncPayload, { onConflict: 'id' });
 
           if (error) {
             throw error;
