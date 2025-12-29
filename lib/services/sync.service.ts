@@ -144,7 +144,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       return { success: false, error: 'Supabase not configured' };
     }
 
-    const db = await getDatabase();
+    let db = await getDatabase();
     const outboxRows = await db.getAllAsync<SyncOutboxRow>(
       'SELECT * FROM sync_outbox ORDER BY created_at ASC'
     );
@@ -208,6 +208,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           console.log(`[Sync] Pushed ${row.table_name} delete: ${row.row_id}`);
         }
 
+        db = await getDatabase();
         await db.runAsync('DELETE FROM sync_outbox WHERE id = ?', [row.id]);
       } catch (error: any) {
         console.error(`[Sync] Failed to push ${row.table_name}:`, error);
@@ -215,6 +216,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         
         if (errorMsg.toLowerCase().includes('invalid api key')) {
           console.error('[Sync] Invalid API key detected - stopping sync');
+          db = await getDatabase();
           await db.runAsync(
             'UPDATE sync_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?',
             [errorMsg, row.id]
@@ -232,6 +234,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           return { success: false, error: 'Invalid API key. Please check your credentials.' };
         }
         
+        db = await getDatabase();
         await db.runAsync(
           'UPDATE sync_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?',
           [errorMsg, row.id]
@@ -260,6 +263,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     // Ensure Supabase tables exist with matching schema before adding to sync
     for (const tableName of tables) {
       try {
+        db = await getDatabase();
         const stateRows = await db.getAllAsync<SyncStateRow>(
           'SELECT last_sync_at FROM sync_state WHERE table_name = ?',
           [tableName]
@@ -286,6 +290,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           let maxUpdatedAt = lastSyncAt;
 
           for (const remoteRow of data) {
+            db = await getDatabase();
             const pendingChanges = await db.getAllAsync<SyncOutboxRow>(
               'SELECT id FROM sync_outbox WHERE table_name = ? AND row_id = ?',
               [tableName, remoteRow.id]
@@ -330,6 +335,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             }
           }
 
+          db = await getDatabase();
           await db.runAsync(
             'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
             [maxUpdatedAt, tableName]
