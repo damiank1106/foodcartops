@@ -319,15 +319,222 @@ For production with multiple businesses:
 3. Update RLS policies to filter by authenticated user's business
 4. Add device registration and device-specific policies if needed
 
-## 9. Current Synced Tables
+## 9. Users + PIN Reset
+
+### Create users table
+
+This table stores PIN-only users for the food cart operations app. PINs are stored as SHA-256 hashes only.
+
+```sql
+CREATE TABLE IF NOT EXISTS public.users (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  pin_hash TEXT NOT NULL,
+  pin_hash_alg TEXT NOT NULL DEFAULT 'sha256-v1',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  is_system BOOLEAN NOT NULL DEFAULT false,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_business_id ON public.users(business_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
+CREATE INDEX IF NOT EXISTS idx_users_updated_at_iso ON public.users(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON public.users(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_users_is_system ON public.users(is_system) WHERE is_system = true;
+
+-- Constraint: only one system user per role
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_unique_system_role 
+  ON public.users(role) 
+  WHERE is_system = true AND deleted_at IS NULL;
+```
+
+### Insert 4 fixed system users with default PINs
+
+**⚠️ SECURITY NOTE:** These are default PINs stored as SHA-256 hashes. Change them in production.
+
+```sql
+-- System User 1: General Manager (PIN: 1234)
+INSERT INTO public.users (
+  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  business_id, created_at, updated_at, created_at_iso, updated_at_iso
+) VALUES (
+  'system-user-general-manager',
+  'General Manager',
+  'general_manager',
+  '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',
+  'sha256-v1',
+  1,
+  true,
+  'default_business',
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  NOW(),
+  NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  pin_hash = EXCLUDED.pin_hash,
+  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  is_system = true,
+  is_active = 1,
+  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  updated_at_iso = NOW();
+
+-- System User 2: Developer (PIN: 2345)
+INSERT INTO public.users (
+  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  business_id, created_at, updated_at, created_at_iso, updated_at_iso
+) VALUES (
+  'system-user-developer',
+  'Developer',
+  'developer',
+  '6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918',
+  'sha256-v1',
+  1,
+  true,
+  'default_business',
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  NOW(),
+  NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  pin_hash = EXCLUDED.pin_hash,
+  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  is_system = true,
+  is_active = 1,
+  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  updated_at_iso = NOW();
+
+-- System User 3: Operation Manager (PIN: 1111)
+INSERT INTO public.users (
+  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  business_id, created_at, updated_at, created_at_iso, updated_at_iso
+) VALUES (
+  'system-user-operation-manager',
+  'Operation Manager',
+  'operation_manager',
+  '0ffe1abd1a08215353c233d6e009613e95eec4253832a761af28ff37ac5a150c',
+  'sha256-v1',
+  1,
+  true,
+  'default_business',
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  NOW(),
+  NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  pin_hash = EXCLUDED.pin_hash,
+  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  is_system = true,
+  is_active = 1,
+  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  updated_at_iso = NOW();
+
+-- System User 4: Inventory Clerk (PIN: 2222)
+INSERT INTO public.users (
+  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  business_id, created_at, updated_at, created_at_iso, updated_at_iso
+) VALUES (
+  'system-user-inventory-clerk',
+  'Inventory Clerk',
+  'inventory_clerk',
+  '934b535800b1cba8f96a5d72f72f1611c3fcb464ec2da2c4f7a0b13db5e2e0b1',
+  'sha256-v1',
+  1,
+  true,
+  'default_business',
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  NOW(),
+  NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  pin_hash = EXCLUDED.pin_hash,
+  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  is_system = true,
+  is_active = 1,
+  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  updated_at_iso = NOW();
+```
+
+### Create pin_reset_requests table
+
+Used for secure PIN reset flow (future edge function implementation).
+
+```sql
+CREATE TABLE IF NOT EXISTS public.pin_reset_requests (
+  request_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role TEXT NOT NULL,
+  token TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  used_at_iso TIMESTAMPTZ,
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at_iso TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '15 minutes')
+);
+
+CREATE INDEX IF NOT EXISTS idx_pin_reset_requests_token ON public.pin_reset_requests(token);
+CREATE INDEX IF NOT EXISTS idx_pin_reset_requests_role ON public.pin_reset_requests(role);
+CREATE INDEX IF NOT EXISTS idx_pin_reset_requests_expires_at_iso ON public.pin_reset_requests(expires_at_iso);
+```
+
+### Enable RLS for users and pin_reset_requests
+
+**⚠️ WARNING:** These permissive policies allow any client with the anon key to read/write. Only use for family/internal apps.
+
+```sql
+-- Users table RLS
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on users"
+  ON public.users
+  FOR ALL
+  USING (business_id = 'default_business');
+
+-- PIN reset requests RLS
+ALTER TABLE public.pin_reset_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow insert on pin_reset_requests"
+  ON public.pin_reset_requests
+  FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Allow select on pin_reset_requests for token lookup"
+  ON public.pin_reset_requests
+  FOR SELECT
+  USING (true);
+```
+
+**Production Note:** For production, restrict policies to authenticated users and add business-level isolation.
+
+## 10. Current Synced Tables
 
 - `product_categories` - Product categories
 - `products` - Products
 - `carts` - Food carts
 - `inventory_storage_groups` - Inventory storage groups (Freezer, Cart, Packaging Supply, Condiments, etc.)
 - `inventory_items` - Inventory items with quantities and prices
+- `users` - PIN-only users with roles (stored as SHA-256 hashes)
 
-## 10. Future Enhancements
+## 11. Default System User PINs
+
+For reference, the 4 system users have these default PINs:
+
+| Role | Default PIN | User ID |
+|------|-------------|----------|
+| General Manager | 1234 | system-user-general-manager |
+| Developer | 2345 | system-user-developer |
+| Operation Manager | 1111 | system-user-operation-manager |
+| Inventory Clerk | 2222 | system-user-inventory-clerk |
+
+**⚠️ IMPORTANT:** These are stored as SHA-256 hashes in the database. Never store plaintext PINs.
+
+**PRODUCTION:** Change these default PINs immediately after setup using the app's PIN reset feature.
+
+## 12. Future Enhancements
 
 - Sync more tables (users, sales, shifts, expenses, etc.)
 - Real-time sync using Supabase Realtime
