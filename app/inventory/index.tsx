@@ -117,16 +117,25 @@ export default function InventoryScreen() {
 
     try {
       setIsRenamingGroup(true);
-      await groupRepo.rename({
+      const result = await groupRepo.rename({
         id: renamingGroup.id,
         name: renameGroupName.trim(),
         user_id: user.id,
       });
-      await loadData();
-      setShowRenameModal(false);
-      setRenamingGroup(null);
-      setRenameGroupName('');
-      Alert.alert('Success', 'Group renamed');
+      
+      if ((result as any).error) {
+        await loadData();
+        setShowRenameModal(false);
+        setRenamingGroup(null);
+        setRenameGroupName('');
+        Alert.alert('Group already exists', (result as any).error);
+      } else {
+        await loadData();
+        setShowRenameModal(false);
+        setRenamingGroup(null);
+        setRenameGroupName('');
+        Alert.alert('Success', 'Group renamed');
+      }
     } catch (error: any) {
       console.error('[Inventory] Rename error:', error);
       Alert.alert('Error', error.message || 'Failed to rename group');

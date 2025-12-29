@@ -159,7 +159,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     id: string;
     name: string;
     user_id: string;
-  }): Promise<InventoryStorageGroup> {
+  }): Promise<InventoryStorageGroup | { error: string; current: InventoryStorageGroup }> {
     console.log(`[InventoryStorageGroupRepository] Renaming storage group: ${data.id}`);
     const db = await this.getDb();
     
@@ -168,10 +168,17 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       throw new Error('Storage group not found');
     }
 
-    const trimmedName = data.name.trim();
+    const trimmedName = data.name.trim().replace(/\s+/g, ' ');
+    
+    if (this.normalizeName(trimmedName) === this.normalizeName(existing.name)) {
+      console.log('[InventoryStorageGroupRepository] Name unchanged, skipping update');
+      return existing;
+    }
+    
     const nameCheck = await this.getByNormalizedName(trimmedName);
     if (nameCheck && nameCheck.id !== data.id) {
-      throw new Error('A storage group with this name already exists');
+      console.log('[InventoryStorageGroupRepository] Duplicate name detected (pre-check)');
+      return { error: 'A storage group with this name already exists', current: existing };
     }
 
     const now = this.now();
@@ -181,24 +188,35 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       updated_at: now,
     };
 
-    await db.runAsync(
-      `UPDATE inventory_storage_groups 
-       SET name = ?, updated_at = ?
-       WHERE id = ?`,
-      [updated.name, updated.updated_at, updated.id]
-    );
+    try {
+      await db.runAsync(
+        `UPDATE inventory_storage_groups 
+         SET name = ?, updated_at = ?
+         WHERE id = ?`,
+        [updated.name, updated.updated_at, updated.id]
+      );
 
-    await this.auditRepo.log({
-      user_id: data.user_id,
-      entity_type: 'inventory_storage_group',
-      entity_id: data.id,
-      action: 'storage_group_renamed',
-      old_data: JSON.stringify(existing),
-      new_data: JSON.stringify(updated),
-    });
+      await this.auditRepo.log({
+        user_id: data.user_id,
+        entity_type: 'inventory_storage_group',
+        entity_id: data.id,
+        action: 'storage_group_renamed',
+        old_data: JSON.stringify(existing),
+        new_data: JSON.stringify(updated),
+      });
 
-    console.log(`[InventoryStorageGroupRepository] Renamed storage group: ${data.id}`);
-    return updated;
+      console.log(`[InventoryStorageGroupRepository] Renamed storage group: ${data.id}`);
+      return updated;
+    } catch (error: any) {
+      console.log('[InventoryStorageGroupRepository] UPDATE failed:', error.message);
+      
+      if (error.message && error.message.includes('UNIQUE constraint')) {
+        console.log('[InventoryStorageGroupRepository] UNIQUE constraint violation on rename');
+        return { error: 'A storage group with this name already exists', current: existing };
+      }
+      
+      throw error;
+    }
   }
 
   async deactivate(data: {
