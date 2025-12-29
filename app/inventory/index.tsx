@@ -33,6 +33,11 @@ export default function InventoryScreen() {
   const [newGroupNameInModal, setNewGroupNameInModal] = useState<string>('');
   const [isSavingGroup, setIsSavingGroup] = useState<boolean>(false);
 
+  const [showRenameModal, setShowRenameModal] = useState<boolean>(false);
+  const [renamingGroup, setRenamingGroup] = useState<InventoryStorageGroup | null>(null);
+  const [renameGroupName, setRenameGroupName] = useState<string>('');
+  const [isRenamingGroup, setIsRenamingGroup] = useState<boolean>(false);
+
   const [editingQuantities, setEditingQuantities] = useState<Record<string, number>>({});
 
   const itemRepo = useMemo(() => new InventoryItemRepository(), []);
@@ -101,6 +106,35 @@ export default function InventoryScreen() {
 
 
 
+  const openRenameModal = (group: InventoryStorageGroup) => {
+    setRenamingGroup(group);
+    setRenameGroupName(group.name);
+    setShowRenameModal(true);
+  };
+
+  const handleRenameGroup = async () => {
+    if (!renameGroupName.trim() || !renamingGroup || !user?.id || isRenamingGroup) return;
+
+    try {
+      setIsRenamingGroup(true);
+      await groupRepo.rename({
+        id: renamingGroup.id,
+        name: renameGroupName.trim(),
+        user_id: user.id,
+      });
+      await loadData();
+      setShowRenameModal(false);
+      setRenamingGroup(null);
+      setRenameGroupName('');
+      Alert.alert('Success', 'Group renamed');
+    } catch (error: any) {
+      console.error('[Inventory] Rename error:', error);
+      Alert.alert('Error', error.message || 'Failed to rename group');
+    } finally {
+      setIsRenamingGroup(false);
+    }
+  };
+
   const handleLongPressGroup = (group: InventoryStorageGroup) => {
     if (!user?.id) return;
 
@@ -113,26 +147,7 @@ export default function InventoryScreen() {
         },
         async (buttonIndex) => {
           if (buttonIndex === 1) {
-            Alert.prompt(
-              'Rename Group',
-              'Enter new name:',
-              async (text) => {
-                if (!text?.trim()) return;
-                try {
-                  await groupRepo.rename({
-                    id: group.id,
-                    name: text.trim(),
-                    user_id: user.id,
-                  });
-                  await loadData();
-                  Alert.alert('Success', 'Group renamed');
-                } catch (error: any) {
-                  Alert.alert('Error', error.message || 'Failed to rename group');
-                }
-              },
-              'plain-text',
-              group.name
-            );
+            openRenameModal(group);
           } else if (buttonIndex === 2) {
             Alert.alert(
               'Delete Group',
@@ -165,28 +180,7 @@ export default function InventoryScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Rename',
-          onPress: () => {
-            Alert.prompt(
-              'Rename Group',
-              'Enter new name:',
-              async (text) => {
-                if (!text?.trim()) return;
-                try {
-                  await groupRepo.rename({
-                    id: group.id,
-                    name: text.trim(),
-                    user_id: user.id,
-                  });
-                  await loadData();
-                  Alert.alert('Success', 'Group renamed');
-                } catch (error: any) {
-                  Alert.alert('Error', error.message || 'Failed to rename group');
-                }
-              },
-              'plain-text',
-              group.name
-            );
-          },
+          onPress: () => openRenameModal(group),
         },
         {
           text: 'Delete',
@@ -366,6 +360,7 @@ export default function InventoryScreen() {
           style={[styles.groupButton, selectedGroupId === group.id && { backgroundColor: theme.primary }]}
           onPress={() => setSelectedGroupId(group.id)}
           onLongPress={() => handleLongPressGroup(group)}
+          delayLongPress={400}
         >
           <Text style={[styles.groupButtonText, { color: selectedGroupId === group.id ? '#fff' : theme.text }]}>
             {group.name}
@@ -635,6 +630,52 @@ export default function InventoryScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={showRenameModal} animationType="fade" transparent>
+        <View style={styles.renameModalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={[styles.renameModalContent, { backgroundColor: theme.card }]}>
+              <Text style={[styles.renameModalTitle, { color: theme.text }]}>Rename Group</Text>
+              <Text style={[styles.renameModalLabel, { color: theme.textSecondary }]}>Enter new name:</Text>
+              <TextInput
+                style={[styles.renameModalInput, { backgroundColor: theme.background, color: theme.text }]}
+                placeholder="Group name"
+                placeholderTextColor={theme.textSecondary}
+                value={renameGroupName}
+                onChangeText={setRenameGroupName}
+                autoFocus
+                editable={!isRenamingGroup}
+              />
+              <View style={styles.renameModalButtons}>
+                <TouchableOpacity
+                  style={[styles.renameModalButton, { backgroundColor: theme.background }]}
+                  onPress={() => {
+                    if (!isRenamingGroup) {
+                      setShowRenameModal(false);
+                      setRenamingGroup(null);
+                      setRenameGroupName('');
+                    }
+                  }}
+                  disabled={isRenamingGroup}
+                >
+                  <Text style={[styles.renameModalButtonText, { color: theme.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.renameModalButton, { backgroundColor: isRenamingGroup ? theme.textSecondary : theme.primary }]}
+                  onPress={handleRenameGroup}
+                  disabled={isRenamingGroup || !renameGroupName.trim()}
+                >
+                  {isRenamingGroup ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.renameModalButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -892,5 +933,49 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+
+  renameModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  renameModalContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 12,
+    padding: 24,
+  },
+  renameModalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    marginBottom: 8,
+  },
+  renameModalLabel: {
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  renameModalInput: {
+    padding: 12,
+    borderRadius: 8,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  renameModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  renameModalButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  renameModalButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#fff',
   },
 });
