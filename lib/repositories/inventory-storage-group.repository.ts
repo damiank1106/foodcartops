@@ -5,6 +5,10 @@ import { AuditRepository } from './audit.repository';
 export class InventoryStorageGroupRepository extends BaseRepository {
   private auditRepo = new AuditRepository();
 
+  private normalizeName(name: string): string {
+    return name.trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
   async listActive(): Promise<InventoryStorageGroup[]> {
     console.log('[InventoryStorageGroupRepository] Fetching active storage groups');
     const db = await this.getDb();
@@ -45,16 +49,36 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     return result || null;
   }
 
+  async getByNormalizedName(name: string): Promise<InventoryStorageGroup | null> {
+    console.log(`[InventoryStorageGroupRepository] Fetching group by normalized name: ${name}`);
+    const db = await this.getDb();
+    const normalized = this.normalizeName(name);
+    const allGroups = await db.getAllAsync<InventoryStorageGroup>(
+      `SELECT * FROM inventory_storage_groups WHERE is_active = 1`
+    );
+    const match = allGroups.find(g => this.normalizeName(g.name) === normalized);
+    return match || null;
+  }
+
   async create(data: {
     name: string;
     user_id: string;
-  }): Promise<InventoryStorageGroup> {
+  }): Promise<InventoryStorageGroup | { existing: true; group: InventoryStorageGroup }> {
     console.log('[InventoryStorageGroupRepository] Creating storage group:', data.name);
     const db = await this.getDb();
     
-    const existing = await this.getByName(data.name);
+    const trimmedName = data.name.trim();
+    const existing = await this.getByNormalizedName(trimmedName);
     if (existing) {
-      throw new Error('A storage group with this name already exists');
+      console.log('[InventoryStorageGroupRepository] Group already exists, returning existing');
+      await this.auditRepo.log({
+        user_id: data.user_id,
+        entity_type: 'inventory_storage_group',
+        entity_id: existing.id,
+        action: 'create_duplicate_selected',
+        new_data: JSON.stringify({ attempted_name: trimmedName, selected_group: existing }),
+      });
+      return { existing: true, group: existing } as any;
     }
 
     const id = this.generateId();
@@ -67,7 +91,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
 
     const group: InventoryStorageGroup = {
       id,
-      name: data.name,
+      name: trimmedName,
       sort_order: sortOrder,
       is_active: 1,
       created_at: now,
@@ -84,7 +108,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       user_id: data.user_id,
       entity_type: 'inventory_storage_group',
       entity_id: id,
-      action: 'create',
+      action: 'storage_group_created',
       new_data: JSON.stringify(group),
     });
 
@@ -105,7 +129,8 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       throw new Error('Storage group not found');
     }
 
-    const nameCheck = await this.getByName(data.name);
+    const trimmedName = data.name.trim();
+    const nameCheck = await this.getByNormalizedName(trimmedName);
     if (nameCheck && nameCheck.id !== data.id) {
       throw new Error('A storage group with this name already exists');
     }
@@ -113,7 +138,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     const now = this.now();
     const updated: InventoryStorageGroup = {
       ...existing,
-      name: data.name,
+      name: trimmedName,
       updated_at: now,
     };
 
@@ -128,7 +153,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       user_id: data.user_id,
       entity_type: 'inventory_storage_group',
       entity_id: data.id,
-      action: 'rename',
+      action: 'storage_group_renamed',
       old_data: JSON.stringify(existing),
       new_data: JSON.stringify(updated),
     });
@@ -164,7 +189,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       user_id: data.user_id,
       entity_type: 'inventory_storage_group',
       entity_id: data.id,
-      action: 'delete',
+      action: 'storage_group_deleted',
       old_data: JSON.stringify(existing),
     });
 

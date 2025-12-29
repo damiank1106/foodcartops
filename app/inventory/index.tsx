@@ -70,15 +70,25 @@ export default function InventoryScreen() {
     if (!newGroupNameInModal.trim() || !user?.id) return;
 
     try {
-      const newGroup = await groupRepo.create({
+      const result = await groupRepo.create({
         name: newGroupNameInModal.trim(),
         user_id: user.id,
       });
-      await loadData();
-      setItemGroupId(newGroup.id);
-      setNewGroupNameInModal('');
-      setShowCreateGroupInModal(false);
-      Alert.alert('Success', 'Storage group created');
+      
+      if ((result as any).existing) {
+        const existingGroup = (result as any).group;
+        await loadData();
+        setItemGroupId(existingGroup.id);
+        setNewGroupNameInModal('');
+        setShowCreateGroupInModal(false);
+        Alert.alert('Group already exists', `Selected existing group: "${existingGroup.name}"`);
+      } else {
+        await loadData();
+        setItemGroupId((result as any).id);
+        setNewGroupNameInModal('');
+        setShowCreateGroupInModal(false);
+        Alert.alert('Success', 'Storage group created');
+      }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create group');
     }
