@@ -15,6 +15,7 @@ import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { CartRepository, ShiftRepository, SaleRepository, ExpenseRepository, UserRepository } from '@/lib/repositories';
 import { format } from 'date-fns';
+import { onSyncComplete } from '@/lib/services/sync.service';
 
 export default function WorkerShiftScreen() {
   const { theme } = useTheme();
@@ -102,6 +103,15 @@ export default function WorkerShiftScreen() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[Worker Shift] Sync completed, refreshing carts');
+      queryClient.invalidateQueries({ queryKey: ['carts'] });
+      queryClient.invalidateQueries({ queryKey: ['cart', selectedCartId] });
+    });
+    return unsubscribe;
+  }, [queryClient, selectedCartId]);
 
   const openStartModal = (cartIdOrShiftId: string) => {
     setSelectedCart(cartIdOrShiftId);

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { ProductRepository, ProductCategoryRepository, SaleRepository, CartRepository } from '@/lib/repositories';
 import { Product, PaymentMethod } from '@/lib/types';
+import { onSyncComplete } from '@/lib/services/sync.service';
 
 export default function WorkerSaleScreen() {
   const { theme } = useTheme();
@@ -44,6 +45,16 @@ export default function WorkerSaleScreen() {
       refetchProducts();
     }, [refetchCategories, refetchProducts])
   );
+
+  useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[Worker Sale] Sync completed, refreshing data');
+      queryClient.invalidateQueries({ queryKey: ['carts'] });
+      queryClient.invalidateQueries({ queryKey: ['product-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    });
+    return unsubscribe;
+  }, [queryClient]);
 
   const { data: cartInfo } = useQuery({
     queryKey: ['cart', selectedCartId],

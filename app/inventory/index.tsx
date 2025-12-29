@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router';
 import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repository';
 import { InventoryStorageGroupRepository } from '@/lib/repositories/inventory-storage-group.repository';
 import type { InventoryItem, InventoryUnit, InventoryStorageGroup } from '@/lib/types';
+import { onSyncComplete } from '@/lib/services/sync.service';
 
 export default function InventoryScreen() {
   const { theme } = useTheme();
@@ -71,6 +72,14 @@ export default function InventoryScreen() {
       loadData();
     }, [loadData])
   );
+
+  useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[Inventory] Sync completed, refreshing data');
+      loadData();
+    });
+    return unsubscribe;
+  }, [loadData]);
 
   const handleCreateGroupInModal = async () => {
     if (!newGroupNameInModal.trim() || !user?.id || isSavingGroup) return;
