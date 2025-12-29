@@ -1,11 +1,10 @@
 import { BaseRepository } from './base';
 
-export type SyncTableName = 'product_categories' | 'products';
 export type SyncOp = 'upsert' | 'delete';
 
 export interface SyncOutboxItem {
   id: string;
-  table_name: SyncTableName;
+  table_name: string;
   row_id: string;
   op: SyncOp;
   payload_json: string;
@@ -16,7 +15,7 @@ export interface SyncOutboxItem {
 
 export class SyncOutboxRepository extends BaseRepository {
   async add(
-    tableName: SyncTableName,
+    tableName: string,
     rowId: string,
     op: SyncOp,
     payload: Record<string, any>
@@ -65,7 +64,7 @@ export class SyncOutboxRepository extends BaseRepository {
     return result?.count ?? 0;
   }
 
-  async hasPendingForRow(tableName: SyncTableName, rowId: string): Promise<boolean> {
+  async hasPendingForRow(tableName: string, rowId: string): Promise<boolean> {
     const db = await this.getDb();
     const result = await db.getFirstAsync<{ count: number }>(
       'SELECT COUNT(*) as count FROM sync_outbox WHERE table_name = ? AND row_id = ?',

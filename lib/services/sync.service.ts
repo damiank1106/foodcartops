@@ -201,7 +201,13 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
     updateStatus({ currentStep: 'Pulling updates...' });
 
-    const tables = ['product_categories', 'products'];
+    const tables = [
+      'product_categories',
+      'products',
+      'carts',
+      'inventory_storage_groups',
+      'inventory_items'
+    ];
     for (const tableName of tables) {
       try {
         const stateRows = await db.getAllAsync<SyncStateRow>(
@@ -240,13 +246,21 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
               continue;
             }
 
-            const columns = Object.keys(remoteRow);
-            const placeholders = columns.map(() => '?').join(', ');
+            if (remoteRow.deleted_at) {
+              console.log(`[Sync] Tombstone detected for ${tableName} ${remoteRow.id}, marking as deleted`);
+              await db.runAsync(
+                `UPDATE ${tableName} SET deleted_at = ?, is_active = 0, updated_at = ? WHERE id = ?`,
+                [remoteRow.deleted_at, Date.now(), remoteRow.id]
+              );
+            } else {
+              const columns = Object.keys(remoteRow);
+              const placeholders = columns.map(() => '?').join(', ');
 
-            const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
-            const values = columns.map(col => remoteRow[col]);
+              const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+              const values = columns.map(col => remoteRow[col]);
 
-            await db.runAsync(insertSQL, values);
+              await db.runAsync(insertSQL, values);
+            }
 
             if (remoteRow.updated_at_iso && remoteRow.updated_at_iso > maxUpdatedAt) {
               maxUpdatedAt = remoteRow.updated_at_iso;

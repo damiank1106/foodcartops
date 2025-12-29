@@ -55,6 +55,11 @@ export interface Cart {
   is_active: number;
   created_at: number;
   updated_at: number;
+  business_id?: string;
+  device_id?: string;
+  deleted_at?: string;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface ProductCategory {
@@ -353,6 +358,11 @@ export interface InventoryStorageGroup {
   is_active: number;
   created_at: number;
   updated_at: number;
+  business_id?: string;
+  device_id?: string;
+  deleted_at?: string;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface InventoryItem {
@@ -367,6 +377,11 @@ export interface InventoryItem {
   is_active: number;
   created_at: number;
   updated_at: number;
+  business_id?: string;
+  device_id?: string;
+  deleted_at?: string;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface StockLocation {

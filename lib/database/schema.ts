@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 28;
+export const SCHEMA_VERSION = 29;
 
 export const MIGRATIONS = [
   {
@@ -1184,6 +1184,88 @@ export const MIGRATIONS = [
       CREATE INDEX idx_inventory_items_name ON inventory_items(name);
 
       DROP TABLE IF EXISTS inventory_storage_groups;
+    `,
+  },
+  {
+    version: 29,
+    up: `
+      ALTER TABLE carts ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE carts ADD COLUMN device_id TEXT;
+      ALTER TABLE carts ADD COLUMN deleted_at TEXT;
+      ALTER TABLE carts ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE carts ADD COLUMN updated_at_iso TEXT;
+
+      ALTER TABLE inventory_storage_groups ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE inventory_storage_groups ADD COLUMN device_id TEXT;
+      ALTER TABLE inventory_storage_groups ADD COLUMN deleted_at TEXT;
+      ALTER TABLE inventory_storage_groups ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE inventory_storage_groups ADD COLUMN updated_at_iso TEXT;
+
+      ALTER TABLE inventory_items ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE inventory_items ADD COLUMN device_id TEXT;
+      ALTER TABLE inventory_items ADD COLUMN deleted_at TEXT;
+      ALTER TABLE inventory_items ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE inventory_items ADD COLUMN updated_at_iso TEXT;
+
+      DROP TABLE IF EXISTS sync_outbox;
+      CREATE TABLE sync_outbox (
+        id TEXT PRIMARY KEY,
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        op TEXT NOT NULL CHECK(op IN ('upsert', 'delete')),
+        payload_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT
+      );
+
+      CREATE INDEX idx_sync_outbox_table_name ON sync_outbox(table_name);
+      CREATE INDEX idx_sync_outbox_created_at ON sync_outbox(created_at);
+
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('carts');
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('inventory_storage_groups');
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('inventory_items');
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added Supabase sync columns to carts, inventory_storage_groups, and inventory_items', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Removed CHECK constraint from sync_outbox.table_name to support arbitrary tables', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Added sync_state entries for carts, inventory_storage_groups, and inventory_items', ${Date.now()});
+    `,
+    down: `
+      DROP TABLE IF EXISTS sync_outbox;
+      CREATE TABLE sync_outbox (
+        id TEXT PRIMARY KEY,
+        table_name TEXT NOT NULL CHECK(table_name IN ('product_categories', 'products')),
+        row_id TEXT NOT NULL,
+        op TEXT NOT NULL CHECK(op IN ('upsert', 'delete')),
+        payload_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT
+      );
+
+      CREATE INDEX idx_sync_outbox_table_name ON sync_outbox(table_name);
+      CREATE INDEX idx_sync_outbox_created_at ON sync_outbox(created_at);
+
+      DELETE FROM sync_state WHERE table_name IN ('carts', 'inventory_storage_groups', 'inventory_items');
+
+      ALTER TABLE inventory_items DROP COLUMN updated_at_iso;
+      ALTER TABLE inventory_items DROP COLUMN created_at_iso;
+      ALTER TABLE inventory_items DROP COLUMN deleted_at;
+      ALTER TABLE inventory_items DROP COLUMN device_id;
+      ALTER TABLE inventory_items DROP COLUMN business_id;
+
+      ALTER TABLE inventory_storage_groups DROP COLUMN updated_at_iso;
+      ALTER TABLE inventory_storage_groups DROP COLUMN created_at_iso;
+      ALTER TABLE inventory_storage_groups DROP COLUMN deleted_at;
+      ALTER TABLE inventory_storage_groups DROP COLUMN device_id;
+      ALTER TABLE inventory_storage_groups DROP COLUMN business_id;
+
+      ALTER TABLE carts DROP COLUMN updated_at_iso;
+      ALTER TABLE carts DROP COLUMN created_at_iso;
+      ALTER TABLE carts DROP COLUMN deleted_at;
+      ALTER TABLE carts DROP COLUMN device_id;
+      ALTER TABLE carts DROP COLUMN business_id;
     `,
   },
 ];
