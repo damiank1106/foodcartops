@@ -275,7 +275,7 @@ CREATE POLICY "Authenticated users can manage inventory_items"
   USING (business_id = 'default_business');
 ```
 
-## 4. Testing the Setup
+## 4. Testing these Setup
 
 1. Create a category on one device:
    ```typescript
