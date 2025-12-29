@@ -38,6 +38,7 @@ export interface SyncStatus {
 function stripLocalOnlyColumns(tableName: string, payload: any): any {
   const localOnlyColumns: Record<string, string[]> = {
     inventory_items: ['storage_group'],
+    users: ['email', 'password_hash', 'profile_image_uri'],
   };
 
   const columnsToStrip = localOnlyColumns[tableName] || [];
@@ -170,6 +171,10 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             reorder_level_qty: syncPayload.reorder_level_qty,
             name: syncPayload.name
           });
+        }
+
+        if (row.table_name === 'users') {
+          console.log('[Sync] users payload keys:', Object.keys(syncPayload));
         }
 
         if (row.op === 'upsert') {
