@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 29;
+export const SCHEMA_VERSION = 30;
 
 export const MIGRATIONS = [
   {
@@ -1266,6 +1266,49 @@ export const MIGRATIONS = [
       ALTER TABLE carts DROP COLUMN deleted_at;
       ALTER TABLE carts DROP COLUMN device_id;
       ALTER TABLE carts DROP COLUMN business_id;
+    `,
+  },
+  {
+    version: 30,
+    up: `
+      ALTER TABLE inventory_storage_groups ADD COLUMN normalized_name TEXT;
+
+      UPDATE inventory_storage_groups 
+      SET normalized_name = LOWER(TRIM(REPLACE(REPLACE(REPLACE(name, '  ', ' '), '  ', ' '), '  ', ' ')));
+
+      CREATE UNIQUE INDEX idx_inventory_storage_groups_normalized_name 
+      ON inventory_storage_groups(normalized_name) 
+      WHERE is_active = 1;
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added normalized_name column to inventory_storage_groups for case-insensitive duplicate detection', ${Date.now()});
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_inventory_storage_groups_normalized_name;
+      
+      CREATE TABLE inventory_storage_groups_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        deleted_at TEXT,
+        created_at_iso TEXT,
+        updated_at_iso TEXT
+      );
+
+      INSERT INTO inventory_storage_groups_new 
+      SELECT id, name, sort_order, is_active, created_at, updated_at, business_id, device_id, deleted_at, created_at_iso, updated_at_iso 
+      FROM inventory_storage_groups;
+
+      DROP TABLE inventory_storage_groups;
+      ALTER TABLE inventory_storage_groups_new RENAME TO inventory_storage_groups;
+
+      CREATE INDEX idx_inventory_storage_groups_is_active ON inventory_storage_groups(is_active);
+      CREATE INDEX idx_inventory_storage_groups_sort_order ON inventory_storage_groups(sort_order);
     `,
   },
 ];

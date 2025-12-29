@@ -354,6 +354,7 @@ export interface BossSavedItemWithDetails extends BossSavedItem {
 export interface InventoryStorageGroup {
   id: string;
   name: string;
+  normalized_name?: string;
   sort_order: number;
   is_active: number;
   created_at: number;

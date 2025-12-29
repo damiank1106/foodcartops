@@ -98,9 +98,12 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     );
     const sortOrder = (maxSortOrder?.max_sort ?? -1) + 1;
 
+    const normalizedName = this.normalizeName(trimmedName);
+
     const group: InventoryStorageGroup = {
       id,
       name: trimmedName,
+      normalized_name: normalizedName,
       sort_order: sortOrder,
       is_active: 1,
       created_at: now,
@@ -113,11 +116,12 @@ export class InventoryStorageGroupRepository extends BaseRepository {
 
     try {
       await db.runAsync(
-        `INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO inventory_storage_groups (id, name, normalized_name, sort_order, is_active, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           group.id,
           group.name,
+          group.normalized_name ?? normalizedName,
           group.sort_order,
           group.is_active,
           group.created_at,
@@ -205,9 +209,11 @@ export class InventoryStorageGroupRepository extends BaseRepository {
 
     const now = this.now();
     const nowISO = new Date(now).toISOString();
+    const normalizedName = this.normalizeName(trimmedName);
     const updated: InventoryStorageGroup = {
       ...existing,
       name: trimmedName,
+      normalized_name: normalizedName,
       updated_at: now,
       updated_at_iso: nowISO,
     };
@@ -215,9 +221,9 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     try {
       await db.runAsync(
         `UPDATE inventory_storage_groups 
-         SET name = ?, updated_at = ?, updated_at_iso = ?
+         SET name = ?, normalized_name = ?, updated_at = ?, updated_at_iso = ?
          WHERE id = ?`,
-        [updated.name, updated.updated_at, updated.updated_at_iso ?? nowISO, updated.id]
+        [updated.name, updated.normalized_name ?? normalizedName, updated.updated_at, updated.updated_at_iso ?? nowISO, updated.id]
       );
 
       const refreshed = await this.getById(data.id);
@@ -337,9 +343,11 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       
       if (!existing) {
         const id = this.generateId();
+        const normalizedName = this.normalizeName(defaultGroup.name);
         const group: InventoryStorageGroup = {
           id,
           name: defaultGroup.name,
+          normalized_name: normalizedName,
           sort_order: defaultGroup.sort_order,
           is_active: 1,
           created_at: now,
@@ -347,9 +355,9 @@ export class InventoryStorageGroupRepository extends BaseRepository {
         };
 
         await db.runAsync(
-          `INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [group.id, group.name, group.sort_order, group.is_active, group.created_at, group.updated_at]
+          `INSERT INTO inventory_storage_groups (id, name, normalized_name, sort_order, is_active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [group.id, group.name, normalizedName, group.sort_order, group.is_active, group.created_at, group.updated_at]
         );
         createdCount++;
       } else if (existing.is_active === 0) {
