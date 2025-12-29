@@ -209,6 +209,11 @@ export class InventoryItemRepository extends BaseRepository {
 
     const refreshed = await this.getById(data.id);
     if (refreshed) {
+      console.log(`[InventoryItemRepository] DEBUG Enqueuing qty update for ${data.id}:`, {
+        current_qty: refreshed.current_qty,
+        name: refreshed.name,
+        id: refreshed.id
+      });
       await this.syncOutbox.add('inventory_items', data.id, 'upsert', refreshed);
     }
 

@@ -37,7 +37,7 @@ export interface SyncStatus {
 
 function stripLocalOnlyColumns(tableName: string, payload: any): any {
   const localOnlyColumns: Record<string, string[]> = {
-    inventory_items: ['current_qty', 'reorder_level_qty', 'storage_group'],
+    inventory_items: ['storage_group'],
   };
 
   const columnsToStrip = localOnlyColumns[tableName] || [];
@@ -163,6 +163,14 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         const payload = JSON.parse(row.payload_json);
         const syncPayload = stripLocalOnlyColumns(row.table_name, payload);
 
+        if (row.table_name === 'inventory_items') {
+          console.log(`[Sync] DEBUG inventory_items payload for ${row.row_id}:`, {
+            current_qty: syncPayload.current_qty,
+            reorder_level_qty: syncPayload.reorder_level_qty,
+            name: syncPayload.name
+          });
+        }
+
         if (row.op === 'upsert') {
           const { error } = await supabase
             .from(row.table_name)
@@ -173,6 +181,18 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           }
 
           console.log(`[Sync] Pushed ${row.table_name} upsert: ${row.row_id}`);
+
+          if (row.table_name === 'inventory_items') {
+            const { data: verifyData, error: verifyError } = await supabase
+              .from(row.table_name)
+              .select('id, name, current_qty, reorder_level_qty')
+              .eq('id', row.row_id)
+              .single();
+            
+            if (!verifyError && verifyData) {
+              console.log(`[Sync] DEBUG Supabase returned for ${row.row_id}:`, verifyData);
+            }
+          }
         } else {
           const now = new Date().toISOString();
           const { error } = await supabase
@@ -282,6 +302,14 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
               const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
               const values = columns.map(col => remoteRow[col]);
+
+              if (tableName === 'inventory_items') {
+                console.log(`[Sync] DEBUG Pulling inventory_items ${remoteRow.id}:`, {
+                  current_qty: remoteRow.current_qty,
+                  reorder_level_qty: remoteRow.reorder_level_qty,
+                  name: remoteRow.name
+                });
+              }
 
               await db.runAsync(insertSQL, values);
             }
