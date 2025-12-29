@@ -31,6 +31,7 @@ export default function InventoryScreen() {
 
   const [showCreateGroupInModal, setShowCreateGroupInModal] = useState<boolean>(false);
   const [newGroupNameInModal, setNewGroupNameInModal] = useState<string>('');
+  const [isSavingGroup, setIsSavingGroup] = useState<boolean>(false);
 
   const [editingQuantities, setEditingQuantities] = useState<Record<string, number>>({});
 
@@ -67,9 +68,10 @@ export default function InventoryScreen() {
   );
 
   const handleCreateGroupInModal = async () => {
-    if (!newGroupNameInModal.trim() || !user?.id) return;
+    if (!newGroupNameInModal.trim() || !user?.id || isSavingGroup) return;
 
     try {
+      setIsSavingGroup(true);
       const result = await groupRepo.create({
         name: newGroupNameInModal.trim(),
         user_id: user.id,
@@ -90,7 +92,10 @@ export default function InventoryScreen() {
         Alert.alert('Success', 'Storage group created');
       }
     } catch (error: any) {
+      console.error('[Inventory] Create group error:', error);
       Alert.alert('Error', error.message || 'Failed to create group');
+    } finally {
+      setIsSavingGroup(false);
     }
   };
 
@@ -531,19 +536,28 @@ export default function InventoryScreen() {
                     placeholderTextColor={theme.textSecondary}
                     value={newGroupNameInModal}
                     onChangeText={setNewGroupNameInModal}
+                    editable={!isSavingGroup}
                   />
                   <TouchableOpacity
-                    style={[styles.createGroupCheckButton, { backgroundColor: theme.success }]}
+                    style={[styles.createGroupCheckButton, { backgroundColor: isSavingGroup ? theme.textSecondary : theme.success }]}
                     onPress={handleCreateGroupInModal}
+                    disabled={isSavingGroup || !newGroupNameInModal.trim()}
                   >
-                    <Check size={18} color="#fff" />
+                    {isSavingGroup ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Check size={18} color="#fff" />
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.createGroupCancelButton, { backgroundColor: theme.error }]}
                     onPress={() => {
-                      setShowCreateGroupInModal(false);
-                      setNewGroupNameInModal('');
+                      if (!isSavingGroup) {
+                        setShowCreateGroupInModal(false);
+                        setNewGroupNameInModal('');
+                      }
                     }}
+                    disabled={isSavingGroup}
                   >
                     <X size={18} color="#fff" />
                   </TouchableOpacity>

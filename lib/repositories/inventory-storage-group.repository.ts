@@ -67,7 +67,8 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     console.log('[InventoryStorageGroupRepository] Creating storage group:', data.name);
     const db = await this.getDb();
     
-    const trimmedName = data.name.trim();
+    const trimmedName = data.name.trim().replace(/\s+/g, ' ');
+    
     const existing = await this.getByNormalizedName(trimmedName);
     if (existing) {
       console.log('[InventoryStorageGroupRepository] Group already exists, returning existing');
@@ -75,7 +76,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
         user_id: data.user_id,
         entity_type: 'inventory_storage_group',
         entity_id: existing.id,
-        action: 'create_duplicate_selected',
+        action: 'storage_group_create_duplicate_selected',
         new_data: JSON.stringify({ attempted_name: trimmedName, selected_group: existing }),
       });
       return { existing: true, group: existing } as any;
@@ -98,22 +99,44 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       updated_at: now,
     };
 
-    await db.runAsync(
-      `INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [group.id, group.name, group.sort_order, group.is_active, group.created_at, group.updated_at]
-    );
+    try {
+      await db.runAsync(
+        `INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [group.id, group.name, group.sort_order, group.is_active, group.created_at, group.updated_at]
+      );
 
-    await this.auditRepo.log({
-      user_id: data.user_id,
-      entity_type: 'inventory_storage_group',
-      entity_id: id,
-      action: 'storage_group_created',
-      new_data: JSON.stringify(group),
-    });
+      await this.auditRepo.log({
+        user_id: data.user_id,
+        entity_type: 'inventory_storage_group',
+        entity_id: id,
+        action: 'storage_group_created',
+        new_data: JSON.stringify(group),
+      });
 
-    console.log(`[InventoryStorageGroupRepository] Created storage group: ${id}`);
-    return group;
+      console.log(`[InventoryStorageGroupRepository] Created storage group: ${id}`);
+      return group;
+    } catch (error: any) {
+      console.log('[InventoryStorageGroupRepository] INSERT failed, checking for UNIQUE constraint:', error.message);
+      
+      if (error.message && error.message.includes('UNIQUE constraint failed')) {
+        console.log('[InventoryStorageGroupRepository] UNIQUE constraint violation, querying existing group');
+        const existingGroup = await this.getByNormalizedName(trimmedName);
+        
+        if (existingGroup) {
+          await this.auditRepo.log({
+            user_id: data.user_id,
+            entity_type: 'inventory_storage_group',
+            entity_id: existingGroup.id,
+            action: 'storage_group_create_duplicate_selected',
+            new_data: JSON.stringify({ attempted_name: trimmedName, selected_group: existingGroup, error: 'UNIQUE constraint' }),
+          });
+          return { existing: true, group: existingGroup } as any;
+        }
+      }
+      
+      throw error;
+    }
   }
 
   async rename(data: {
