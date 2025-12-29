@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Key, UserX, UserCheck, X, Trash2 } from 'lucide-react-native';
+import { Plus, Edit2, Key, UserX, UserCheck, X, Trash2, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository } from '@/lib/repositories';
@@ -32,6 +32,8 @@ export default function UsersScreen() {
 
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showPin, setShowPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     role: 'worker' as UserRole,
@@ -308,6 +310,24 @@ export default function UsersScreen() {
                     </View>
                   )}
                 </View>
+                <View style={styles.pinStatus}>
+                  {user.pin ? (
+                    <View style={styles.pinStatusRow}>
+                      <CheckCircle size={14} color={theme.success} />
+                      <Text style={[styles.pinStatusText, { color: theme.success }]}>PIN Set</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.pinStatusRow}>
+                      <AlertCircle size={14} color={theme.error} />
+                      <Text style={[styles.pinStatusText, { color: theme.error }]}>PIN Missing</Text>
+                    </View>
+                  )}
+                  {user.updated_at_iso && (
+                    <Text style={[styles.pinStatusDate, { color: theme.textSecondary }]}>
+                      Last updated: {new Date(user.updated_at_iso).toLocaleDateString()}
+                    </Text>
+                  )}
+                </View>
               </View>
               {user.role !== 'boss' && user.role !== 'boss2' && user.role !== 'developer' && (
                 <View style={styles.userActions}>
@@ -434,28 +454,44 @@ export default function UsersScreen() {
               {(modalMode === 'create' || modalMode === 'pin') && (
                 <>
                   <Text style={[styles.label, { color: theme.text }]}>PIN (4-8 digits) *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                    value={formData.pin}
-                    onChangeText={(text) => setFormData((prev) => ({ ...prev, pin: text }))}
-                    placeholder="Enter PIN"
-                    placeholderTextColor={theme.textSecondary}
-                    keyboardType="numeric"
-                    maxLength={8}
-                    secureTextEntry
-                  />
+                  <View style={styles.pinInputRow}>
+                    <TextInput
+                      style={[styles.input, styles.pinInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                      value={formData.pin}
+                      onChangeText={(text) => setFormData((prev) => ({ ...prev, pin: text }))}
+                      placeholder="Enter PIN"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="numeric"
+                      maxLength={8}
+                      secureTextEntry={!showPin}
+                    />
+                    <TouchableOpacity
+                      style={[styles.eyeButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                      onPress={() => setShowPin(!showPin)}
+                    >
+                      {showPin ? <EyeOff size={20} color={theme.textSecondary} /> : <Eye size={20} color={theme.textSecondary} />}
+                    </TouchableOpacity>
+                  </View>
 
                   <Text style={[styles.label, { color: theme.text }]}>Confirm PIN *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                    value={formData.confirmPin}
-                    onChangeText={(text) => setFormData((prev) => ({ ...prev, confirmPin: text }))}
-                    placeholder="Confirm PIN"
-                    placeholderTextColor={theme.textSecondary}
-                    keyboardType="numeric"
-                    maxLength={8}
-                    secureTextEntry
-                  />
+                  <View style={styles.pinInputRow}>
+                    <TextInput
+                      style={[styles.input, styles.pinInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
+                      value={formData.confirmPin}
+                      onChangeText={(text) => setFormData((prev) => ({ ...prev, confirmPin: text }))}
+                      placeholder="Confirm PIN"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="numeric"
+                      maxLength={8}
+                      secureTextEntry={!showConfirmPin}
+                    />
+                    <TouchableOpacity
+                      style={[styles.eyeButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                      onPress={() => setShowConfirmPin(!showConfirmPin)}
+                    >
+                      {showConfirmPin ? <EyeOff size={20} color={theme.textSecondary} /> : <Eye size={20} color={theme.textSecondary} />}
+                    </TouchableOpacity>
+                  </View>
                 </>
               )}
             </ScrollView>
@@ -689,5 +725,38 @@ const styles = StyleSheet.create({
   roleInfo: {
     fontSize: 12,
     marginTop: 4,
+  },
+  pinStatus: {
+    marginTop: 8,
+    gap: 4,
+  },
+  pinStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pinStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pinStatusDate: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  pinInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  pinInput: {
+    flex: 1,
+  },
+  eyeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

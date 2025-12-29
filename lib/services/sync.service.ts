@@ -1,6 +1,7 @@
 import * as Network from 'expo-network';
 import { initSupabaseClient } from '../supabase/client';
 import { getDatabase } from '../database/init';
+import { ensureSystemUsers } from '../utils/seed';
 
 interface SyncOutboxRow {
   id: string;
@@ -369,6 +370,11 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             [maxUpdatedAt, tableName]
           );
           console.log(`[Sync] Updated last_sync_at for ${tableName} to ${maxUpdatedAt}`);
+
+          if (tableName === 'users') {
+            console.log('[Sync] Ensuring system users after pull...');
+            await ensureSystemUsers();
+          }
         } else {
           console.log(`[Sync] No new ${tableName} rows since ${lastSyncAt}`);
         }

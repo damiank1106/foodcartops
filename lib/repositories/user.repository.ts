@@ -3,6 +3,7 @@ import { User, UserRole } from '../types';
 import { hashPin, verifyPin } from '../utils/crypto';
 import { SyncOutboxRepository } from './sync-outbox.repository';
 import { getDeviceId } from '../utils/device-id';
+import { SYSTEM_USER_IDS } from '../utils/seed';
 
 export class UserRepository extends BaseRepository {
   private syncOutbox = new SyncOutboxRepository();
@@ -303,6 +304,90 @@ export class UserRepository extends BaseRepository {
     await this.auditLog(deletedByUserId, 'users', id, 'user_deleted', oldUser, newUser);
 
     console.log('[UserRepo] Deleted user with audit:', id);
+  }
+
+  async createSystemUser(id: string, name: string, role: UserRole, pin: string): Promise<User> {
+    const db = await this.getDb();
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
+    const deviceId = await getDeviceId();
+
+    const pinHash = await hashPin(pin);
+
+    const user: User = {
+      id,
+      name,
+      role,
+      pin: pinHash,
+      pin_hash_alg: 'sha256-v1',
+      created_at: now,
+      updated_at: now,
+      is_active: 1,
+      business_id: 'default_business',
+      device_id: deviceId,
+      created_at_iso: nowISO,
+      updated_at_iso: nowISO,
+    };
+
+    await db.runAsync(
+      `INSERT OR REPLACE INTO users (id, name, role, pin, pin_hash_alg, password_hash, email, created_at, updated_at, is_active, business_id, device_id, created_at_iso, updated_at_iso, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, user.name, user.role, user.pin, user.pin_hash_alg, null, null, user.created_at, user.updated_at, user.is_active, user.business_id, user.device_id ?? null, user.created_at_iso, user.updated_at_iso, null] as any[]
+    );
+
+    const syncPayload = {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      pin_hash: user.pin,
+      pin_hash_alg: user.pin_hash_alg,
+      is_active: user.is_active,
+      business_id: user.business_id,
+      device_id: user.device_id,
+      created_at_iso: user.created_at_iso,
+      updated_at_iso: user.updated_at_iso,
+    };
+
+    await this.syncOutbox.add('users', user.id, 'upsert', syncPayload);
+
+    console.log('[UserRepo] Created system user:', user.id);
+    return user;
+  }
+
+  async repairSystemUserPin(id: string, pin: string): Promise<void> {
+    const db = await this.getDb();
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
+
+    const pinHash = await hashPin(pin);
+
+    await db.runAsync(
+      'UPDATE users SET pin = ?, pin_hash_alg = ?, is_active = 1, updated_at = ?, updated_at_iso = ?, deleted_at = NULL WHERE id = ?',
+      [pinHash, 'sha256-v1', now, nowISO, id]
+    );
+
+    const updatedUser = await this.findById(id);
+    if (updatedUser) {
+      const syncPayload = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        pin_hash: updatedUser.pin,
+        pin_hash_alg: updatedUser.pin_hash_alg,
+        is_active: updatedUser.is_active,
+        business_id: updatedUser.business_id,
+        device_id: updatedUser.device_id,
+        created_at_iso: updatedUser.created_at_iso,
+        updated_at_iso: nowISO,
+      };
+      await this.syncOutbox.add('users', updatedUser.id, 'upsert', syncPayload);
+    }
+
+    console.log('[UserRepo] Repaired system user PIN:', id);
+  }
+
+  isSystemUser(userId: string): boolean {
+    return userId === SYSTEM_USER_IDS.OPERATION_MANAGER || userId === SYSTEM_USER_IDS.DEVELOPER;
   }
 
   async updateProfileImage(userId: string, imageUri: string | null, actorUserId: string): Promise<void> {
