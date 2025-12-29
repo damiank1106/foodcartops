@@ -272,7 +272,12 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                 [remoteRow.deleted_at, Date.now(), remoteRow.id]
               );
             } else {
-              const columns = Object.keys(remoteRow);
+              const localSchema = await db.getAllAsync<{ name: string }>(
+                `PRAGMA table_info(${tableName})`
+              );
+              const localColumns = new Set(localSchema.map(col => col.name));
+
+              const columns = Object.keys(remoteRow).filter(col => localColumns.has(col));
               const placeholders = columns.map(() => '?').join(', ');
 
               const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
