@@ -1,9 +1,12 @@
 import { BaseRepository } from './base';
 import { InventoryStorageGroup } from '../types';
 import { AuditRepository } from './audit.repository';
+import { SyncOutboxRepository } from './sync-outbox.repository';
+import { getDeviceId } from '../utils/device-id';
 
 export class InventoryStorageGroupRepository extends BaseRepository {
   private auditRepo = new AuditRepository();
+  private syncOutbox = new SyncOutboxRepository();
 
   private normalizeName(name: string): string {
     return name.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -87,6 +90,8 @@ export class InventoryStorageGroupRepository extends BaseRepository {
 
     const id = this.generateId();
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
+    const deviceId = await getDeviceId();
 
     const maxSortOrder = await db.getFirstAsync<{ max_sort: number | null }>(
       `SELECT MAX(sort_order) as max_sort FROM inventory_storage_groups`
@@ -100,14 +105,31 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       is_active: 1,
       created_at: now,
       updated_at: now,
+      business_id: 'default_business',
+      device_id: deviceId,
+      created_at_iso: nowISO,
+      updated_at_iso: nowISO,
     };
 
     try {
       await db.runAsync(
-        `INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [group.id, group.name, group.sort_order, group.is_active, group.created_at, group.updated_at]
+        `INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          group.id,
+          group.name,
+          group.sort_order,
+          group.is_active,
+          group.created_at,
+          group.updated_at,
+          group.business_id ?? 'default_business',
+          group.device_id ?? null,
+          group.created_at_iso ?? nowISO,
+          group.updated_at_iso ?? nowISO,
+        ]
       );
+
+      await this.syncOutbox.add('inventory_storage_groups', group.id, 'upsert', group);
 
       await this.auditRepo.log({
         user_id: data.user_id,
@@ -182,19 +204,26 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     }
 
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
     const updated: InventoryStorageGroup = {
       ...existing,
       name: trimmedName,
       updated_at: now,
+      updated_at_iso: nowISO,
     };
 
     try {
       await db.runAsync(
         `UPDATE inventory_storage_groups 
-         SET name = ?, updated_at = ?
+         SET name = ?, updated_at = ?, updated_at_iso = ?
          WHERE id = ?`,
-        [updated.name, updated.updated_at, updated.id]
+        [updated.name, updated.updated_at, updated.updated_at_iso ?? nowISO, updated.id]
       );
+
+      const refreshed = await this.getById(data.id);
+      if (refreshed) {
+        await this.syncOutbox.add('inventory_storage_groups', data.id, 'upsert', refreshed);
+      }
 
       await this.auditRepo.log({
         user_id: data.user_id,
@@ -232,10 +261,16 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     }
 
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
     await db.runAsync(
-      `UPDATE inventory_storage_groups SET is_active = 0, updated_at = ? WHERE id = ?`,
-      [now, data.id]
+      `UPDATE inventory_storage_groups SET is_active = 0, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
+      [nowISO, now, nowISO, data.id]
     );
+
+    const deleted = await this.getById(data.id);
+    if (deleted) {
+      await this.syncOutbox.add('inventory_storage_groups', data.id, 'upsert', deleted);
+    }
 
     await db.runAsync(
       `UPDATE inventory_items SET storage_group_id = NULL WHERE storage_group_id = ?`,

@@ -1,9 +1,12 @@
 import { BaseRepository } from './base';
 import { InventoryItem, InventoryUnit } from '../types';
 import { AuditRepository } from './audit.repository';
+import { SyncOutboxRepository } from './sync-outbox.repository';
+import { getDeviceId } from '../utils/device-id';
 
 export class InventoryItemRepository extends BaseRepository {
   private auditRepo = new AuditRepository();
+  private syncOutbox = new SyncOutboxRepository();
   async listActive(): Promise<InventoryItem[]> {
     console.log('[InventoryItemRepository] Fetching active inventory items');
     const db = await this.getDb();
@@ -48,6 +51,8 @@ export class InventoryItemRepository extends BaseRepository {
     const db = await this.getDb();
     const id = this.generateId();
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
+    const deviceId = await getDeviceId();
 
     const item: InventoryItem = {
       id,
@@ -61,13 +66,35 @@ export class InventoryItemRepository extends BaseRepository {
       is_active: 1,
       created_at: now,
       updated_at: now,
+      business_id: 'default_business',
+      device_id: deviceId,
+      created_at_iso: nowISO,
+      updated_at_iso: nowISO,
     };
 
     await db.runAsync(
-      `INSERT INTO inventory_items (id, name, unit, current_qty, reorder_level_qty, storage_group, storage_group_id, price_cents, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.id, item.name, item.unit, item.current_qty, item.reorder_level_qty, item.storage_group, item.storage_group_id ?? null, item.price_cents, item.is_active, item.created_at, item.updated_at]
+      `INSERT INTO inventory_items (id, name, unit, current_qty, reorder_level_qty, storage_group, storage_group_id, price_cents, is_active, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        item.id,
+        item.name,
+        item.unit,
+        item.current_qty,
+        item.reorder_level_qty,
+        item.storage_group,
+        item.storage_group_id ?? null,
+        item.price_cents,
+        item.is_active,
+        item.created_at,
+        item.updated_at,
+        item.business_id ?? 'default_business',
+        item.device_id ?? null,
+        item.created_at_iso ?? nowISO,
+        item.updated_at_iso ?? nowISO,
+      ]
     );
+
+    await this.syncOutbox.add('inventory_items', item.id, 'upsert', item);
 
     await this.auditRepo.log({
       user_id: data.user_id,
@@ -101,6 +128,7 @@ export class InventoryItemRepository extends BaseRepository {
     }
 
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
     const updated: InventoryItem = {
       ...existing,
       name: data.name !== undefined ? data.name : existing.name,
@@ -111,14 +139,31 @@ export class InventoryItemRepository extends BaseRepository {
       storage_group_id: data.storage_group_id !== undefined ? data.storage_group_id : existing.storage_group_id,
       price_cents: data.price_cents !== undefined ? data.price_cents : existing.price_cents,
       updated_at: now,
+      updated_at_iso: nowISO,
     };
 
     await db.runAsync(
       `UPDATE inventory_items 
-       SET name = ?, unit = ?, current_qty = ?, reorder_level_qty = ?, storage_group = ?, storage_group_id = ?, price_cents = ?, updated_at = ?
+       SET name = ?, unit = ?, current_qty = ?, reorder_level_qty = ?, storage_group = ?, storage_group_id = ?, price_cents = ?, updated_at = ?, updated_at_iso = ?
        WHERE id = ?`,
-      [updated.name, updated.unit, updated.current_qty, updated.reorder_level_qty, updated.storage_group, updated.storage_group_id ?? null, updated.price_cents, updated.updated_at, updated.id]
+      [
+        updated.name,
+        updated.unit,
+        updated.current_qty,
+        updated.reorder_level_qty,
+        updated.storage_group,
+        updated.storage_group_id ?? null,
+        updated.price_cents,
+        updated.updated_at,
+        updated.updated_at_iso ?? nowISO,
+        updated.id,
+      ]
     );
+
+    const refreshed = await this.getById(data.id);
+    if (refreshed) {
+      await this.syncOutbox.add('inventory_items', data.id, 'upsert', refreshed);
+    }
 
     await this.auditRepo.log({
       user_id: data.user_id,
@@ -147,18 +192,25 @@ export class InventoryItemRepository extends BaseRepository {
     }
 
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
     const updated: InventoryItem = {
       ...existing,
       current_qty: data.current_qty,
       updated_at: now,
+      updated_at_iso: nowISO,
     };
 
     await db.runAsync(
       `UPDATE inventory_items 
-       SET current_qty = ?, updated_at = ?
+       SET current_qty = ?, updated_at = ?, updated_at_iso = ?
        WHERE id = ?`,
-      [updated.current_qty, updated.updated_at, updated.id]
+      [updated.current_qty, updated.updated_at, updated.updated_at_iso ?? nowISO, updated.id]
     );
+
+    const refreshed = await this.getById(data.id);
+    if (refreshed) {
+      await this.syncOutbox.add('inventory_items', data.id, 'upsert', refreshed);
+    }
 
     await this.auditRepo.log({
       user_id: data.user_id,
@@ -183,10 +235,16 @@ export class InventoryItemRepository extends BaseRepository {
     }
 
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
     await db.runAsync(
-      `UPDATE inventory_items SET is_active = 0, updated_at = ? WHERE id = ?`,
-      [now, id]
+      `UPDATE inventory_items SET is_active = 0, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
+      [nowISO, now, nowISO, id]
     );
+
+    const deleted = await this.getById(id);
+    if (deleted) {
+      await this.syncOutbox.add('inventory_items', id, 'upsert', deleted);
+    }
 
     await this.auditRepo.log({
       user_id,
@@ -209,10 +267,16 @@ export class InventoryItemRepository extends BaseRepository {
     }
 
     const now = this.now();
+    const nowISO = new Date(now).toISOString();
     await db.runAsync(
-      `UPDATE inventory_items SET is_active = 1, updated_at = ? WHERE id = ?`,
-      [now, id]
+      `UPDATE inventory_items SET is_active = 1, deleted_at = NULL, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
+      [now, nowISO, id]
     );
+
+    const restored = await this.getById(id);
+    if (restored) {
+      await this.syncOutbox.add('inventory_items', id, 'upsert', restored);
+    }
 
     await this.auditRepo.log({
       user_id,
