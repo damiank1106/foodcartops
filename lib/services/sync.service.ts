@@ -37,7 +37,7 @@ export interface SyncStatus {
 
 function stripLocalOnlyColumns(tableName: string, payload: any): any {
   const localOnlyColumns: Record<string, string[]> = {
-    inventory_items: ['storage_group', 'reorder_level_qty', 'current_qty'],
+    inventory_items: ['storage_group'],
   };
 
   const columnsToStrip = localOnlyColumns[tableName] || [];
@@ -164,6 +164,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         const syncPayload = stripLocalOnlyColumns(row.table_name, payload);
 
         if (row.table_name === 'inventory_items') {
+          console.log('[Sync] inventory_items payload keys:', Object.keys(syncPayload));
           console.log(`[Sync] DEBUG inventory_items payload for ${row.row_id}:`, {
             current_qty: syncPayload.current_qty,
             reorder_level_qty: syncPayload.reorder_level_qty,
