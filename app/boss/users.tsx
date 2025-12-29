@@ -21,6 +21,7 @@ import { UserCartAssignmentRepository } from '@/lib/repositories/user-cart-assig
 import { User, UserRole } from '@/lib/types';
 import { getRoleLabel } from '@/lib/utils/role-labels';
 import { useFocusEffect } from 'expo-router';
+import { onSyncComplete } from '@/lib/services/sync.service';
 
 type ModalMode = 'create' | 'edit' | 'pin' | null;
 
@@ -55,6 +56,14 @@ export default function UsersScreen() {
       queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
     }, [queryClient])
   );
+
+  React.useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[Users] Sync completed, refreshing users data');
+      queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
+    });
+    return unsubscribe;
+  }, [queryClient]);
 
 
 

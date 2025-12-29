@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 import { CheckCircle, AlertTriangle, RefreshCw, Trash2, Database, Eye, EyeOff, Edit3, Save, X as XIcon } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -37,6 +37,20 @@ export default function BackupDataScreen() {
     loadCredentials();
     const unsubscribe = SyncService.subscribeSyncStatus((status) => {
       setSyncStatus(status);
+    });
+    return unsubscribe;
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStatus();
+    }, [])
+  );
+
+  useEffect(() => {
+    const unsubscribe = SyncService.onSyncComplete(() => {
+      console.log('[BackupData] Sync completed, refreshing status');
+      loadStatus();
     });
     return unsubscribe;
   }, []);
