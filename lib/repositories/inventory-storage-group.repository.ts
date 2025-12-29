@@ -252,4 +252,97 @@ export class InventoryStorageGroupRepository extends BaseRepository {
 
     console.log(`[InventoryStorageGroupRepository] Deactivated storage group: ${data.id}`);
   }
+
+  async resetToDefaults(data: {
+    user_id: string;
+  }): Promise<{ groups_deactivated: number; groups_created: number; items_detached_to_none: number }> {
+    console.log('[InventoryStorageGroupRepository] Resetting inventory to defaults');
+    const db = await this.getDb();
+    const now = this.now();
+
+    const defaultGroups = [
+      { name: 'Freezer', sort_order: 0 },
+      { name: 'Cart', sort_order: 1 },
+      { name: 'Packaging Supply', sort_order: 2 },
+      { name: 'Condiments', sort_order: 3 },
+    ];
+
+    const normalizedDefaults = defaultGroups.map(g => this.normalizeName(g.name));
+
+    const allGroups = await this.listAll();
+    const groupsToDeactivate = allGroups.filter(
+      g => g.is_active === 1 && !normalizedDefaults.includes(this.normalizeName(g.name))
+    );
+
+    let deactivatedCount = 0;
+    for (const group of groupsToDeactivate) {
+      await db.runAsync(
+        `UPDATE inventory_storage_groups SET is_active = 0, updated_at = ? WHERE id = ?`,
+        [now, group.id]
+      );
+      deactivatedCount++;
+    }
+
+    const itemsResult = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM inventory_items WHERE storage_group_id IN (
+        SELECT id FROM inventory_storage_groups WHERE is_active = 0
+      )`
+    );
+    const itemsToDetach = itemsResult?.count || 0;
+
+    await db.runAsync(
+      `UPDATE inventory_items SET storage_group_id = NULL WHERE storage_group_id IN (
+        SELECT id FROM inventory_storage_groups WHERE is_active = 0
+      )`
+    );
+
+    let createdCount = 0;
+    for (const defaultGroup of defaultGroups) {
+      const existing = await this.getByNormalizedName(defaultGroup.name);
+      
+      if (!existing) {
+        const id = this.generateId();
+        const group: InventoryStorageGroup = {
+          id,
+          name: defaultGroup.name,
+          sort_order: defaultGroup.sort_order,
+          is_active: 1,
+          created_at: now,
+          updated_at: now,
+        };
+
+        await db.runAsync(
+          `INSERT INTO inventory_storage_groups (id, name, sort_order, is_active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [group.id, group.name, group.sort_order, group.is_active, group.created_at, group.updated_at]
+        );
+        createdCount++;
+      } else if (existing.is_active === 0) {
+        await db.runAsync(
+          `UPDATE inventory_storage_groups SET is_active = 1, sort_order = ?, updated_at = ? WHERE id = ?`,
+          [defaultGroup.sort_order, now, existing.id]
+        );
+      }
+    }
+
+    await this.auditRepo.log({
+      user_id: data.user_id,
+      entity_type: 'inventory_storage_group',
+      entity_id: 'reset',
+      action: 'inventory_reset',
+      new_data: JSON.stringify({
+        groups_deactivated: deactivatedCount,
+        groups_created: createdCount,
+        items_detached_to_none: itemsToDetach,
+        default_groups: defaultGroups.map(g => g.name),
+      }),
+    });
+
+    console.log(`[InventoryStorageGroupRepository] Reset complete: ${deactivatedCount} deactivated, ${createdCount} created, ${itemsToDetach} items detached`);
+    return {
+      groups_deactivated: deactivatedCount,
+      groups_created: createdCount,
+      items_detached_to_none: itemsToDetach,
+    };
+  }
 }

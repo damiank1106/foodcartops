@@ -5,7 +5,7 @@ import { LogOut, Moon, Sun, Database, Key, Info, Download, ChevronRight, X, Edit
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { getRoleLabel } from '@/lib/utils/role-labels';
-import { UserRepository, ShiftRepository, AuditRepository } from '@/lib/repositories';
+import { UserRepository, ShiftRepository, AuditRepository, InventoryStorageGroupRepository } from '@/lib/repositories';
 import { resetDatabase } from '@/lib/database/init';
 import { seedDatabase } from '@/lib/utils/seed';
 import * as SyncService from '@/lib/services/sync.service';
@@ -28,7 +28,7 @@ export default function SettingsScreen() {
   const [showPinConfirmModal, setShowPinConfirmModal] = useState(false);
   const [showSecondConfirmModal, setShowSecondConfirmModal] = useState(false);
   const [pinConfirmValue, setPinConfirmValue] = useState('');
-  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<'reset' | 'wipe' | null>(null);
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<'reset' | 'wipe' | 'reset_inventory' | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
@@ -210,6 +210,12 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleResetInventory = () => {
+    setPendingDestructiveAction('reset_inventory');
+    setPinConfirmValue('');
+    setShowPinConfirmModal(true);
+  };
+
   const executeDestructiveAction = async () => {
     setShowSecondConfirmModal(false);
     
@@ -269,6 +275,25 @@ export default function SettingsScreen() {
       } catch (error) {
         console.error('[Settings] Wipe failed:', error);
         Alert.alert('Error', 'Failed to wipe data.');
+      }
+    } else if (pendingDestructiveAction === 'reset_inventory') {
+      try {
+        console.log('[Settings] Resetting inventory...');
+        const storageGroupRepo = new InventoryStorageGroupRepository();
+        const result = await storageGroupRepo.resetToDefaults({
+          user_id: user?.id || '',
+        });
+        
+        Alert.alert(
+          'Success',
+          `Inventory reset complete.\n\n` +
+          `• ${result.groups_deactivated} custom groups removed\n` +
+          `• ${result.groups_created} default groups restored\n` +
+          `• ${result.items_detached_to_none} items moved to "None"`
+        );
+      } catch (error) {
+        console.error('[Settings] Reset inventory failed:', error);
+        Alert.alert('Error', 'Failed to reset inventory.');
       }
     }
     
@@ -416,6 +441,13 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </>
             )}
+            <TouchableOpacity style={styles.listItem} onPress={handleResetInventory}>
+              <View style={styles.listItemLeft}>
+                <Database size={20} color={theme.warning || '#F59E0B'} />
+                <Text style={[styles.label, { color: theme.warning || '#F59E0B' }]}>Reset Inventory</Text>
+              </View>
+              <ChevronRight size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.listItem} onPress={handleWipeWorkersAndShifts}>
               <View style={styles.listItemLeft}>
                 <Trash2 size={20} color={theme.warning || '#F59E0B'} />
@@ -680,6 +712,8 @@ export default function SettingsScreen() {
               <Text style={[styles.warningText, { color: theme.textSecondary }]}>
                 {pendingDestructiveAction === 'reset' 
                   ? 'This will permanently delete ALL data and reset to factory defaults. This action cannot be undone.'
+                  : pendingDestructiveAction === 'reset_inventory'
+                  ? 'This will restore Inventory storage groups to defaults (Freezer, Cart, Packaging Supply, Condiments). All custom groups will be removed and items will be moved to "None". This action cannot be undone.'
                   : 'This will permanently delete all workers, shifts, and related data. This action cannot be undone.'}
               </Text>
 
