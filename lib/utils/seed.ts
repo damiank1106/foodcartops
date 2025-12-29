@@ -23,13 +23,19 @@ export async function seedDatabase(): Promise<void> {
     if (existingBoss.length === 0) {
       console.log('[Seed] Creating Boss user...');
       await userRepo.create({
-        name: 'Boss',
+        name: 'Operation Manager',
         role: 'boss',
         pin: '1234',
       });
       console.log('[Seed] Boss user created with PIN 1234');
     } else {
-      console.log('[Seed] Boss user already exists');
+      const boss = existingBoss[0];
+      console.log('[Seed] Boss user exists:', boss.id, 'has_pin:', !!boss.pin);
+      
+      if (!boss.pin) {
+        console.log('[Seed] Boss has no PIN, resetting to default 1234');
+        await userRepo.resetPin(boss.id, '1234', boss.id);
+      }
     }
 
     if (existingDeveloper.length === 0) {
@@ -41,7 +47,13 @@ export async function seedDatabase(): Promise<void> {
       });
       console.log('[Seed] Developer user created with PIN 2345');
     } else {
-      console.log('[Seed] Developer user already exists');
+      const developer = existingDeveloper[0];
+      console.log('[Seed] Developer user exists:', developer.id, 'has_pin:', !!developer.pin);
+      
+      if (!developer.pin) {
+        console.log('[Seed] Developer has no PIN, resetting to default 2345');
+        await userRepo.resetPin(developer.id, '2345', developer.id);
+      }
     }
 
     console.log('[Seed] Database initialized successfully');

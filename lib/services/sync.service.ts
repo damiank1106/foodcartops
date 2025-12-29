@@ -316,8 +316,28 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
               const columns = Object.keys(remoteRow).filter(col => localColumns.has(col));
               const placeholders = columns.map(() => '?').join(', ');
 
-              const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
-              const values = columns.map(col => remoteRow[col]);
+              if (tableName === 'users') {
+                const localUser = await db.getFirstAsync<any>(
+                  'SELECT id, role, pin, pin_hash_alg FROM users WHERE id = ?',
+                  [remoteRow.id]
+                );
+
+                if (localUser && (localUser.role === 'boss' || localUser.role === 'developer')) {
+                  console.log(`[Sync] Protecting system user ${localUser.role} pin_hash`);
+                  
+                  if (!remoteRow.pin_hash && localUser.pin) {
+                    console.log(`[Sync] Remote has empty pin_hash for ${localUser.role}, keeping local`);
+                    remoteRow.pin_hash = localUser.pin;
+                    remoteRow.pin_hash_alg = localUser.pin_hash_alg;
+                  }
+                }
+
+                console.log(`[Sync] DEBUG Pulling user ${remoteRow.id}:`, {
+                  role: remoteRow.role,
+                  has_pin_hash: !!remoteRow.pin_hash,
+                  pin_hash_alg: remoteRow.pin_hash_alg
+                });
+              }
 
               if (tableName === 'inventory_items') {
                 console.log(`[Sync] DEBUG Pulling inventory_items ${remoteRow.id}:`, {
@@ -326,6 +346,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                   name: remoteRow.name
                 });
               }
+
+              const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+              const values = columns.map(col => remoteRow[col]);
 
               await db.runAsync(insertSQL, values);
             }
