@@ -37,7 +37,7 @@ export interface SyncStatus {
 
 function stripLocalOnlyColumns(tableName: string, payload: any): any {
   const localOnlyColumns: Record<string, string[]> = {
-    inventory_items: ['storage_group'],
+    inventory_items: ['storage_group', 'reorder_level_qty', 'current_qty'],
   };
 
   const columnsToStrip = localOnlyColumns[tableName] || [];
