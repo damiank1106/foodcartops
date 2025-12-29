@@ -52,12 +52,15 @@ export class InventoryStorageGroupRepository extends BaseRepository {
   async getByNormalizedName(name: string): Promise<InventoryStorageGroup | null> {
     console.log(`[InventoryStorageGroupRepository] Fetching group by normalized name: ${name}`);
     const db = await this.getDb();
-    const normalized = this.normalizeName(name);
-    const allGroups = await db.getAllAsync<InventoryStorageGroup>(
-      `SELECT * FROM inventory_storage_groups WHERE is_active = 1`
+    const trimmed = name.trim().replace(/\s+/g, ' ');
+    
+    const result = await db.getFirstAsync<InventoryStorageGroup>(
+      `SELECT * FROM inventory_storage_groups 
+       WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) 
+       AND is_active = 1`,
+      [trimmed]
     );
-    const match = allGroups.find(g => this.normalizeName(g.name) === normalized);
-    return match || null;
+    return result || null;
   }
 
   async create(data: {
@@ -117,22 +120,35 @@ export class InventoryStorageGroupRepository extends BaseRepository {
       console.log(`[InventoryStorageGroupRepository] Created storage group: ${id}`);
       return group;
     } catch (error: any) {
-      console.log('[InventoryStorageGroupRepository] INSERT failed, checking for UNIQUE constraint:', error.message);
+      console.log('[InventoryStorageGroupRepository] INSERT failed:', error.message);
       
-      if (error.message && error.message.includes('UNIQUE constraint failed')) {
-        console.log('[InventoryStorageGroupRepository] UNIQUE constraint violation, querying existing group');
-        const existingGroup = await this.getByNormalizedName(trimmedName);
+      if (error.message && error.message.includes('UNIQUE constraint')) {
+        console.log('[InventoryStorageGroupRepository] UNIQUE constraint violation, finding existing group');
         
-        if (existingGroup) {
-          await this.auditRepo.log({
-            user_id: data.user_id,
-            entity_type: 'inventory_storage_group',
-            entity_id: existingGroup.id,
-            action: 'storage_group_create_duplicate_selected',
-            new_data: JSON.stringify({ attempted_name: trimmedName, selected_group: existingGroup, error: 'UNIQUE constraint' }),
-          });
-          return { existing: true, group: existingGroup } as any;
+        try {
+          const existingGroup = await db.getFirstAsync<InventoryStorageGroup>(
+            `SELECT * FROM inventory_storage_groups 
+             WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))`,
+            [trimmedName]
+          );
+          
+          if (existingGroup) {
+            console.log('[InventoryStorageGroupRepository] Found existing group, returning it');
+            await this.auditRepo.log({
+              user_id: data.user_id,
+              entity_type: 'inventory_storage_group',
+              entity_id: existingGroup.id,
+              action: 'storage_group_create_duplicate_selected',
+              new_data: JSON.stringify({ attempted_name: trimmedName, selected_group: existingGroup, error: 'UNIQUE constraint' }),
+            });
+            return { existing: true, group: existingGroup } as any;
+          }
+        } catch (queryError) {
+          console.error('[InventoryStorageGroupRepository] Failed to query existing group:', queryError);
         }
+        
+        console.log('[InventoryStorageGroupRepository] Could not find existing group, will not crash');
+        throw new Error('A storage group with this name already exists');
       }
       
       throw error;
