@@ -242,6 +242,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     updateStatus({ currentStep: 'Pulling updates...' });
 
     const tables = [
+      'users',
       'product_categories',
       'products',
       'carts',

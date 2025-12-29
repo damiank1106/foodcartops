@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 30;
+export const SCHEMA_VERSION = 31;
 
 export const MIGRATIONS = [
   {
@@ -1309,6 +1309,48 @@ export const MIGRATIONS = [
 
       CREATE INDEX idx_inventory_storage_groups_is_active ON inventory_storage_groups(is_active);
       CREATE INDEX idx_inventory_storage_groups_sort_order ON inventory_storage_groups(sort_order);
+    `,
+  },
+  {
+    version: 31,
+    up: `
+      ALTER TABLE users ADD COLUMN pin_hash_alg TEXT;
+      ALTER TABLE users ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE users ADD COLUMN device_id TEXT;
+      ALTER TABLE users ADD COLUMN deleted_at TEXT;
+      ALTER TABLE users ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE users ADD COLUMN updated_at_iso TEXT;
+
+      UPDATE users SET pin_hash_alg = 'sha256-v1' WHERE pin IS NOT NULL;
+
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('users');
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added Supabase sync columns to users table', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Added pin_hash_alg column to users table for PIN hash version tracking', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Added sync_state entry for users table', ${Date.now()});
+    `,
+    down: `
+      DELETE FROM sync_state WHERE table_name = 'users';
+      
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker', 'inventory_clerk', 'developer')),
+        pin TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        profile_image_uri TEXT
+      );
+
+      INSERT INTO users_new (id, name, role, pin, password_hash, email, created_at, updated_at, is_active, profile_image_uri)
+      SELECT id, name, role, pin, password_hash, email, created_at, updated_at, is_active, profile_image_uri FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
     `,
   },
 ];

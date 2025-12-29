@@ -1,5 +1,10 @@
 import * as Crypto from 'expo-crypto';
 
+export function validatePinFormat(pin: string): boolean {
+  const numericRegex = /^[0-9]{4,8}$/;
+  return numericRegex.test(pin);
+}
+
 export async function hashPin(pin: string): Promise<string> {
   const hash = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,

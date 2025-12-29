@@ -1,8 +1,12 @@
 import { BaseRepository } from './base';
 import { User, UserRole } from '../types';
 import { hashPin, verifyPin } from '../utils/crypto';
+import { SyncOutboxRepository } from './sync-outbox.repository';
+import { getDeviceId } from '../utils/device-id';
 
 export class UserRepository extends BaseRepository {
+  private syncOutbox = new SyncOutboxRepository();
+
   async create(data: {
     name: string;
     role: UserRole;
@@ -15,24 +19,47 @@ export class UserRepository extends BaseRepository {
     const now = this.now();
 
     const pinHash = data.pin ? await hashPin(data.pin) : undefined;
+    const nowISO = new Date(now).toISOString();
+    const deviceId = await getDeviceId();
 
     const user: User = {
       id,
       name: data.name,
       role: data.role,
       pin: pinHash,
+      pin_hash_alg: pinHash ? 'sha256-v1' : undefined,
       password_hash: data.password_hash,
       email: data.email,
       created_at: now,
       updated_at: now,
       is_active: 1,
+      business_id: 'default_business',
+      device_id: deviceId,
+      created_at_iso: nowISO,
+      updated_at_iso: nowISO,
     };
 
     await db.runAsync(
-      `INSERT INTO users (id, name, role, pin, password_hash, email, created_at, updated_at, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user.id, user.name, user.role, user.pin ?? null, user.password_hash ?? null, user.email ?? null, user.created_at, user.updated_at, user.is_active]
+      `INSERT INTO users (id, name, role, pin, pin_hash_alg, password_hash, email, created_at, updated_at, is_active, business_id, device_id, created_at_iso, updated_at_iso)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, user.name, user.role, user.pin ?? null, user.pin_hash_alg ?? null, user.password_hash ?? null, user.email ?? null, user.created_at, user.updated_at, user.is_active, user.business_id ?? 'default_business', user.device_id ?? null, user.created_at_iso ?? nowISO, user.updated_at_iso ?? nowISO]
     );
+
+    const syncPayload = {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      pin_hash: user.pin,
+      pin_hash_alg: user.pin_hash_alg,
+      email: user.email,
+      is_active: user.is_active,
+      business_id: user.business_id,
+      device_id: user.device_id,
+      created_at_iso: user.created_at_iso,
+      updated_at_iso: user.updated_at_iso,
+    };
+
+    await this.syncOutbox.add('users', user.id, 'upsert', syncPayload);
 
     console.log('[UserRepo] Created user:', user.id);
     return user;
@@ -108,6 +135,8 @@ export class UserRepository extends BaseRepository {
     const db = await this.getDb();
     const updates: string[] = [];
     const values: any[] = [];
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
 
     Object.entries(data).forEach(([key, value]) => {
       if (key !== 'id' && key !== 'created_at') {
@@ -117,13 +146,33 @@ export class UserRepository extends BaseRepository {
     });
 
     updates.push('updated_at = ?');
-    values.push(this.now());
+    updates.push('updated_at_iso = ?');
+    values.push(now);
+    values.push(nowISO);
     values.push(id);
 
     await db.runAsync(
       `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
       values
     );
+
+    const updatedUser = await this.findById(id);
+    if (updatedUser) {
+      const syncPayload = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        pin_hash: updatedUser.pin,
+        pin_hash_alg: updatedUser.pin_hash_alg,
+        email: updatedUser.email,
+        is_active: updatedUser.is_active,
+        business_id: updatedUser.business_id,
+        device_id: updatedUser.device_id,
+        created_at_iso: updatedUser.created_at_iso,
+        updated_at_iso: nowISO,
+      };
+      await this.syncOutbox.add('users', updatedUser.id, 'upsert', syncPayload);
+    }
 
     console.log('[UserRepo] Updated user:', id);
   }
@@ -145,7 +194,7 @@ export class UserRepository extends BaseRepository {
     }
 
     const newPinHash = await hashPin(newPin);
-    await this.update(id, { pin: newPinHash });
+    await this.update(id, { pin: newPinHash, pin_hash_alg: 'sha256-v1' });
     console.log('[UserRepo] Changed PIN for user:', id);
     return true;
   }
@@ -154,7 +203,7 @@ export class UserRepository extends BaseRepository {
     const oldUser = await this.findById(id);
     
     const newPinHash = await hashPin(newPin);
-    await this.update(id, { pin: newPinHash });
+    await this.update(id, { pin: newPinHash, pin_hash_alg: 'sha256-v1' });
 
     await this.auditLog(resetByUserId, 'users', id, 'reset_pin', oldUser, {
       ...oldUser,
@@ -237,13 +286,19 @@ export class UserRepository extends BaseRepository {
   }
 
   async deleteWithAudit(id: string, deletedByUserId: string): Promise<void> {
+    const db = await this.getDb();
     const oldUser = await this.findById(id);
     if (!oldUser) throw new Error('User not found');
     
-    await this.update(id, { 
-      is_active: 0,
-      pin: undefined
-    });
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
+    
+    await db.runAsync(
+      'UPDATE users SET deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+      [nowISO, now, nowISO, id]
+    );
+
+    await this.syncOutbox.add('users', id, 'delete', { id, deleted_at: nowISO, updated_at_iso: nowISO });
 
     const newUser = await this.findById(id);
 

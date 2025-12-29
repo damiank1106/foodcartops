@@ -39,12 +39,18 @@ export interface User {
   name: string;
   role: UserRole;
   pin?: string;
+  pin_hash_alg?: string;
   password_hash?: string;
   email?: string;
   created_at: number;
   updated_at: number;
   is_active: number;
+  profile_image_uri?: string;
+  business_id?: string;
+  device_id?: string;
   deleted_at?: string;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface Cart {
