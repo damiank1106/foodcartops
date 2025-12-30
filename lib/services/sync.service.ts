@@ -277,11 +277,11 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       'carts',
       'inventory_storage_groups',
       'inventory_items',
-      'expenses'
+      'expenses',
+      'worker_shifts'
     ];
 
     // TODO PHASE 8.XX-C: Add next sync batch tables
-    // - worker_shifts
     // - sales
     // - sale_items
     // - payments

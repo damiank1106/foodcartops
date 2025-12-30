@@ -1,7 +1,10 @@
 import { BaseRepository } from './base';
 import { WorkerShift, ShiftEvent } from '../types';
+import { getDeviceId } from '../utils/device-id';
+import { SyncOutboxRepository } from './sync-outbox.repository';
 
 export class ShiftRepository extends BaseRepository {
+  private syncOutbox = new SyncOutboxRepository();
   async createAssignedShift(
     worker_id: string,
     cart_id: string,
@@ -12,6 +15,8 @@ export class ShiftRepository extends BaseRepository {
     
     const id = this.generateId();
     const now = this.now();
+    const nowISO = new Date().toISOString();
+    const deviceId = await getDeviceId();
 
     const shift: WorkerShift = {
       id,
@@ -29,9 +34,10 @@ export class ShiftRepository extends BaseRepository {
     await db.runAsync(
       `INSERT INTO worker_shifts (
         id, worker_id, cart_id, clock_in, starting_cash_cents, 
-        expected_cash_cents, notes, status, created_at, updated_at
+        expected_cash_cents, notes, status, created_at, updated_at,
+        business_id, device_id, created_at_iso, updated_at_iso
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         shift.id,
         shift.worker_id,
@@ -43,6 +49,10 @@ export class ShiftRepository extends BaseRepository {
         shift.status,
         shift.created_at,
         shift.updated_at,
+        'default_business',
+        deviceId,
+        nowISO,
+        nowISO,
       ]
     );
 
@@ -51,6 +61,11 @@ export class ShiftRepository extends BaseRepository {
       starting_cash_cents,
       notes,
     });
+
+    const createdShift = await this.getShiftById(id);
+    if (createdShift) {
+      await this.syncOutbox.add('worker_shifts', id, 'upsert', createdShift);
+    }
 
     console.log('[ShiftRepo] Shift assigned (inactive):', shift.id);
     return shift;
@@ -75,9 +90,10 @@ export class ShiftRepository extends BaseRepository {
       const shift_id = worker_or_shift_id;
       const cash = cart_id_or_cash;
       const now = this.now();
+      const nowISO = new Date().toISOString();
 
       const shift = await db.getFirstAsync<WorkerShift>(
-        'SELECT * FROM worker_shifts WHERE id = ?',
+        'SELECT * FROM worker_shifts WHERE id = ? AND is_deleted = 0 AND deleted_at IS NULL',
         [shift_id]
       );
 
@@ -91,14 +107,19 @@ export class ShiftRepository extends BaseRepository {
 
       await db.runAsync(
         `UPDATE worker_shifts 
-         SET status = 'active', clock_in = ?, starting_cash_cents = ?, expected_cash_cents = ?, updated_at = ? 
+         SET status = 'active', clock_in = ?, starting_cash_cents = ?, expected_cash_cents = ?, updated_at = ?, updated_at_iso = ? 
          WHERE id = ?`,
-        [now, cash, cash, now, shift_id]
+        [now, cash, cash, now, nowISO, shift_id]
       );
 
       await this.addShiftEvent(shift_id, 'shift_started', {
         starting_cash_cents: cash,
       });
+
+      const updatedShift = await this.getShiftById(shift_id);
+      if (updatedShift) {
+        await this.syncOutbox.add('worker_shifts', shift_id, 'upsert', updatedShift);
+      }
 
       console.log('[ShiftRepo] Shift started:', shift_id);
       return;
@@ -116,6 +137,8 @@ export class ShiftRepository extends BaseRepository {
     
     const id = this.generateId();
     const now = this.now();
+    const nowISO = new Date().toISOString();
+    const deviceId = await getDeviceId();
 
     const shift: WorkerShift = {
       id,
@@ -133,9 +156,10 @@ export class ShiftRepository extends BaseRepository {
     await db.runAsync(
       `INSERT INTO worker_shifts (
         id, worker_id, cart_id, clock_in, starting_cash_cents, 
-        expected_cash_cents, notes, status, created_at, updated_at
+        expected_cash_cents, notes, status, created_at, updated_at,
+        business_id, device_id, created_at_iso, updated_at_iso
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         shift.id,
         shift.worker_id,
@@ -147,6 +171,10 @@ export class ShiftRepository extends BaseRepository {
         shift.status,
         shift.created_at,
         shift.updated_at,
+        'default_business',
+        deviceId,
+        nowISO,
+        nowISO,
       ]
     );
 
@@ -156,6 +184,11 @@ export class ShiftRepository extends BaseRepository {
       notes,
     });
 
+    const createdShift = await this.getShiftById(id);
+    if (createdShift) {
+      await this.syncOutbox.add('worker_shifts', id, 'upsert', createdShift);
+    }
+
     console.log('[ShiftRepo] Shift started:', shift.id);
     return shift;
   }
@@ -163,9 +196,10 @@ export class ShiftRepository extends BaseRepository {
   async endShift(shift_id: string, notes?: string): Promise<void> {
     const db = await this.getDb();
     const now = this.now();
+    const nowISO = new Date().toISOString();
 
     const shift = await db.getFirstAsync<WorkerShift>(
-      'SELECT * FROM worker_shifts WHERE id = ?',
+      'SELECT * FROM worker_shifts WHERE id = ? AND is_deleted = 0 AND deleted_at IS NULL',
       [shift_id]
     );
 
@@ -175,9 +209,9 @@ export class ShiftRepository extends BaseRepository {
 
     await db.runAsync(
       `UPDATE worker_shifts 
-       SET clock_out = ?, status = 'ended', notes = ?, updated_at = ? 
+       SET clock_out = ?, status = 'ended', notes = ?, updated_at = ?, updated_at_iso = ? 
        WHERE id = ?`,
-      [now, notes || shift.notes || null, now, shift_id]
+      [now, notes || shift.notes || null, now, nowISO, shift_id]
     );
 
     await this.addShiftEvent(shift_id, 'shift_ended', {
@@ -185,13 +219,18 @@ export class ShiftRepository extends BaseRepository {
       notes,
     });
 
+    const updatedShift = await this.getShiftById(shift_id);
+    if (updatedShift) {
+      await this.syncOutbox.add('worker_shifts', shift_id, 'upsert', updatedShift);
+    }
+
     console.log('[ShiftRepo] Shift ended:', shift_id);
   }
 
   async getActiveShift(worker_id: string): Promise<WorkerShift | null> {
     const db = await this.getDb();
     const shift = await db.getFirstAsync<WorkerShift>(
-      "SELECT * FROM worker_shifts WHERE worker_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+      "SELECT * FROM worker_shifts WHERE worker_id = ? AND status = 'active' AND is_deleted = 0 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
       [worker_id]
     );
     return shift || null;
@@ -200,14 +239,14 @@ export class ShiftRepository extends BaseRepository {
   async getActiveShifts(): Promise<(WorkerShift & { worker_name: string })[]> {
     const db = await this.getDb();
     return await db.getAllAsync<WorkerShift & { worker_name: string }>(
-      "SELECT ws.*, u.name as worker_name FROM worker_shifts ws JOIN users u ON ws.worker_id = u.id WHERE ws.status = 'active' ORDER BY ws.created_at DESC"
+      "SELECT ws.*, u.name as worker_name FROM worker_shifts ws JOIN users u ON ws.worker_id = u.id WHERE ws.status = 'active' AND ws.is_deleted = 0 AND ws.deleted_at IS NULL ORDER BY ws.created_at DESC"
     );
   }
 
   async getLastCompletedShift(): Promise<(WorkerShift & { worker_name: string }) | null> {
     const db = await this.getDb();
     const shift = await db.getFirstAsync<WorkerShift & { worker_name: string }>(
-      "SELECT ws.*, u.name as worker_name FROM worker_shifts ws JOIN users u ON ws.worker_id = u.id WHERE ws.status = 'ended' AND ws.clock_out IS NOT NULL ORDER BY ws.clock_out DESC LIMIT 1"
+      "SELECT ws.*, u.name as worker_name FROM worker_shifts ws JOIN users u ON ws.worker_id = u.id WHERE ws.status = 'ended' AND ws.clock_out IS NOT NULL AND ws.is_deleted = 0 AND ws.deleted_at IS NULL ORDER BY ws.clock_out DESC LIMIT 1"
     );
     return shift || null;
   }
@@ -215,7 +254,7 @@ export class ShiftRepository extends BaseRepository {
   async getAssignedShifts(worker_id: string): Promise<WorkerShift[]> {
     const db = await this.getDb();
     return await db.getAllAsync<WorkerShift>(
-      "SELECT * FROM worker_shifts WHERE worker_id = ? AND status = 'assigned' ORDER BY created_at DESC",
+      "SELECT * FROM worker_shifts WHERE worker_id = ? AND status = 'assigned' AND is_deleted = 0 AND deleted_at IS NULL ORDER BY created_at DESC",
       [worker_id]
     );
   }
@@ -223,7 +262,7 @@ export class ShiftRepository extends BaseRepository {
   async getShiftById(shift_id: string): Promise<WorkerShift | null> {
     const db = await this.getDb();
     const shift = await db.getFirstAsync<WorkerShift>(
-      'SELECT * FROM worker_shifts WHERE id = ?',
+      'SELECT * FROM worker_shifts WHERE id = ? AND is_deleted = 0 AND deleted_at IS NULL',
       [shift_id]
     );
     return shift || null;
@@ -231,7 +270,7 @@ export class ShiftRepository extends BaseRepository {
 
   async getShifts(worker_id?: string, cart_id?: string): Promise<WorkerShift[]> {
     const db = await this.getDb();
-    const conditions: string[] = ['1=1'];
+    const conditions: string[] = ['is_deleted = 0', 'deleted_at IS NULL'];
     const params: any[] = [];
 
     if (worker_id) {
@@ -253,7 +292,7 @@ export class ShiftRepository extends BaseRepository {
   async getActiveWorkerCount(): Promise<number> {
     const db = await this.getDb();
     const result = await db.getFirstAsync<{ count: number }>(
-      "SELECT COUNT(DISTINCT worker_id) as count FROM worker_shifts WHERE status = 'active'"
+      "SELECT COUNT(DISTINCT worker_id) as count FROM worker_shifts WHERE status = 'active' AND is_deleted = 0 AND deleted_at IS NULL"
     );
     return result?.count || 0;
   }
@@ -261,11 +300,17 @@ export class ShiftRepository extends BaseRepository {
   async updateExpectedCash(shift_id: string, expected_cash_cents: number): Promise<void> {
     const db = await this.getDb();
     const now = this.now();
+    const nowISO = new Date().toISOString();
 
     await db.runAsync(
-      'UPDATE worker_shifts SET expected_cash_cents = ?, updated_at = ? WHERE id = ?',
-      [expected_cash_cents, now, shift_id]
+      'UPDATE worker_shifts SET expected_cash_cents = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+      [expected_cash_cents, now, nowISO, shift_id]
     );
+
+    const updatedShift = await this.getShiftById(shift_id);
+    if (updatedShift) {
+      await this.syncOutbox.add('worker_shifts', shift_id, 'upsert', updatedShift);
+    }
 
     console.log('[ShiftRepo] Updated expected cash for shift:', shift_id);
   }
@@ -319,8 +364,37 @@ export class ShiftRepository extends BaseRepository {
 
   async deleteShift(shift_id: string): Promise<void> {
     const db = await this.getDb();
-    await db.runAsync('DELETE FROM shift_events WHERE shift_id = ?', [shift_id]);
-    await db.runAsync('DELETE FROM worker_shifts WHERE id = ?', [shift_id]);
-    console.log('[ShiftRepo] Shift deleted:', shift_id);
+    const now = this.now();
+    const nowISO = new Date().toISOString();
+    const deviceId = await getDeviceId();
+
+    const shift = await db.getFirstAsync<WorkerShift>(
+      'SELECT * FROM worker_shifts WHERE id = ?',
+      [shift_id]
+    );
+
+    if (!shift) {
+      console.log('[ShiftRepo] Shift not found for deletion:', shift_id);
+      return;
+    }
+
+    await db.runAsync(
+      'UPDATE worker_shifts SET is_deleted = 1, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+      [nowISO, now, nowISO, shift_id]
+    );
+
+    const deletedShift = {
+      ...shift,
+      is_deleted: 1,
+      deleted_at: nowISO,
+      updated_at: now,
+      updated_at_iso: nowISO,
+      business_id: 'default_business',
+      device_id: deviceId,
+    };
+
+    await this.syncOutbox.add('worker_shifts', shift_id, 'upsert', deletedShift);
+
+    console.log('[ShiftRepo] Shift soft deleted:', shift_id);
   }
 }

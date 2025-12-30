@@ -601,6 +601,49 @@ CREATE POLICY "Allow all operations on expenses"
   USING (business_id = 'default_business');
 ```
 
+### Create worker_shifts table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.worker_shifts (
+  id TEXT PRIMARY KEY,
+  worker_id TEXT NOT NULL,
+  cart_id TEXT NOT NULL,
+  clock_in BIGINT,
+  clock_out BIGINT,
+  starting_cash_cents INTEGER DEFAULT 0,
+  expected_cash_cents INTEGER DEFAULT 0,
+  notes TEXT,
+  status TEXT DEFAULT 'active',
+  synced_at BIGINT,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_worker_shifts_business_id ON public.worker_shifts(business_id);
+CREATE INDEX IF NOT EXISTS idx_worker_shifts_worker_id ON public.worker_shifts(worker_id);
+CREATE INDEX IF NOT EXISTS idx_worker_shifts_cart_id ON public.worker_shifts(cart_id);
+CREATE INDEX IF NOT EXISTS idx_worker_shifts_status ON public.worker_shifts(status);
+CREATE INDEX IF NOT EXISTS idx_worker_shifts_updated_at_iso ON public.worker_shifts(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_worker_shifts_deleted_at ON public.worker_shifts(deleted_at);
+```
+
+### Enable RLS for worker_shifts
+
+```sql
+ALTER TABLE public.worker_shifts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on worker_shifts"
+  ON public.worker_shifts
+  FOR ALL
+  USING (business_id = 'default_business');
+```
+
 ## 10. Current Synced Tables
 
 - `product_categories` - Product categories
@@ -610,6 +653,7 @@ CREATE POLICY "Allow all operations on expenses"
 - `inventory_items` - Inventory items with quantities and prices
 - `users` - PIN-only users with roles (stored as SHA-256 hashes)
 - `expenses` - Shift and cart expenses with approval workflow
+- `worker_shifts` - Worker shifts with clock-in/clock-out times and cash tracking
 
 ## 11. Valid User Roles
 

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 36;
+export const SCHEMA_VERSION = 37;
 
 export const MIGRATIONS = [
   {
@@ -1587,6 +1587,57 @@ export const MIGRATIONS = [
       CREATE INDEX idx_expenses_submitted_by ON expenses(submitted_by_user_id);
       CREATE INDEX idx_expenses_created_at ON expenses(created_at);
       CREATE INDEX idx_expenses_is_deleted ON expenses(is_deleted);
+    `,
+  },
+  {
+    version: 37,
+    up: `
+      ALTER TABLE worker_shifts ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE worker_shifts ADD COLUMN device_id TEXT;
+      ALTER TABLE worker_shifts ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE worker_shifts ADD COLUMN deleted_at TEXT;
+      ALTER TABLE worker_shifts ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE worker_shifts ADD COLUMN updated_at_iso TEXT;
+
+      CREATE INDEX idx_worker_shifts_deleted_at ON worker_shifts(deleted_at);
+      CREATE INDEX idx_worker_shifts_is_deleted ON worker_shifts(is_deleted);
+
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('worker_shifts');
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added Supabase sync columns to worker_shifts table', ${Date.now()});
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_worker_shifts_deleted_at;
+      DROP INDEX IF EXISTS idx_worker_shifts_is_deleted;
+      
+      DELETE FROM sync_state WHERE table_name = 'worker_shifts';
+
+      CREATE TABLE worker_shifts_new (
+        id TEXT PRIMARY KEY,
+        worker_id TEXT NOT NULL,
+        cart_id TEXT NOT NULL,
+        clock_in INTEGER,
+        clock_out INTEGER,
+        starting_cash_cents INTEGER DEFAULT 0,
+        expected_cash_cents INTEGER DEFAULT 0,
+        notes TEXT,
+        status TEXT DEFAULT 'active' CHECK(status IN ('assigned', 'active', 'ended')),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        synced_at INTEGER,
+        FOREIGN KEY (worker_id) REFERENCES users(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id)
+      );
+
+      INSERT INTO worker_shifts_new (id, worker_id, cart_id, clock_in, clock_out, starting_cash_cents, expected_cash_cents, notes, status, created_at, updated_at, synced_at)
+      SELECT id, worker_id, cart_id, clock_in, clock_out, starting_cash_cents, expected_cash_cents, notes, status, created_at, updated_at, synced_at FROM worker_shifts;
+
+      DROP TABLE worker_shifts;
+      ALTER TABLE worker_shifts_new RENAME TO worker_shifts;
+
+      CREATE INDEX idx_worker_shifts_worker_id ON worker_shifts(worker_id);
+      CREATE INDEX idx_worker_shifts_cart_id ON worker_shifts(cart_id);
     `,
   },
 ];
