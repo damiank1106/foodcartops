@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 32;
+export const SCHEMA_VERSION = 33;
 
 export const MIGRATIONS = [
   {
@@ -1433,6 +1433,41 @@ export const MIGRATIONS = [
       );
 
       INSERT INTO users_new SELECT * FROM users WHERE role IN ('boss', 'boss2', 'worker', 'inventory_clerk', 'developer');
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `,
+  },
+  {
+    version: 33,
+    up: `
+      ALTER TABLE users ADD COLUMN pin_hash TEXT;
+
+      UPDATE users SET pin_hash = pin WHERE pin IS NOT NULL;
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added pin_hash column to users table for secure PIN storage', ${Date.now()});
+    `,
+    down: `
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('general_manager', 'developer', 'operation_manager', 'inventory_clerk')),
+        pin TEXT,
+        pin_hash_alg TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        profile_image_uri TEXT,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        deleted_at TEXT,
+        created_at_iso TEXT,
+        updated_at_iso TEXT
+      );
+
+      INSERT INTO users_new SELECT id, name, role, pin, pin_hash_alg, password_hash, email, created_at, updated_at, is_active, profile_image_uri, business_id, device_id, deleted_at, created_at_iso, updated_at_iso FROM users;
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
     `,
