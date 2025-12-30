@@ -22,6 +22,7 @@ import { User, UserRole } from '@/lib/types';
 import { getRoleLabel } from '@/lib/utils/role-labels';
 import { useFocusEffect } from 'expo-router';
 import { onSyncComplete } from '@/lib/services/sync.service';
+import { canManageUsers } from '@/lib/utils/rbac';
 
 type ModalMode = 'create' | 'edit' | 'pin' | null;
 
@@ -89,7 +90,8 @@ export default function UsersScreen() {
           role: data.role,
           pin: data.pin,
         },
-        currentUser.id
+        currentUser.id,
+        currentUser.role
       );
 
 
@@ -118,11 +120,11 @@ export default function UsersScreen() {
       if (!oldUser) throw new Error('User not found');
 
       if (data.updates.name !== oldUser.name) {
-        await userRepo.updateWithAudit(data.userId, { name: data.updates.name }, currentUser.id);
+        await userRepo.updateWithAudit(data.userId, { name: data.updates.name }, currentUser.id, currentUser.role);
       }
 
       if (data.updates.role !== oldUser.role) {
-        await userRepo.updateRole(data.userId, data.updates.role, currentUser.id);
+        await userRepo.updateRole(data.userId, data.updates.role, currentUser.id, currentUser.role);
       }
 
 
@@ -147,7 +149,7 @@ export default function UsersScreen() {
       if (data.newPin !== data.confirmPin) throw new Error('PINs do not match');
       if (!/^\d+$/.test(data.newPin)) throw new Error('PIN must contain only digits');
 
-      await userRepo.resetPin(data.userId, data.newPin, currentUser.id);
+      await userRepo.resetPin(data.userId, data.newPin, currentUser.id, currentUser.role);
     },
     onSuccess: () => {
       setModalMode(null);
@@ -164,9 +166,9 @@ export default function UsersScreen() {
     mutationFn: async (user: User) => {
       if (!currentUser) throw new Error('Not authenticated');
       if (user.is_active === 1) {
-        await userRepo.deactivateWithAudit(user.id, currentUser.id);
+        await userRepo.deactivateWithAudit(user.id, currentUser.id, currentUser.role);
       } else {
-        await userRepo.activateWithAudit(user.id, currentUser.id);
+        await userRepo.activateWithAudit(user.id, currentUser.id, currentUser.role);
       }
     },
     onSuccess: () => {
@@ -180,7 +182,7 @@ export default function UsersScreen() {
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
       if (!currentUser) throw new Error('Not authenticated');
-      await userRepo.deleteWithAudit(userId, currentUser.id);
+      await userRepo.deleteWithAudit(userId, currentUser.id, currentUser.role);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-with-carts'] });
@@ -264,6 +266,18 @@ export default function UsersScreen() {
   };
 
   const shouldShowRoles = currentUser?.role === 'general_manager' || currentUser?.role === 'developer';
+
+  if (!currentUser || !canManageUsers(currentUser.role)) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.unauthorizedContainer}>
+          <Text style={[styles.unauthorizedText, { color: theme.text }]}>
+            Only General Manager and Developer can access this page
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -758,5 +772,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  unauthorizedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  unauthorizedText: {
+    fontSize: 16,
+    textAlign: 'center',
   },
 });

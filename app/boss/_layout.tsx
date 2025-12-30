@@ -73,6 +73,7 @@ export default function BossLayout() {
         options={{
           title: 'Users',
           tabBarIcon: ({ color }) => <Users size={24} color={color} />,
+          href: (user?.role === 'general_manager' || user?.role === 'developer') ? '/boss/users' : null,
         }}
       />
       <Tabs.Screen

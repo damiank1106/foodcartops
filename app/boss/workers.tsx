@@ -45,11 +45,12 @@ export default function WorkersScreen() {
 
   const createWorkerMutation = useMutation({
     mutationFn: async (data: { name: string; pin: string }) => {
+      if (!user) throw new Error('Not authenticated');
       const newWorker = await userRepo.create({
         name: data.name,
         role: 'operation_manager',
         pin: data.pin,
-      });
+      }, user.role);
 
       if (user) {
         await auditRepo.log({
@@ -76,13 +77,14 @@ export default function WorkersScreen() {
 
   const updateWorkerMutation = useMutation({
     mutationFn: async (data: { id: string; name: string; pin?: string }) => {
+      if (!user) throw new Error('Not authenticated');
       const updateData: any = { name: data.name };
       if (data.pin) {
         const { hashPin } = await import('@/lib/utils/crypto');
         updateData.pin = await hashPin(data.pin);
       }
 
-      await userRepo.update(data.id, updateData);
+      await userRepo.update(data.id, updateData, user.role);
 
       if (user) {
         await auditRepo.log({
@@ -107,7 +109,8 @@ export default function WorkersScreen() {
 
   const deleteWorkerMutation = useMutation({
     mutationFn: async (workerId: string) => {
-      await userRepo.deactivate(workerId);
+      if (!user) throw new Error('Not authenticated');
+      await userRepo.deactivate(workerId, user.role);
 
       if (user) {
         await auditRepo.log({

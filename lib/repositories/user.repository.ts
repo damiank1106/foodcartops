@@ -4,6 +4,7 @@ import { hashPin, verifyPin } from '../utils/crypto';
 import { SyncOutboxRepository } from './sync-outbox.repository';
 import { getDeviceId } from '../utils/device-id';
 import { isSystemUserId } from '../utils/seed';
+import { requireUserManagementRole } from '../utils/rbac';
 
 export class UserRepository extends BaseRepository {
   private syncOutbox = new SyncOutboxRepository();
@@ -14,7 +15,8 @@ export class UserRepository extends BaseRepository {
     pin?: string;
     password_hash?: string;
     email?: string;
-  }): Promise<User> {
+  }, currentUserRole: UserRole): Promise<User> {
+    requireUserManagementRole(currentUserRole);
     const db = await this.getDb();
     const id = this.generateId();
     const now = this.now();
@@ -132,7 +134,8 @@ export class UserRepository extends BaseRepository {
     );
   }
 
-  async update(id: string, data: Partial<Omit<User, 'id' | 'created_at'>>): Promise<void> {
+  async update(id: string, data: Partial<Omit<User, 'id' | 'created_at'>>, currentUserRole: UserRole): Promise<void> {
+    requireUserManagementRole(currentUserRole);
     const db = await this.getDb();
     const updates: string[] = [];
     const values: any[] = [];
@@ -178,8 +181,9 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Updated user:', id);
   }
 
-  async deactivate(id: string): Promise<void> {
-    await this.update(id, { is_active: 0 });
+  async deactivate(id: string, currentUserRole: UserRole): Promise<void> {
+    requireUserManagementRole(currentUserRole);
+    await this.update(id, { is_active: 0 }, currentUserRole);
     console.log('[UserRepo] Deactivated user:', id);
   }
 
@@ -194,17 +198,44 @@ export class UserRepository extends BaseRepository {
       return false;
     }
 
+    const db = await this.getDb();
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
     const newPinHash = await hashPin(newPin);
-    await this.update(id, { pin: newPinHash, pin_hash_alg: 'sha256-v1' });
+
+    await db.runAsync(
+      'UPDATE users SET pin = ?, pin_hash_alg = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+      [newPinHash, 'sha256-v1', now, nowISO, id]
+    );
+
+    const updatedUser = await this.findById(id);
+    if (updatedUser) {
+      const syncPayload = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        pin_hash: updatedUser.pin,
+        pin_hash_alg: updatedUser.pin_hash_alg,
+        is_active: updatedUser.is_active,
+        is_system: isSystemUserId(updatedUser.id),
+        business_id: updatedUser.business_id,
+        device_id: updatedUser.device_id,
+        created_at_iso: updatedUser.created_at_iso,
+        updated_at_iso: nowISO,
+      };
+      await this.syncOutbox.add('users', updatedUser.id, 'upsert', syncPayload);
+    }
+
     console.log('[UserRepo] Changed PIN for user:', id);
     return true;
   }
 
-  async resetPin(id: string, newPin: string, resetByUserId: string): Promise<void> {
+  async resetPin(id: string, newPin: string, resetByUserId: string, currentUserRole: UserRole): Promise<void> {
+    requireUserManagementRole(currentUserRole);
     const oldUser = await this.findById(id);
     
     const newPinHash = await hashPin(newPin);
-    await this.update(id, { pin: newPinHash, pin_hash_alg: 'sha256-v1' });
+    await this.update(id, { pin: newPinHash, pin_hash_alg: 'sha256-v1' }, currentUserRole);
 
     await this.auditLog(resetByUserId, 'users', id, 'reset_pin', oldUser, {
       ...oldUser,
@@ -222,10 +253,11 @@ export class UserRepository extends BaseRepository {
     return await verifyPin(pin, user.pin);
   }
 
-  async updateRole(id: string, newRole: UserRole, updatedByUserId: string): Promise<void> {
+  async updateRole(id: string, newRole: UserRole, updatedByUserId: string, currentUserRole: UserRole): Promise<void> {
+    requireUserManagementRole(currentUserRole);
     const oldUser = await this.findById(id);
     
-    await this.update(id, { role: newRole });
+    await this.update(id, { role: newRole }, currentUserRole);
 
     await this.auditLog(updatedByUserId, 'users', id, 'assign_role', oldUser, {
       ...oldUser,
@@ -241,8 +273,9 @@ export class UserRepository extends BaseRepository {
     pin?: string;
     password_hash?: string;
     email?: string;
-  }, createdByUserId: string): Promise<User> {
-    const user = await this.create(data);
+  }, createdByUserId: string, currentUserRole: UserRole): Promise<User> {
+    requireUserManagementRole(currentUserRole);
+    const user = await this.create(data, currentUserRole);
 
     await this.auditLog(createdByUserId, 'users', user.id, 'create', null, user);
 
@@ -250,10 +283,53 @@ export class UserRepository extends BaseRepository {
     return user;
   }
 
-  async updateWithAudit(id: string, data: Partial<Omit<User, 'id' | 'created_at'>>, updatedByUserId: string): Promise<void> {
-    const oldUser = await this.findById(id);
+  async updateWithAudit(id: string, data: Partial<Omit<User, 'id' | 'created_at'>>, updatedByUserId: string, currentUserRole: UserRole, isSelfUpdate: boolean = false): Promise<void> {
+    if (!isSelfUpdate) {
+      requireUserManagementRole(currentUserRole);
+    }
     
-    await this.update(id, data);
+    const db = await this.getDb();
+    const oldUser = await this.findById(id);
+    const updates: string[] = [];
+    const values: any[] = [];
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
+
+    Object.entries(data).forEach(([key, value]) => {
+      if (key !== 'id' && key !== 'created_at') {
+        updates.push(`${key} = ?`);
+        values.push(value);
+      }
+    });
+
+    updates.push('updated_at = ?');
+    updates.push('updated_at_iso = ?');
+    values.push(now);
+    values.push(nowISO);
+    values.push(id);
+
+    await db.runAsync(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    const updatedUser = await this.findById(id);
+    if (updatedUser) {
+      const syncPayload = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        pin_hash: updatedUser.pin,
+        pin_hash_alg: updatedUser.pin_hash_alg,
+        is_active: updatedUser.is_active,
+        is_system: isSystemUserId(updatedUser.id),
+        business_id: updatedUser.business_id,
+        device_id: updatedUser.device_id,
+        created_at_iso: updatedUser.created_at_iso,
+        updated_at_iso: nowISO,
+      };
+      await this.syncOutbox.add('users', updatedUser.id, 'upsert', syncPayload);
+    }
 
     const newUser = await this.findById(id);
 
@@ -262,10 +338,11 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Updated user with audit:', id);
   }
 
-  async deactivateWithAudit(id: string, deactivatedByUserId: string): Promise<void> {
+  async deactivateWithAudit(id: string, deactivatedByUserId: string, currentUserRole: UserRole): Promise<void> {
+    requireUserManagementRole(currentUserRole);
     const oldUser = await this.findById(id);
     
-    await this.deactivate(id);
+    await this.deactivate(id, currentUserRole);
 
     const newUser = await this.findById(id);
 
@@ -274,10 +351,11 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Deactivated user with audit:', id);
   }
 
-  async activateWithAudit(id: string, activatedByUserId: string): Promise<void> {
+  async activateWithAudit(id: string, activatedByUserId: string, currentUserRole: UserRole): Promise<void> {
+    requireUserManagementRole(currentUserRole);
     const oldUser = await this.findById(id);
     
-    await this.update(id, { is_active: 1 });
+    await this.update(id, { is_active: 1 }, currentUserRole);
 
     const newUser = await this.findById(id);
 
@@ -286,7 +364,8 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Activated user with audit:', id);
   }
 
-  async deleteWithAudit(id: string, deletedByUserId: string): Promise<void> {
+  async deleteWithAudit(id: string, deletedByUserId: string, currentUserRole: UserRole): Promise<void> {
+    requireUserManagementRole(currentUserRole);
     const db = await this.getDb();
     const oldUser = await this.findById(id);
     if (!oldUser) throw new Error('User not found');

@@ -89,7 +89,7 @@ export default function InventorySettingsScreen() {
     try {
       const userRepo = new UserRepository();
       if (user?.id) {
-        await userRepo.updateWithAudit(user.id, { name: newName.trim() }, user.id);
+        await userRepo.updateWithAudit(user.id, { name: newName.trim() }, user.id, user.role, true);
         await updateUser();
         Alert.alert('Success', 'Name updated successfully.');
         setShowNameModal(false);

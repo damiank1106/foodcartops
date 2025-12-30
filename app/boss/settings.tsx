@@ -119,7 +119,7 @@ export default function SettingsScreen() {
     try {
       const userRepo = new UserRepository();
       if (user?.id) {
-        await userRepo.resetPin(user.id, newPin, user.id);
+        await userRepo.resetPin(user.id, newPin, user.id, user.role);
         
         Alert.alert('Success', 'PIN changed successfully');
         setShowPinModal(false);
@@ -151,7 +151,7 @@ export default function SettingsScreen() {
     try {
       const userRepo = new UserRepository();
       if (user?.id) {
-        await userRepo.updateWithAudit(user.id, { name: newName.trim() }, user.id);
+        await userRepo.updateWithAudit(user.id, { name: newName.trim() }, user.id, user.role, true);
         await updateUser();
         Alert.alert('Success', 'Name updated successfully.');
         setShowNameModal(false);
@@ -247,8 +247,8 @@ export default function SettingsScreen() {
         
         const workers = await userRepo.findAll();
         for (const worker of workers) {
-          if (worker.role === 'operation_manager') {
-            await userRepo.update(worker.id, { is_active: 0 });
+          if (worker.role === 'operation_manager' && user) {
+            await userRepo.update(worker.id, { is_active: 0 }, user.role);
             await auditRepo.log({
               user_id: user?.id,
               entity_type: 'user',
