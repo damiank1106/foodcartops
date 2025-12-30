@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 34;
+export const SCHEMA_VERSION = 35;
 
 export const MIGRATIONS = [
   {
@@ -1504,6 +1504,33 @@ export const MIGRATIONS = [
       INSERT INTO users_new SELECT id, name, role, pin, pin_hash, pin_hash_alg, password_hash, email, created_at, updated_at, is_active, profile_image_uri, business_id, device_id, deleted_at, created_at_iso, updated_at_iso FROM users;
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
+    `,
+  },
+  {
+    version: 35,
+    up: `
+      UPDATE users SET pin_hash = NULL, pin_hash_alg = NULL WHERE 1=1;
+
+      UPDATE users 
+      SET pin = '1234', is_system = 1, is_active = 1, deleted_at = NULL 
+      WHERE id = 'system-user-general-manager';
+
+      UPDATE users 
+      SET pin = '2345', is_system = 1, is_active = 1, deleted_at = NULL 
+      WHERE id = 'system-user-developer';
+
+      UPDATE users 
+      SET pin = '1111', is_system = 1, is_active = 1, deleted_at = NULL 
+      WHERE id = 'system-user-operation-manager';
+
+      UPDATE users 
+      SET pin = '2222', is_system = 1, is_active = 1, deleted_at = NULL 
+      WHERE id = 'system-user-inventory-clerk';
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migrated to plain-text PINs: reset pin_hash/pin_hash_alg to NULL, restored system user PINs', ${Date.now()});
+    `,
+    down: `
     `,
   },
 ];

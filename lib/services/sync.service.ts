@@ -39,7 +39,7 @@ export interface SyncStatus {
 function stripLocalOnlyColumns(tableName: string, payload: any): any {
   const localOnlyColumns: Record<string, string[]> = {
     inventory_items: ['storage_group'],
-    users: ['email', 'password_hash', 'profile_image_uri'],
+    users: ['email', 'password_hash', 'profile_image_uri', 'pin_hash', 'pin_hash_alg'],
   };
 
   const columnsToStrip = localOnlyColumns[tableName] || [];
@@ -355,24 +355,22 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                 remoteRow.is_system = isSystemUser ? 1 : 0;
 
                 const localUser = await db.getFirstAsync<any>(
-                  'SELECT id, role, pin_hash, pin_hash_alg, is_system FROM users WHERE id = ?',
+                  'SELECT id, role, pin, is_system FROM users WHERE id = ?',
                   [remoteRow.id]
                 );
 
                 if (localUser && localUser.is_system) {
-                  console.log(`[Sync] Protecting system user ${localUser.role} pin_hash`);
+                  console.log(`[Sync] Protecting system user ${localUser.role} PIN`);
                   
-                  if (!remoteRow.pin_hash && localUser.pin_hash) {
-                    console.log(`[Sync] Remote has empty pin_hash for ${localUser.role}, keeping local`);
-                    remoteRow.pin_hash = localUser.pin_hash;
-                    remoteRow.pin_hash_alg = localUser.pin_hash_alg;
+                  if (!remoteRow.pin && localUser.pin) {
+                    console.log(`[Sync] Remote has empty PIN for ${localUser.role}, keeping local`);
+                    remoteRow.pin = localUser.pin;
                   }
                 }
 
                 console.log(`[Sync] DEBUG Pulling user ${remoteRow.id}:`, {
                   role: remoteRow.role,
-                  has_pin_hash: !!remoteRow.pin_hash,
-                  pin_hash_alg: remoteRow.pin_hash_alg,
+                  has_pin: !!remoteRow.pin,
                   is_system: remoteRow.is_system
                 });
               }
