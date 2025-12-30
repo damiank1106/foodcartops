@@ -29,7 +29,7 @@ export default function LoginScreen() {
     
     const redirectTimeout = setTimeout(() => {
       try {
-        if (user.role === 'boss' || user.role === 'boss2' || user.role === 'developer') {
+        if (user.role === 'general_manager' || user.role === 'developer') {
           router.replace('/boss' as any);
         } else if (user.role === 'inventory_clerk') {
           router.replace('/inventory' as any);

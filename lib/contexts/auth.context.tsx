@@ -51,7 +51,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           let selectedCart = cartId;
           let assignedCartIds: string[] = [];
 
-          if (user.role === 'worker') {
+          if (user.role === 'operation_manager') {
             const activeShift = await shiftRepo.getActiveShift(user.id);
             activeShiftId = activeShift?.id || null;
             if (activeShift && !selectedCart) {
@@ -100,7 +100,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       let activeShiftId: string | null = null;
       let assignedCartIds: string[] = [];
 
-      if (user.role === 'worker') {
+      if (user.role === 'operation_manager') {
         const activeShift = await shiftRepo.getActiveShift(user.id);
         activeShiftId = activeShift?.id || null;
       } else if (user.role === 'inventory_clerk') {
@@ -125,7 +125,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const logout = async () => {
     try {
-      if (state.user?.role === 'worker') {
+      if (state.user?.role === 'operation_manager') {
         const shiftRepo = new ShiftRepository();
         const activeShift = await shiftRepo.getActiveShift(state.user.id);
         
@@ -169,7 +169,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   };
 
   const startShift = async (shiftIdOrCartId: string, startingCashCents: number = 0) => {
-    if (!state.user || state.user.role !== 'worker') {
+    if (!state.user || state.user.role !== 'operation_manager') {
       throw new Error('Only workers can start shifts');
     }
 
@@ -251,15 +251,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const canAccessCart = (cartId: string): boolean => {
     if (!state.user) return false;
-    if (state.user.role === 'boss' || state.user.role === 'boss2') return true;
-    if (state.user.role === 'worker') return true;
+    if (state.user.role === 'general_manager') return true;
+    if (state.user.role === 'operation_manager') return true;
     if (state.user.role === 'inventory_clerk') return true;
     return false;
   };
 
   const hasPermission = (permission: 'approve_expenses' | 'create_settlements' | 'view_all_data' | 'manage_users'): boolean => {
     if (!state.user) return false;
-    if (state.user.role === 'boss' || state.user.role === 'boss2' || state.user.role === 'developer') return true;
+    if (state.user.role === 'general_manager' || state.user.role === 'developer') return true;
     return false;
   };
 
@@ -275,11 +275,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     canAccessCart,
     hasPermission,
     isAuthenticated: !!state.user,
-    isBoss: state.user?.role === 'boss' || state.user?.role === 'boss2',
+    isBoss: state.user?.role === 'general_manager',
     isDeveloper: state.user?.role === 'developer',
-    isWorker: state.user?.role === 'worker',
+    isWorker: state.user?.role === 'operation_manager',
     isInventoryClerk: state.user?.role === 'inventory_clerk',
-    canDoWorkerTasks: state.user?.role === 'worker',
-    canAccessInventory: state.user?.role === 'boss' || state.user?.role === 'boss2' || state.user?.role === 'inventory_clerk' || state.user?.role === 'developer',
+    canDoWorkerTasks: state.user?.role === 'operation_manager',
+    canAccessInventory: state.user?.role === 'general_manager' || state.user?.role === 'inventory_clerk' || state.user?.role === 'developer',
   };
 });

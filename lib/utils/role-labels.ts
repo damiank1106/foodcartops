@@ -2,10 +2,9 @@ import type { UserRole } from '@/lib/types';
 
 export function getRoleLabel(role: UserRole): string {
   switch (role) {
-    case 'boss':
-    case 'boss2':
+    case 'general_manager':
       return 'General Manager';
-    case 'worker':
+    case 'operation_manager':
       return 'Operation Manager';
     case 'inventory_clerk':
       return 'Inventory Clerk';
@@ -18,10 +17,9 @@ export function getRoleLabel(role: UserRole): string {
 
 export function getRoleDescription(role: UserRole): string {
   switch (role) {
-    case 'boss':
-    case 'boss2':
+    case 'general_manager':
       return 'Full access to all features';
-    case 'worker':
+    case 'operation_manager':
       return 'Can make sales and submit expenses';
     case 'inventory_clerk':
       return 'Can manage inventory items';

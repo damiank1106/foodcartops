@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 31;
+export const SCHEMA_VERSION = 32;
 
 export const MIGRATIONS = [
   {
@@ -1349,6 +1349,90 @@ export const MIGRATIONS = [
       INSERT INTO users_new (id, name, role, pin, password_hash, email, created_at, updated_at, is_active, profile_image_uri)
       SELECT id, name, role, pin, password_hash, email, created_at, updated_at, is_active, profile_image_uri FROM users;
 
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `,
+  },
+  {
+    version: 32,
+    up: `
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('general_manager', 'developer', 'operation_manager', 'inventory_clerk')),
+        pin TEXT,
+        pin_hash_alg TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        profile_image_uri TEXT,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        deleted_at TEXT,
+        created_at_iso TEXT,
+        updated_at_iso TEXT
+      );
+
+      INSERT INTO users_new (
+        id, name, role, pin, pin_hash_alg, password_hash, email, 
+        created_at, updated_at, is_active, profile_image_uri, 
+        business_id, device_id, deleted_at, created_at_iso, updated_at_iso
+      )
+      SELECT 
+        id, 
+        name, 
+        CASE 
+          WHEN role = 'boss' THEN 'general_manager'
+          WHEN role = 'boss2' THEN 'developer'
+          WHEN role = 'worker' THEN 'operation_manager'
+          WHEN role = 'inventory_clerk' THEN 'inventory_clerk'
+          WHEN role = 'developer' THEN 'developer'
+          ELSE 'general_manager'
+        END as role,
+        pin, 
+        pin_hash_alg, 
+        password_hash, 
+        email, 
+        created_at, 
+        updated_at, 
+        is_active, 
+        profile_image_uri, 
+        business_id, 
+        device_id, 
+        deleted_at, 
+        created_at_iso, 
+        updated_at_iso
+      FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migrated user roles: boss->general_manager, boss2->developer, worker->operation_manager', ${Date.now()});
+    `,
+    down: `
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('boss', 'boss2', 'worker', 'inventory_clerk', 'developer')),
+        pin TEXT,
+        pin_hash_alg TEXT,
+        password_hash TEXT,
+        email TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        profile_image_uri TEXT,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        deleted_at TEXT,
+        created_at_iso TEXT,
+        updated_at_iso TEXT
+      );
+
+      INSERT INTO users_new SELECT * FROM users WHERE role IN ('boss', 'boss2', 'worker', 'inventory_clerk', 'developer');
       DROP TABLE users;
       ALTER TABLE users_new RENAME TO users;
     `,

@@ -549,7 +549,7 @@ export default function BossDashboard() {
             </Text>
             {selectedTab === 'overview' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
-          {(user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && (
+          {(user?.role === 'general_manager' || user?.role === 'developer') && (
             <TouchableOpacity
               style={styles.tab}
               onPress={() => setSelectedTab('calendar')}
@@ -1089,7 +1089,7 @@ export default function BossDashboard() {
             </>
           )}
 
-          {selectedTab === 'calendar' && (user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer') && (
+          {selectedTab === 'calendar' && (user?.role === 'general_manager' || user?.role === 'developer') && (
             <CalendarScreen selectedDate={pickerDate} />
           )}
 

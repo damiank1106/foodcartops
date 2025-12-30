@@ -210,7 +210,7 @@ export default function UsersScreen() {
   const resetForm = () => {
     setFormData({
       name: '',
-      role: 'worker',
+      role: 'operation_manager',
       pin: '',
       confirmPin: '',
       assignedCartIds: [],
@@ -234,7 +234,7 @@ export default function UsersScreen() {
     setSelectedUser(user);
     setFormData({
       name: '',
-      role: 'worker',
+      role: 'operation_manager',
       pin: '',
       confirmPin: '',
       assignedCartIds: [],
@@ -259,11 +259,11 @@ export default function UsersScreen() {
 
 
   const getRoleBadgeColor = (role: UserRole) => {
-    if (role === 'boss' || role === 'boss2') return theme.error;
+    if (role === 'general_manager') return theme.error;
     return theme.success;
   };
 
-  const shouldShowRoles = currentUser?.role === 'boss' || currentUser?.role === 'boss2' || currentUser?.role === 'developer';
+  const shouldShowRoles = currentUser?.role === 'general_manager' || currentUser?.role === 'developer';
 
   if (isLoading) {
     return (
@@ -329,7 +329,7 @@ export default function UsersScreen() {
                   )}
                 </View>
               </View>
-              {user.role !== 'boss' && user.role !== 'boss2' && user.role !== 'developer' && (
+              {user.role !== 'general_manager' && user.role !== 'developer' && (
                 <View style={styles.userActions}>
                   <TouchableOpacity
                     style={[styles.actionButton, { backgroundColor: theme.primary + '20' }]}
@@ -343,7 +343,7 @@ export default function UsersScreen() {
                   >
                     <Key size={18} color={theme.warning} />
                   </TouchableOpacity>
-                  {(user.role === 'worker' || user.role === 'inventory_clerk') && (
+                  {(user.role === 'operation_manager' || user.role === 'inventory_clerk') && (
                     <TouchableOpacity
                       style={[styles.actionButton, { backgroundColor: theme.error + '20' }]}
                       onPress={() => handleDeleteUser(user)}
@@ -415,18 +415,18 @@ export default function UsersScreen() {
                       style={[
                         styles.roleButton,
                         { borderColor: theme.border },
-                        formData.role === 'worker' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
+                        formData.role === 'operation_manager' && { backgroundColor: theme.primary + '20', borderColor: theme.primary },
                       ]}
-                      onPress={() => setFormData((prev) => ({ ...prev, role: 'worker' }))}
+                      onPress={() => setFormData((prev) => ({ ...prev, role: 'operation_manager' }))}
                     >
                       <Text
                         style={[
                           styles.roleButtonText,
                           { color: theme.text },
-                          formData.role === 'worker' && { color: theme.primary, fontWeight: '700' as const },
+                          formData.role === 'operation_manager' && { color: theme.primary, fontWeight: '700' as const },
                         ]}
                       >
-                        {getRoleLabel('worker')}
+                        {getRoleLabel('operation_manager')}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity

@@ -247,7 +247,7 @@ export default function SettingsScreen() {
         
         const workers = await userRepo.findAll();
         for (const worker of workers) {
-          if (worker.role === 'worker') {
+          if (worker.role === 'operation_manager') {
             await userRepo.update(worker.id, { is_active: 0 });
             await auditRepo.log({
               user_id: user?.id,
@@ -388,7 +388,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {(user?.role === 'boss' || user?.role === 'developer') && (
+        {(user?.role === 'general_manager' || user?.role === 'developer') && (
           <View style={[styles.section, { backgroundColor: theme.card }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Developer Actions</Text>
             {user?.role === 'developer' && syncEnabled && (

@@ -31,7 +31,7 @@ export default function BossSalesScreen() {
 
   const { data: workers } = useQuery({
     queryKey: ['workers'],
-    queryFn: () => userRepo.findByRole('worker'),
+    queryFn: () => userRepo.findByRole('operation_manager'),
   });
 
   const { data: carts } = useQuery({

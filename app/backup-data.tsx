@@ -26,7 +26,7 @@ export default function BackupDataScreen() {
   const [currentUrl, setCurrentUrl] = useState('');
   const [currentKey, setCurrentKey] = useState('');
   const [editMode, setEditMode] = useState(false);
-  const canEditCredentials = user?.role === 'boss' || user?.role === 'boss2' || user?.role === 'developer';
+  const canEditCredentials = user?.role === 'general_manager' || user?.role === 'developer';
   const [showUrl, setShowUrl] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [editedUrl, setEditedUrl] = useState('');
@@ -111,8 +111,8 @@ export default function BackupDataScreen() {
   };
 
   const handleClearOutbox = () => {
-    if (user?.role !== 'developer' && user?.role !== 'boss' && user?.role !== 'boss2') {
-      Alert.alert('Permission Denied', 'Only Developer and Boss can clear outbox');
+    if (user?.role !== 'developer' && user?.role !== 'general_manager') {
+      Alert.alert('Permission Denied', 'Only Developer and General Manager can clear outbox');
       return;
     }
 
@@ -378,7 +378,7 @@ export default function BackupDataScreen() {
             <Text style={[styles.actionButtonTextOutline, { color: theme.text }]}>View Outbox</Text>
           </TouchableOpacity>
 
-          {(user?.role === 'developer' || user?.role === 'boss' || user?.role === 'boss2') && (
+          {(user?.role === 'developer' || user?.role === 'general_manager') && (
             <TouchableOpacity
               style={[styles.actionButtonOutline, { borderColor: theme.error }]}
               onPress={handleClearOutbox}

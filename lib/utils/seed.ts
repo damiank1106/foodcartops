@@ -29,7 +29,7 @@ export async function ensureSystemUsers(): Promise<void> {
     await userRepo.createSystemUser(
       SYSTEM_USER_IDS.OPERATION_MANAGER,
       'Operation Manager',
-      'boss',
+      'operation_manager',
       DEFAULT_PINS.OPERATION_MANAGER
     );
     console.log('[Seed] Operation Manager ready (PIN: 1234)');

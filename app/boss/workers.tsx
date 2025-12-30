@@ -47,7 +47,7 @@ export default function WorkersScreen() {
     mutationFn: async (data: { name: string; pin: string }) => {
       const newWorker = await userRepo.create({
         name: data.name,
-        role: 'worker',
+        role: 'operation_manager',
         pin: data.pin,
       });
 
@@ -57,7 +57,7 @@ export default function WorkersScreen() {
           entity_type: 'user',
           entity_id: newWorker.id,
           action: 'create',
-          new_data: JSON.stringify({ name: data.name, role: 'worker' }),
+          new_data: JSON.stringify({ name: data.name, role: 'operation_manager' }),
         });
       }
 

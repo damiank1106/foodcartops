@@ -11,12 +11,12 @@ export default function WorkerLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== 'worker')) {
+    if (!isLoading && (!user || user.role !== 'operation_manager')) {
       router.replace('/');
     }
   }, [isLoading, user, router]);
 
-  if (isLoading || !user || user.role !== 'worker') {
+  if (isLoading || !user || user.role !== 'operation_manager') {
     return (
       <View style={[styles.loading, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
