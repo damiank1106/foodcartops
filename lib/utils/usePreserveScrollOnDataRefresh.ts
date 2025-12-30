@@ -27,15 +27,17 @@ export function usePreserveScrollOnDataRefresh(isModalOpen: boolean = false) {
       
       if (age < 2000 && offset > 0) {
         isRestoringRef.current = true;
-        setTimeout(() => {
-          scrollViewRef.current?.scrollTo({
-            y: offset,
-            animated: false,
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            scrollViewRef.current?.scrollTo({
+              y: offset,
+              animated: false,
+            });
+            setTimeout(() => {
+              isRestoringRef.current = false;
+            }, 100);
           });
-          setTimeout(() => {
-            isRestoringRef.current = false;
-          }, 100);
-        }, 16);
+        });
       }
     }
   }, [isModalOpen]);
