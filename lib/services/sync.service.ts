@@ -329,10 +329,28 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
             if (remoteRow.deleted_at) {
               console.log(`[Sync] Tombstone detected for ${tableName} ${remoteRow.id}, marking as deleted`);
-              await db.runAsync(
-                `UPDATE ${tableName} SET deleted_at = ?, is_active = 0, updated_at = ? WHERE id = ?`,
-                [remoteRow.deleted_at, Date.now(), remoteRow.id]
+              
+              const tableColumns = await db.getAllAsync<{ name: string }>(
+                `PRAGMA table_info(${tableName})`
               );
+              const columnNames = new Set(tableColumns.map(col => col.name));
+              
+              if (columnNames.has('is_deleted') && columnNames.has('deleted_at')) {
+                await db.runAsync(
+                  `UPDATE ${tableName} SET deleted_at = ?, is_deleted = 1, updated_at = ? WHERE id = ?`,
+                  [remoteRow.deleted_at, Date.now(), remoteRow.id]
+                );
+              } else if (columnNames.has('is_active')) {
+                await db.runAsync(
+                  `UPDATE ${tableName} SET deleted_at = ?, is_active = 0, updated_at = ? WHERE id = ?`,
+                  [remoteRow.deleted_at, Date.now(), remoteRow.id]
+                );
+              } else {
+                await db.runAsync(
+                  `UPDATE ${tableName} SET deleted_at = ?, updated_at = ? WHERE id = ?`,
+                  [remoteRow.deleted_at, Date.now(), remoteRow.id]
+                );
+              }
             } else {
               const localSchema = await db.getAllAsync<{ name: string }>(
                 `PRAGMA table_info(${tableName})`

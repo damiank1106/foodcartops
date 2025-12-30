@@ -143,14 +143,8 @@ export default function WorkerExpensesScreen() {
 
   const deleteExpenseMutation = useMutation({
     mutationFn: async (expenseId: string) => {
-      await expenseRepo.delete(expenseId);
-      await auditRepo.log({
-        user_id: user?.id || '',
-        entity_type: 'expense',
-        entity_id: expenseId,
-        action: 'delete',
-        new_data: JSON.stringify({ reason: 'manual_delete' }),
-      });
+      if (!user?.id) throw new Error('User not found');
+      await expenseRepo.softDelete(expenseId, user.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['worker-expenses'] });
@@ -171,14 +165,7 @@ export default function WorkerExpensesScreen() {
       );
       
       for (const expense of oldDrafts) {
-        await expenseRepo.delete(expense.id);
-        await auditRepo.log({
-          user_id: user.id,
-          entity_type: 'expense',
-          entity_id: expense.id,
-          action: 'delete',
-          new_data: JSON.stringify({ reason: 'auto_cleanup_7_days_draft' }),
-        });
+        await expenseRepo.softDelete(expense.id, user.id);
       }
       
       if (oldDrafts.length > 0) {

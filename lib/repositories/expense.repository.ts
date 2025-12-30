@@ -239,30 +239,40 @@ export class ExpenseRepository extends BaseRepository {
     }
   }
 
-  async delete(id: string): Promise<void> {
-    const db = await getDatabase();
-    await db.runAsync('DELETE FROM expenses WHERE id = ?', [id]);
-  }
+
 
   async softDelete(id: string, deletedByUserId: string): Promise<void> {
     const db = await getDatabase();
     const now = Date.now();
     const nowISO = new Date().toISOString();
+    const deviceId = await getDeviceId();
     
-    const oldExpense = await this.findById(id);
+    const oldExpense = await db.getFirstAsync<Expense>(
+      'SELECT * FROM expenses WHERE id = ?',
+      [id]
+    );
     
     await db.runAsync(
-      'UPDATE expenses SET is_deleted = 1, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
-      [nowISO, now, nowISO, id]
+      'UPDATE expenses SET is_deleted = 1, deleted_at = ?, updated_at = ?, updated_at_iso = ?, device_id = ? WHERE id = ?',
+      [nowISO, now, nowISO, deviceId, id]
     );
 
     await this.auditLog(deletedByUserId, 'expense', id, 'delete', oldExpense, null);
     
-    const expense = await this.findById(id);
-    if (expense) {
-      await this.syncOutbox.add('expenses', id, 'upsert', expense);
-    }
+    const deletedExpense = await db.getFirstAsync<Expense>(
+      'SELECT * FROM expenses WHERE id = ?',
+      [id]
+    );
     
-    console.log('[ExpenseRepo] Soft deleted expense:', id);
+    if (deletedExpense) {
+      await this.syncOutbox.add('expenses', id, 'upsert', deletedExpense);
+      console.log('[ExpenseRepo] Soft deleted expense and queued sync:', {
+        id,
+        is_deleted: deletedExpense.is_deleted,
+        deleted_at: deletedExpense.deleted_at,
+        business_id: deletedExpense.business_id,
+        device_id: deletedExpense.device_id
+      });
+    }
   }
 }

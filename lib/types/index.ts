@@ -229,6 +229,12 @@ export interface Expense {
   created_at: number;
   updated_at: number;
   reviewed_at?: number;
+  is_deleted?: number;
+  business_id?: string;
+  device_id?: string;
+  deleted_at?: string;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface ExpenseWithDetails extends Expense {
