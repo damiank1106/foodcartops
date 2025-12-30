@@ -73,14 +73,14 @@ export class ProductCategoryRepository extends BaseRepository {
   async listActive(): Promise<ProductCategory[]> {
     const db = await this.getDb();
     return await db.getAllAsync<ProductCategory>(
-      'SELECT * FROM product_categories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC'
+      'SELECT * FROM product_categories WHERE is_active = 1 AND deleted_at IS NULL ORDER BY sort_order ASC, name ASC'
     );
   }
 
   async listAll(): Promise<ProductCategory[]> {
     const db = await this.getDb();
     return await db.getAllAsync<ProductCategory>(
-      'SELECT * FROM product_categories ORDER BY sort_order ASC, name ASC'
+      'SELECT * FROM product_categories WHERE deleted_at IS NULL ORDER BY sort_order ASC, name ASC'
     );
   }
 
@@ -161,7 +161,7 @@ export class ProductCategoryRepository extends BaseRepository {
     }
 
     const productsInCategory = await db.getAllAsync<{ id: string }>(
-      'SELECT id FROM products WHERE category_id = ? AND is_active = 1',
+      'SELECT id FROM products WHERE category_id = ? AND is_active = 1 AND deleted_at IS NULL',
       [id]
     );
 

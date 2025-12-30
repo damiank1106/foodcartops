@@ -11,7 +11,7 @@ export class InventoryItemRepository extends BaseRepository {
     console.log('[InventoryItemRepository] Fetching active inventory items');
     const db = await this.getDb();
     const result = await db.getAllAsync<InventoryItem>(
-      `SELECT * FROM inventory_items WHERE is_active = 1 ORDER BY name ASC`
+      `SELECT * FROM inventory_items WHERE is_active = 1 AND deleted_at IS NULL ORDER BY name ASC`
     );
     console.log(`[InventoryItemRepository] Found ${result.length} active items`);
     return result;
@@ -21,7 +21,7 @@ export class InventoryItemRepository extends BaseRepository {
     console.log('[InventoryItemRepository] Fetching all inventory items');
     const db = await this.getDb();
     const result = await db.getAllAsync<InventoryItem>(
-      `SELECT * FROM inventory_items ORDER BY name ASC`
+      `SELECT * FROM inventory_items WHERE deleted_at IS NULL ORDER BY name ASC`
     );
     console.log(`[InventoryItemRepository] Found ${result.length} items`);
     return result;
@@ -298,7 +298,7 @@ export class InventoryItemRepository extends BaseRepository {
     console.log(`[InventoryItemRepository] Fetching items by group: ${storage_group_id}`);
     const db = await this.getDb();
     const result = await db.getAllAsync<InventoryItem>(
-      `SELECT * FROM inventory_items WHERE is_active = 1 AND storage_group_id = ? ORDER BY name ASC`,
+      `SELECT * FROM inventory_items WHERE is_active = 1 AND deleted_at IS NULL AND storage_group_id = ? ORDER BY name ASC`,
       [storage_group_id]
     );
     console.log(`[InventoryItemRepository] Found ${result.length} items in group`);

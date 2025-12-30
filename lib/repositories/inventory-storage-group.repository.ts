@@ -16,7 +16,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     console.log('[InventoryStorageGroupRepository] Fetching active storage groups');
     const db = await this.getDb();
     const result = await db.getAllAsync<InventoryStorageGroup>(
-      `SELECT * FROM inventory_storage_groups WHERE is_active = 1 ORDER BY sort_order ASC, name ASC`
+      `SELECT * FROM inventory_storage_groups WHERE is_active = 1 AND deleted_at IS NULL ORDER BY sort_order ASC, name ASC`
     );
     console.log(`[InventoryStorageGroupRepository] Found ${result.length} active groups`);
     return result;
@@ -26,7 +26,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     console.log('[InventoryStorageGroupRepository] Fetching all storage groups');
     const db = await this.getDb();
     const result = await db.getAllAsync<InventoryStorageGroup>(
-      `SELECT * FROM inventory_storage_groups ORDER BY sort_order ASC, name ASC`
+      `SELECT * FROM inventory_storage_groups WHERE deleted_at IS NULL ORDER BY sort_order ASC, name ASC`
     );
     console.log(`[InventoryStorageGroupRepository] Found ${result.length} groups`);
     return result;
@@ -60,7 +60,7 @@ export class InventoryStorageGroupRepository extends BaseRepository {
     const result = await db.getFirstAsync<InventoryStorageGroup>(
       `SELECT * FROM inventory_storage_groups 
        WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) 
-       AND is_active = 1`,
+       AND is_active = 1 AND deleted_at IS NULL`,
       [trimmed]
     );
     return result || null;

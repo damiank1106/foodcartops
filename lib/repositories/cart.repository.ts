@@ -76,14 +76,14 @@ export class CartRepository extends BaseRepository {
   async findAll(): Promise<Cart[]> {
     const db = await this.getDb();
     return await db.getAllAsync<Cart>(
-      'SELECT * FROM carts WHERE is_active = 1 ORDER BY name ASC'
+      'SELECT * FROM carts WHERE is_active = 1 AND deleted_at IS NULL ORDER BY name ASC'
     );
   }
 
   async findAllIncludingInactive(): Promise<Cart[]> {
     const db = await this.getDb();
     return await db.getAllAsync<Cart>(
-      'SELECT * FROM carts ORDER BY is_active DESC, name ASC'
+      'SELECT * FROM carts WHERE deleted_at IS NULL ORDER BY is_active DESC, name ASC'
     );
   }
 
