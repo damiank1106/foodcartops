@@ -31,6 +31,16 @@ export async function ensureSystemUsers(): Promise<void> {
 
   const userRepo = new UserRepository();
 
+  const validSystemIds = new Set([
+    SYSTEM_USER_IDS.GENERAL_MANAGER,
+    SYSTEM_USER_IDS.DEVELOPER,
+    SYSTEM_USER_IDS.OPERATION_MANAGER,
+    SYSTEM_USER_IDS.INVENTORY_CLERK,
+  ]);
+
+  console.log('[Seed] Cleaning up invalid system users...');
+  await userRepo.cleanupInvalidSystemUsers(validSystemIds);
+
   const systemUsers = [
     { id: SYSTEM_USER_IDS.GENERAL_MANAGER, name: 'General Manager', role: 'general_manager' as const, pin: DEFAULT_PINS.GENERAL_MANAGER },
     { id: SYSTEM_USER_IDS.DEVELOPER, name: 'Developer', role: 'developer' as const, pin: DEFAULT_PINS.DEVELOPER },

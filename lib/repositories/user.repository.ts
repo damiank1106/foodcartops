@@ -39,10 +39,12 @@ export class UserRepository extends BaseRepository {
       updated_at_iso: nowISO,
     };
 
+    const isSystem = isSystemUserId(user.id) ? 1 : 0;
+
     await db.runAsync(
       `INSERT INTO users (id, name, role, pin, password_hash, email, created_at, updated_at, is_active, is_system, business_id, device_id, created_at_iso, updated_at_iso)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user.id, user.name, user.role, user.pin ?? null, user.password_hash ?? null, user.email ?? null, user.created_at, user.updated_at, user.is_active, 0, user.business_id ?? 'default_business', user.device_id ?? null, user.created_at_iso ?? nowISO, user.updated_at_iso ?? nowISO]
+      [user.id, user.name, user.role, user.pin ?? null, user.password_hash ?? null, user.email ?? null, user.created_at, user.updated_at, user.is_active, isSystem, user.business_id ?? 'default_business', user.device_id ?? null, user.created_at_iso ?? nowISO, user.updated_at_iso ?? nowISO]
     );
 
     const syncPayload = {
@@ -447,6 +449,83 @@ export class UserRepository extends BaseRepository {
 
   isSystemUser(userId: string): boolean {
     return isSystemUserId(userId);
+  }
+
+  async cleanupInvalidSystemUsers(validSystemIds: Set<string>): Promise<void> {
+    const db = await this.getDb();
+    const now = this.now();
+    const nowISO = new Date(now).toISOString();
+
+    const invalidSystemUsers = await db.getAllAsync<User>(
+      'SELECT * FROM users WHERE is_system = 1'
+    );
+
+    for (const user of invalidSystemUsers) {
+      if (!validSystemIds.has(user.id)) {
+        console.log(`[UserRepo] Removing is_system flag from invalid user: ${user.id}`);
+        await db.runAsync(
+          'UPDATE users SET is_system = 0, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+          [now, nowISO, user.id]
+        );
+
+        const syncPayload = {
+          id: user.id,
+          name: user.name,
+          role: user.role,
+          pin: user.pin,
+          is_active: user.is_active,
+          is_system: false,
+          business_id: user.business_id,
+          device_id: user.device_id,
+          created_at_iso: user.created_at_iso,
+          updated_at_iso: nowISO,
+        };
+        await this.syncOutbox.add('users', user.id, 'upsert', syncPayload);
+      }
+    }
+
+    const rolesWithSystemUsers = await db.getAllAsync<{ role: string; count: number }>(
+      `SELECT role, COUNT(*) as count 
+       FROM users 
+       WHERE is_system = 1 
+       GROUP BY role 
+       HAVING count > 1`
+    );
+
+    for (const roleGroup of rolesWithSystemUsers) {
+      console.warn(`[UserRepo] Multiple system users detected for role ${roleGroup.role}`);
+      const duplicates = await db.getAllAsync<User>(
+        'SELECT * FROM users WHERE is_system = 1 AND role = ? ORDER BY created_at ASC',
+        [roleGroup.role]
+      );
+
+      for (let i = 1; i < duplicates.length; i++) {
+        const duplicate = duplicates[i];
+        if (!validSystemIds.has(duplicate.id)) {
+          console.log(`[UserRepo] Removing duplicate system user: ${duplicate.id}`);
+          await db.runAsync(
+            'UPDATE users SET is_system = 0, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+            [now, nowISO, duplicate.id]
+          );
+
+          const syncPayload = {
+            id: duplicate.id,
+            name: duplicate.name,
+            role: duplicate.role,
+            pin: duplicate.pin,
+            is_active: duplicate.is_active,
+            is_system: false,
+            business_id: duplicate.business_id,
+            device_id: duplicate.device_id,
+            created_at_iso: duplicate.created_at_iso,
+            updated_at_iso: nowISO,
+          };
+          await this.syncOutbox.add('users', duplicate.id, 'upsert', syncPayload);
+        }
+      }
+    }
+
+    console.log('[UserRepo] Cleanup complete');
   }
 
   async updateProfileImage(userId: string, imageUri: string | null, actorUserId: string): Promise<void> {

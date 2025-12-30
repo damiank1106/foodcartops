@@ -351,15 +351,27 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
                 remoteRow.role = normalizedRole;
 
-                const isSystemUser = remoteRow.id && remoteRow.id.startsWith('system-user-');
-                remoteRow.is_system = isSystemUser ? 1 : 0;
+                const validSystemIds = new Set([
+                  'system-user-general-manager',
+                  'system-user-developer',
+                  'system-user-operation-manager',
+                  'system-user-inventory-clerk',
+                ]);
+
+                const isValidSystemUser = validSystemIds.has(remoteRow.id);
+                remoteRow.is_system = isValidSystemUser ? 1 : 0;
+
+                if (!isValidSystemUser && remoteRow.is_system) {
+                  console.warn(`[Sync] Remote user ${remoteRow.id} has is_system=true but is not a valid system user - forcing to false`);
+                  remoteRow.is_system = 0;
+                }
 
                 const localUser = await db.getFirstAsync<any>(
                   'SELECT id, role, pin, is_system FROM users WHERE id = ?',
                   [remoteRow.id]
                 );
 
-                if (localUser && localUser.is_system) {
+                if (localUser && localUser.is_system && isValidSystemUser) {
                   console.log(`[Sync] Protecting system user ${localUser.role} PIN`);
                   
                   if (!remoteRow.pin && localUser.pin) {
