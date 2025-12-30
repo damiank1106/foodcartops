@@ -30,6 +30,37 @@ In `app.json`:
 
 ## 2. Database Tables
 
+### ⚠️ CRITICAL: Timestamp Format Requirement
+
+**All synced tables MUST use BIGINT for `created_at` and `updated_at` columns (milliseconds since epoch).**
+
+The app uses JavaScript `Date.now()` which returns milliseconds, not seconds. Using INTEGER or TIMESTAMP types will cause sync failures.
+
+**If you already created tables with INTEGER (seconds) or TIMESTAMP types:**
+
+```sql
+-- Convert existing tables to use BIGINT milliseconds
+ALTER TABLE public.users ALTER COLUMN created_at TYPE BIGINT USING (created_at::BIGINT * 1000);
+ALTER TABLE public.users ALTER COLUMN updated_at TYPE BIGINT USING (updated_at::BIGINT * 1000);
+
+ALTER TABLE public.carts ALTER COLUMN created_at TYPE BIGINT USING (created_at::BIGINT * 1000);
+ALTER TABLE public.carts ALTER COLUMN updated_at TYPE BIGINT USING (updated_at::BIGINT * 1000);
+
+ALTER TABLE public.inventory_items ALTER COLUMN created_at TYPE BIGINT USING (created_at::BIGINT * 1000);
+ALTER TABLE public.inventory_items ALTER COLUMN updated_at TYPE BIGINT USING (updated_at::BIGINT * 1000);
+
+ALTER TABLE public.inventory_storage_groups ALTER COLUMN created_at TYPE BIGINT USING (created_at::BIGINT * 1000);
+ALTER TABLE public.inventory_storage_groups ALTER COLUMN updated_at TYPE BIGINT USING (updated_at::BIGINT * 1000);
+
+ALTER TABLE public.products ALTER COLUMN created_at TYPE BIGINT USING (created_at::BIGINT * 1000);
+ALTER TABLE public.products ALTER COLUMN updated_at TYPE BIGINT USING (updated_at::BIGINT * 1000);
+
+ALTER TABLE public.product_categories ALTER COLUMN created_at TYPE BIGINT USING (created_at::BIGINT * 1000);
+ALTER TABLE public.product_categories ALTER COLUMN updated_at TYPE BIGINT USING (updated_at::BIGINT * 1000);
+```
+
+**After altering columns:** Reload the Supabase schema cache or restart your Supabase client to pick up the changes.
+
 Run the following SQL in Supabase SQL Editor:
 
 ### Create product_categories table
@@ -43,8 +74,8 @@ CREATE TABLE IF NOT EXISTS public.product_categories (
   business_id TEXT NOT NULL DEFAULT 'default_business',
   device_id TEXT,
   deleted_at TIMESTAMPTZ,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
   created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -72,8 +103,8 @@ CREATE TABLE IF NOT EXISTS public.products (
   business_id TEXT NOT NULL DEFAULT 'default_business',
   device_id TEXT,
   deleted_at TIMESTAMPTZ,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
   created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   FOREIGN KEY (category_id) REFERENCES public.product_categories(id)
@@ -98,8 +129,8 @@ CREATE TABLE IF NOT EXISTS public.carts (
   business_id TEXT NOT NULL DEFAULT 'default_business',
   device_id TEXT,
   deleted_at TIMESTAMPTZ,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
   created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -121,8 +152,8 @@ CREATE TABLE IF NOT EXISTS public.inventory_storage_groups (
   business_id TEXT NOT NULL DEFAULT 'default_business',
   device_id TEXT,
   deleted_at TIMESTAMPTZ,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
   created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -149,8 +180,8 @@ CREATE TABLE IF NOT EXISTS public.inventory_items (
   business_id TEXT NOT NULL DEFAULT 'default_business',
   device_id TEXT,
   deleted_at TIMESTAMPTZ,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
   created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -330,15 +361,16 @@ CREATE TABLE IF NOT EXISTS public.users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   role TEXT NOT NULL,
-  pin_hash TEXT NOT NULL,
-  pin_hash_alg TEXT NOT NULL DEFAULT 'sha256-v1',
+  pin TEXT,  -- plain-text PIN for login
+  pin_hash TEXT,  -- deprecated, kept for backward compatibility
+  pin_hash_alg TEXT DEFAULT 'sha256-v1',
   is_active INTEGER NOT NULL DEFAULT 1,
   is_system BOOLEAN NOT NULL DEFAULT false,
   business_id TEXT NOT NULL DEFAULT 'default_business',
   device_id TEXT,
   deleted_at TIMESTAMPTZ,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
   created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -357,9 +389,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_unique_system_role
 
 ### Insert 4 fixed system users with default PINs
 
-**⚠️ SECURITY NOTE:** These are default PINs stored as SHA-256 hashes. Change them in production.
+**⚠️ SECURITY NOTE:** These are default PINs stored as plain text. Change them in production immediately.
 
-**⚠️ IMPORTANT:** Ensure all users use ONLY these 4 valid roles:
+**⚠️ IMPORTANT:** The app now uses plain-text PINs stored in `users.pin` (NOT `pin_hash`). Ensure all users use ONLY these 4 valid roles:
 - `general_manager`
 - `developer`
 - `operation_manager`
@@ -370,106 +402,102 @@ Old roles (`boss`, `boss2`, `worker`) are automatically normalized during sync b
 ```sql
 -- System User 1: General Manager (PIN: 1234)
 INSERT INTO public.users (
-  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  id, name, role, pin, is_active, is_system, 
   business_id, created_at, updated_at, created_at_iso, updated_at_iso
 ) VALUES (
   'system-user-general-manager',
   'General Manager',
   'general_manager',
-  '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',
-  'sha256-v1',
+  '1234',
   1,
   true,
   'default_business',
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   NOW(),
   NOW()
 ) ON CONFLICT (id) DO UPDATE SET
-  pin_hash = EXCLUDED.pin_hash,
-  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  pin = EXCLUDED.pin,
   is_system = true,
   is_active = 1,
   role = 'general_manager',
-  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  deleted_at = NULL,
+  updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   updated_at_iso = NOW();
 
 -- System User 2: Developer (PIN: 2345)
 INSERT INTO public.users (
-  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  id, name, role, pin, is_active, is_system, 
   business_id, created_at, updated_at, created_at_iso, updated_at_iso
 ) VALUES (
   'system-user-developer',
   'Developer',
   'developer',
-  '6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918',
-  'sha256-v1',
+  '2345',
   1,
   true,
   'default_business',
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   NOW(),
   NOW()
 ) ON CONFLICT (id) DO UPDATE SET
-  pin_hash = EXCLUDED.pin_hash,
-  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  pin = EXCLUDED.pin,
   is_system = true,
   is_active = 1,
   role = 'developer',
-  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  deleted_at = NULL,
+  updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   updated_at_iso = NOW();
 
 -- System User 3: Operation Manager (PIN: 1111)
 INSERT INTO public.users (
-  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  id, name, role, pin, is_active, is_system, 
   business_id, created_at, updated_at, created_at_iso, updated_at_iso
 ) VALUES (
   'system-user-operation-manager',
   'Operation Manager',
   'operation_manager',
-  '0ffe1abd1a08215353c233d6e009613e95eec4253832a761af28ff37ac5a150c',
-  'sha256-v1',
+  '1111',
   1,
   true,
   'default_business',
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   NOW(),
   NOW()
 ) ON CONFLICT (id) DO UPDATE SET
-  pin_hash = EXCLUDED.pin_hash,
-  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  pin = EXCLUDED.pin,
   is_system = true,
   is_active = 1,
   role = 'operation_manager',
-  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  deleted_at = NULL,
+  updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   updated_at_iso = NOW();
 
 -- System User 4: Inventory Clerk (PIN: 2222)
 INSERT INTO public.users (
-  id, name, role, pin_hash, pin_hash_alg, is_active, is_system, 
+  id, name, role, pin, is_active, is_system, 
   business_id, created_at, updated_at, created_at_iso, updated_at_iso
 ) VALUES (
   'system-user-inventory-clerk',
   'Inventory Clerk',
   'inventory_clerk',
-  '934b535800b1cba8f96a5d72f72f1611c3fcb464ec2da2c4f7a0b13db5e2e0b1',
-  'sha256-v1',
+  '2222',
   1,
   true,
   'default_business',
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
-  EXTRACT(EPOCH FROM NOW())::INTEGER,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   NOW(),
   NOW()
 ) ON CONFLICT (id) DO UPDATE SET
-  pin_hash = EXCLUDED.pin_hash,
-  pin_hash_alg = EXCLUDED.pin_hash_alg,
+  pin = EXCLUDED.pin,
   is_system = true,
   is_active = 1,
   role = 'inventory_clerk',
-  updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
+  deleted_at = NULL,
+  updated_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   updated_at_iso = NOW();
 
 -- Migrate any old role values to new ones
@@ -547,9 +575,9 @@ The app now uses these 4 standardized roles only:
 | `operation_manager` | Operation Manager | 1111 | system-user-operation-manager |
 | `inventory_clerk` | Inventory Clerk | 2222 | system-user-inventory-clerk |
 
-**⚠️ IMPORTANT:** These are stored as SHA-256 hashes in the database. Never store plaintext PINs.
+**⚠️ IMPORTANT:** PINs are now stored as plain text in the `pin` column for simplicity.
 
-**PRODUCTION:** Change these default PINs immediately after setup using the app's PIN reset feature.
+**PRODUCTION:** Change these default PINs immediately after setup using the app's user management feature (General Manager or Developer only).
 
 ### Legacy Role Migration
 
