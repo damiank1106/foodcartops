@@ -8,6 +8,7 @@ import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repos
 import { InventoryStorageGroupRepository } from '@/lib/repositories/inventory-storage-group.repository';
 import type { InventoryItem, InventoryUnit, InventoryStorageGroup } from '@/lib/types';
 import { onSyncComplete } from '@/lib/services/sync.service';
+import { usePreserveScrollOnDataRefresh } from '@/lib/utils/usePreserveScrollOnDataRefresh';
 
 export default function InventoryScreen() {
   const { theme } = useTheme();
@@ -44,22 +45,27 @@ export default function InventoryScreen() {
   const itemRepo = useMemo(() => new InventoryItemRepository(), []);
   const groupRepo = useMemo(() => new InventoryStorageGroupRepository(), []);
 
+  const isAnyModalOpen = showItemModal || showRenameModal;
+  const { scrollViewRef, handleScroll, wrapDataLoader } = usePreserveScrollOnDataRefresh(isAnyModalOpen);
+
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [itemsData, groupsData] = await Promise.all([
-        itemRepo.listActive(),
-        groupRepo.listActive(),
-      ]);
-      setItems(itemsData);
-      setStorageGroups(groupsData);
+      await wrapDataLoader(async () => {
+        const [itemsData, groupsData] = await Promise.all([
+          itemRepo.listActive(),
+          groupRepo.listActive(),
+        ]);
+        setItems(itemsData);
+        setStorageGroups(groupsData);
+      });
     } catch (error) {
       console.error('[Inventory] Load error:', error);
       Alert.alert('Error', 'Failed to load data');
     } finally {
       setIsLoading(false);
     }
-  }, [itemRepo, groupRepo]);
+  }, [itemRepo, groupRepo, wrapDataLoader]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -488,7 +494,10 @@ export default function InventoryScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {renderGroupFilter()}
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />}
       >
         {isLoading ? (

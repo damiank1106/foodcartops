@@ -5,6 +5,7 @@ import { Package, Plus, Edit2, Trash2, X, Save, FolderOpen } from 'lucide-react-
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { ProductRepository, ProductCategoryRepository } from '@/lib/repositories';
+import { usePreserveScrollOnDataRefresh } from '@/lib/utils/usePreserveScrollOnDataRefresh';
 
 export default function ProductsScreen() {
   const { theme } = useTheme();
@@ -30,14 +31,21 @@ export default function ProductsScreen() {
   const categoryRepo = new ProductCategoryRepository();
   const productRepo = new ProductRepository();
 
+  const isAnyModalOpen = categoryModalVisible || productModalVisible;
+  const { scrollViewRef, handleScroll, wrapDataLoader } = usePreserveScrollOnDataRefresh(isAnyModalOpen);
+
   const { data: categories } = useQuery({
     queryKey: ['product-categories'],
-    queryFn: async () => categoryRepo.listActive(),
+    queryFn: async () => {
+      return wrapDataLoader(() => categoryRepo.listActive());
+    },
   });
 
   const { data: products } = useQuery({
     queryKey: ['products'],
-    queryFn: async () => productRepo.findAll(),
+    queryFn: async () => {
+      return wrapDataLoader(() => productRepo.findAll());
+    },
   });
 
 
@@ -221,7 +229,12 @@ export default function ProductsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.scrollView}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
         <View style={styles.content}>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
