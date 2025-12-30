@@ -633,6 +633,51 @@ CREATE INDEX IF NOT EXISTS idx_worker_shifts_updated_at_iso ON public.worker_shi
 CREATE INDEX IF NOT EXISTS idx_worker_shifts_deleted_at ON public.worker_shifts(deleted_at);
 ```
 
+### worker_shifts table SQL
+
+-- WORKER SHIFTS (synced)
+create table if not exists public.worker_shifts (
+  id text primary key,
+  worker_id text not null,
+  cart_id text not null,
+
+  clock_in bigint not null,
+  clock_out bigint,
+
+  starting_cash_cents integer,
+  expected_cash_cents integer not null default 0,
+
+  notes text,
+  status text not null default 'open',
+
+  is_deleted integer not null default 0,
+  deleted_at timestamptz,
+
+  business_id text not null default 'default_business',
+  device_id text,
+
+  created_at bigint not null,
+  updated_at bigint not null,
+
+  created_at_iso timestamptz not null default now(),
+  updated_at_iso timestamptz not null default now()
+);
+
+create index if not exists idx_worker_shifts_business_id on public.worker_shifts(business_id);
+create index if not exists idx_worker_shifts_deleted_at on public.worker_shifts(deleted_at);
+create index if not exists idx_worker_shifts_updated_at_iso on public.worker_shifts(updated_at_iso);
+
+-- RLS (family app, anon key sync)
+alter table public.worker_shifts enable row level security;
+
+drop policy if exists "anon_all_worker_shifts" on public.worker_shifts;
+create policy "anon_all_worker_shifts"
+on public.worker_shifts for all
+to anon
+using (true)
+with check (true);
+
+
 ### Enable RLS for worker_shifts
 
 ```sql
