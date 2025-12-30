@@ -306,7 +306,7 @@ export class UserRepository extends BaseRepository {
     console.log('[UserRepo] Deleted user with audit:', id);
   }
 
-  async createSystemUser(id: string, name: string, role: UserRole, pin: string): Promise<User> {
+  async createSystemUser(id: string, name: string, role: UserRole, pin: string, skipSync: boolean = false): Promise<User> {
     const db = await this.getDb();
     const now = this.now();
     const nowISO = new Date(now).toISOString();
@@ -336,27 +336,29 @@ export class UserRepository extends BaseRepository {
       [user.id, user.name, user.role, user.pin, user.pin_hash_alg, null, null, user.created_at, user.updated_at, user.is_active, user.is_system, user.business_id, user.device_id ?? null, user.created_at_iso, user.updated_at_iso, null] as any[]
     );
 
-    const syncPayload = {
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      pin_hash: user.pin,
-      pin_hash_alg: user.pin_hash_alg,
-      is_active: user.is_active,
-      is_system: true,
-      business_id: user.business_id,
-      device_id: user.device_id,
-      created_at_iso: user.created_at_iso,
-      updated_at_iso: user.updated_at_iso,
-    };
+    if (!skipSync) {
+      const syncPayload = {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        pin_hash: user.pin,
+        pin_hash_alg: user.pin_hash_alg,
+        is_active: user.is_active,
+        is_system: true,
+        business_id: user.business_id,
+        device_id: user.device_id,
+        created_at_iso: user.created_at_iso,
+        updated_at_iso: user.updated_at_iso,
+      };
 
-    await this.syncOutbox.add('users', user.id, 'upsert', syncPayload);
+      await this.syncOutbox.add('users', user.id, 'upsert', syncPayload);
+    }
 
-    console.log('[UserRepo] Created system user:', user.id);
+    console.log('[UserRepo] Created system user:', user.id, skipSync ? '(no sync)' : '');
     return user;
   }
 
-  async repairSystemUserPin(id: string, pin: string): Promise<void> {
+  async repairSystemUserPin(id: string, pin: string, skipSync: boolean = false): Promise<void> {
     const db = await this.getDb();
     const now = this.now();
     const nowISO = new Date(now).toISOString();
@@ -368,25 +370,27 @@ export class UserRepository extends BaseRepository {
       [pinHash, 'sha256-v1', now, nowISO, id]
     );
 
-    const updatedUser = await this.findById(id);
-    if (updatedUser) {
-      const syncPayload = {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        role: updatedUser.role,
-        pin_hash: updatedUser.pin,
-        pin_hash_alg: updatedUser.pin_hash_alg,
-        is_active: updatedUser.is_active,
-        is_system: true,
-        business_id: updatedUser.business_id,
-        device_id: updatedUser.device_id,
-        created_at_iso: updatedUser.created_at_iso,
-        updated_at_iso: nowISO,
-      };
-      await this.syncOutbox.add('users', updatedUser.id, 'upsert', syncPayload);
+    if (!skipSync) {
+      const updatedUser = await this.findById(id);
+      if (updatedUser) {
+        const syncPayload = {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          role: updatedUser.role,
+          pin_hash: updatedUser.pin,
+          pin_hash_alg: updatedUser.pin_hash_alg,
+          is_active: updatedUser.is_active,
+          is_system: true,
+          business_id: updatedUser.business_id,
+          device_id: updatedUser.device_id,
+          created_at_iso: updatedUser.created_at_iso,
+          updated_at_iso: nowISO,
+        };
+        await this.syncOutbox.add('users', updatedUser.id, 'upsert', syncPayload);
+      }
     }
 
-    console.log('[UserRepo] Repaired system user PIN:', id);
+    console.log('[UserRepo] Repaired system user PIN:', id, skipSync ? '(no sync)' : '');
   }
 
   isSystemUser(userId: string): boolean {

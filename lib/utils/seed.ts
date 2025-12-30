@@ -30,14 +30,15 @@ export async function ensureSystemUsers(): Promise<void> {
       SYSTEM_USER_IDS.OPERATION_MANAGER,
       'Operation Manager',
       'operation_manager',
-      DEFAULT_PINS.OPERATION_MANAGER
+      DEFAULT_PINS.OPERATION_MANAGER,
+      true
     );
     console.log('[Seed] Operation Manager ready (PIN: 1234)');
   } else {
     console.log('[Seed] Operation Manager exists:', { id: boss.id, has_pin: !!boss.pin });
     if (!boss.pin || boss.is_active === 0) {
       console.log('[Seed] Repairing Operation Manager PIN and activation');
-      await userRepo.repairSystemUserPin(boss.id, DEFAULT_PINS.OPERATION_MANAGER);
+      await userRepo.repairSystemUserPin(boss.id, DEFAULT_PINS.OPERATION_MANAGER, true);
     }
   }
 
@@ -48,14 +49,15 @@ export async function ensureSystemUsers(): Promise<void> {
       SYSTEM_USER_IDS.DEVELOPER,
       'Developer',
       'developer',
-      DEFAULT_PINS.DEVELOPER
+      DEFAULT_PINS.DEVELOPER,
+      true
     );
     console.log('[Seed] Developer ready (PIN: 2345)');
   } else {
     console.log('[Seed] Developer exists:', { id: developer.id, has_pin: !!developer.pin });
     if (!developer.pin || developer.is_active === 0) {
       console.log('[Seed] Repairing Developer PIN and activation');
-      await userRepo.repairSystemUserPin(developer.id, DEFAULT_PINS.DEVELOPER);
+      await userRepo.repairSystemUserPin(developer.id, DEFAULT_PINS.DEVELOPER, true);
     }
   }
 }
