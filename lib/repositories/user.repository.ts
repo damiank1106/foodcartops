@@ -323,6 +323,7 @@ export class UserRepository extends BaseRepository {
       created_at: now,
       updated_at: now,
       is_active: 1,
+      is_system: 1,
       business_id: 'default_business',
       device_id: deviceId,
       created_at_iso: nowISO,
@@ -330,9 +331,9 @@ export class UserRepository extends BaseRepository {
     };
 
     await db.runAsync(
-      `INSERT OR REPLACE INTO users (id, name, role, pin, pin_hash_alg, password_hash, email, created_at, updated_at, is_active, business_id, device_id, created_at_iso, updated_at_iso, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user.id, user.name, user.role, user.pin, user.pin_hash_alg, null, null, user.created_at, user.updated_at, user.is_active, user.business_id, user.device_id ?? null, user.created_at_iso, user.updated_at_iso, null] as any[]
+      `INSERT OR REPLACE INTO users (id, name, role, pin, pin_hash_alg, password_hash, email, created_at, updated_at, is_active, is_system, business_id, device_id, created_at_iso, updated_at_iso, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user.id, user.name, user.role, user.pin, user.pin_hash_alg, null, null, user.created_at, user.updated_at, user.is_active, user.is_system, user.business_id, user.device_id ?? null, user.created_at_iso, user.updated_at_iso, null] as any[]
     );
 
     const syncPayload = {
@@ -342,6 +343,7 @@ export class UserRepository extends BaseRepository {
       pin_hash: user.pin,
       pin_hash_alg: user.pin_hash_alg,
       is_active: user.is_active,
+      is_system: true,
       business_id: user.business_id,
       device_id: user.device_id,
       created_at_iso: user.created_at_iso,
@@ -362,7 +364,7 @@ export class UserRepository extends BaseRepository {
     const pinHash = await hashPin(pin);
 
     await db.runAsync(
-      'UPDATE users SET pin = ?, pin_hash_alg = ?, is_active = 1, updated_at = ?, updated_at_iso = ?, deleted_at = NULL WHERE id = ?',
+      'UPDATE users SET pin = ?, pin_hash_alg = ?, is_active = 1, is_system = 1, updated_at = ?, updated_at_iso = ?, deleted_at = NULL WHERE id = ?',
       [pinHash, 'sha256-v1', now, nowISO, id]
     );
 
@@ -375,6 +377,7 @@ export class UserRepository extends BaseRepository {
         pin_hash: updatedUser.pin,
         pin_hash_alg: updatedUser.pin_hash_alg,
         is_active: updatedUser.is_active,
+        is_system: true,
         business_id: updatedUser.business_id,
         device_id: updatedUser.device_id,
         created_at_iso: updatedUser.created_at_iso,

@@ -45,6 +45,7 @@ export interface User {
   created_at: number;
   updated_at: number;
   is_active: number;
+  is_system?: number;
   profile_image_uri?: string;
   business_id?: string;
   device_id?: string;
