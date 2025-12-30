@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ActivityIndicator, View, AppState } from 'react-native';
 import * as Network from 'expo-network';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider } from '@/lib/contexts/auth.context';
 import { ThemeProvider } from '@/lib/contexts/theme.context';
 import { seedDatabase } from '@/lib/utils/seed';
@@ -64,6 +65,8 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
     const checkNetworkAndSync = async () => {
       try {
         const networkState = await Network.getNetworkStateAsync();
@@ -76,10 +79,29 @@ export default function RootLayout() {
       }
     };
 
-    const intervalId = setInterval(checkNetworkAndSync, 30000);
+    const setupAutoSync = async () => {
+      try {
+        const savedInterval = await AsyncStorage.getItem('sync_interval');
+        const interval = savedInterval ? parseInt(savedInterval, 10) : 300000;
+        
+        if (interval > 0) {
+          console.log(`[App] Setting up auto-sync with interval: ${interval}ms`);
+          intervalId = setInterval(checkNetworkAndSync, interval);
+        } else {
+          console.log('[App] Manual sync mode - no auto-sync');
+        }
+      } catch {
+        console.log('[App] Failed to load sync interval, using default 5 minutes');
+        intervalId = setInterval(checkNetworkAndSync, 300000);
+      }
+    };
+
+    setupAutoSync();
 
     return () => {
-      clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
   }, []);
 

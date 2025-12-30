@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { Stack, useFocusEffect } from 'expo-router';
-import { CheckCircle, AlertTriangle, RefreshCw, Trash2, Database, Eye, EyeOff, Edit3, Save, X as XIcon } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CheckCircle, AlertTriangle, RefreshCw, Trash2, Database, Eye, EyeOff, Edit3, Save, X as XIcon, Clock } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import * as SyncService from '@/lib/services/sync.service';
@@ -31,10 +32,12 @@ export default function BackupDataScreen() {
   const [showKey, setShowKey] = useState(false);
   const [editedUrl, setEditedUrl] = useState('');
   const [editedKey, setEditedKey] = useState('');
+  const [syncInterval, setSyncInterval] = useState<number>(300000);
 
   useEffect(() => {
     loadStatus();
     loadCredentials();
+    loadSyncInterval();
     const unsubscribe = SyncService.subscribeSyncStatus((status) => {
       setSyncStatus(status);
     });
@@ -68,6 +71,17 @@ export default function BackupDataScreen() {
       }
     } catch (error) {
       console.error('[BackupData] Failed to load credentials:', error);
+    }
+  };
+
+  const loadSyncInterval = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('sync_interval');
+      const interval = saved ? parseInt(saved, 10) : 300000;
+      setSyncInterval(interval);
+    } catch (error) {
+      console.error('[BackupData] Failed to load sync interval:', error);
+      setSyncInterval(300000);
     }
   };
 
@@ -184,6 +198,25 @@ export default function BackupDataScreen() {
         },
       ]
     );
+  };
+
+  const handleSyncIntervalChange = async (interval: number) => {
+    try {
+      await AsyncStorage.setItem('sync_interval', interval.toString());
+      setSyncInterval(interval);
+      console.log(`[BackupData] Sync interval set to ${interval}ms`);
+      
+      Alert.alert(
+        'Success',
+        interval === 0 
+          ? 'Auto-sync disabled. Use "Run Sync Now" to sync manually.'
+          : `Auto-sync set to ${interval === 300000 ? '5' : '10'} minutes.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('[BackupData] Failed to save sync interval:', error);
+      Alert.alert('Error', 'Failed to save sync interval');
+    }
   };
 
   const urlValidation = validateSupabaseUrl(editedUrl);
@@ -355,6 +388,54 @@ export default function BackupDataScreen() {
         <View style={[styles.actionsCard, { backgroundColor: theme.card }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Actions</Text>
           
+          <View style={styles.syncTimingSection}>
+            <View style={styles.syncTimingHeader}>
+              <Clock size={18} color={theme.textSecondary} />
+              <Text style={[styles.syncTimingLabel, { color: theme.textSecondary }]}>Auto-Sync Frequency</Text>
+            </View>
+            <View style={styles.syncTimingOptions}>
+              <TouchableOpacity
+                style={[
+                  styles.syncTimingButton,
+                  syncInterval === 300000 && styles.syncTimingButtonActive,
+                  { borderColor: theme.border, backgroundColor: syncInterval === 300000 ? theme.primary : 'transparent' }
+                ]}
+                onPress={() => handleSyncIntervalChange(300000)}
+              >
+                <Text style={[
+                  styles.syncTimingButtonText,
+                  { color: syncInterval === 300000 ? '#FFF' : theme.text }
+                ]}>5 min</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.syncTimingButton,
+                  syncInterval === 600000 && styles.syncTimingButtonActive,
+                  { borderColor: theme.border, backgroundColor: syncInterval === 600000 ? theme.primary : 'transparent' }
+                ]}
+                onPress={() => handleSyncIntervalChange(600000)}
+              >
+                <Text style={[
+                  styles.syncTimingButtonText,
+                  { color: syncInterval === 600000 ? '#FFF' : theme.text }
+                ]}>10 min</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.syncTimingButton,
+                  syncInterval === 0 && styles.syncTimingButtonActive,
+                  { borderColor: theme.border, backgroundColor: syncInterval === 0 ? theme.primary : 'transparent' }
+                ]}
+                onPress={() => handleSyncIntervalChange(0)}
+              >
+                <Text style={[
+                  styles.syncTimingButtonText,
+                  { color: syncInterval === 0 ? '#FFF' : theme.text }
+                ]}>Manual</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: theme.primary }]}
             onPress={handleSyncNow}
@@ -727,5 +808,38 @@ const styles = StyleSheet.create({
   },
   outboxError: {
     marginTop: 4,
+  },
+  syncTimingSection: {
+    marginTop: 0,
+    marginBottom: 12,
+  },
+  syncTimingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  syncTimingLabel: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+  },
+  syncTimingOptions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  syncTimingButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncTimingButtonActive: {
+  },
+  syncTimingButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
 });
