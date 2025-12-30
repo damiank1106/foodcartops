@@ -359,6 +359,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_unique_system_role
 
 **⚠️ SECURITY NOTE:** These are default PINs stored as SHA-256 hashes. Change them in production.
 
+**⚠️ IMPORTANT:** Ensure all users use ONLY these 4 valid roles:
+- `general_manager`
+- `developer`
+- `operation_manager`
+- `inventory_clerk`
+
+Old roles (`boss`, `boss2`, `worker`) are automatically normalized during sync but should be updated in Supabase.
+
 ```sql
 -- System User 1: General Manager (PIN: 1234)
 INSERT INTO public.users (
@@ -382,6 +390,7 @@ INSERT INTO public.users (
   pin_hash_alg = EXCLUDED.pin_hash_alg,
   is_system = true,
   is_active = 1,
+  role = 'general_manager',
   updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
   updated_at_iso = NOW();
 
@@ -407,6 +416,7 @@ INSERT INTO public.users (
   pin_hash_alg = EXCLUDED.pin_hash_alg,
   is_system = true,
   is_active = 1,
+  role = 'developer',
   updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
   updated_at_iso = NOW();
 
@@ -432,6 +442,7 @@ INSERT INTO public.users (
   pin_hash_alg = EXCLUDED.pin_hash_alg,
   is_system = true,
   is_active = 1,
+  role = 'operation_manager',
   updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
   updated_at_iso = NOW();
 
@@ -457,8 +468,14 @@ INSERT INTO public.users (
   pin_hash_alg = EXCLUDED.pin_hash_alg,
   is_system = true,
   is_active = 1,
+  role = 'inventory_clerk',
   updated_at = EXTRACT(EPOCH FROM NOW())::INTEGER,
   updated_at_iso = NOW();
+
+-- Migrate any old role values to new ones
+UPDATE public.users SET role = 'general_manager', updated_at_iso = NOW() WHERE role = 'boss';
+UPDATE public.users SET role = 'developer', updated_at_iso = NOW() WHERE role = 'boss2';
+UPDATE public.users SET role = 'operation_manager', updated_at_iso = NOW() WHERE role = 'worker';
 ```
 
 ### Create pin_reset_requests table
@@ -519,20 +536,29 @@ CREATE POLICY "Allow select on pin_reset_requests for token lookup"
 - `inventory_items` - Inventory items with quantities and prices
 - `users` - PIN-only users with roles (stored as SHA-256 hashes)
 
-## 11. Default System User PINs
+## 11. Valid User Roles
 
-For reference, the 4 system users have these default PINs:
+The app now uses these 4 standardized roles only:
 
-| Role | Default PIN | User ID |
-|------|-------------|----------|
-| General Manager | 1234 | system-user-general-manager |
-| Developer | 2345 | system-user-developer |
-| Operation Manager | 1111 | system-user-operation-manager |
-| Inventory Clerk | 2222 | system-user-inventory-clerk |
+| Role Value | Display Name | Default PIN | User ID |
+|------------|--------------|-------------|----------|
+| `general_manager` | General Manager | 1234 | system-user-general-manager |
+| `developer` | Developer | 2345 | system-user-developer |
+| `operation_manager` | Operation Manager | 1111 | system-user-operation-manager |
+| `inventory_clerk` | Inventory Clerk | 2222 | system-user-inventory-clerk |
 
 **⚠️ IMPORTANT:** These are stored as SHA-256 hashes in the database. Never store plaintext PINs.
 
 **PRODUCTION:** Change these default PINs immediately after setup using the app's PIN reset feature.
+
+### Legacy Role Migration
+
+If you have users with old role values in Supabase, they will be automatically normalized during sync:
+- `boss` → `general_manager`
+- `boss2` → `developer`
+- `worker` → `operation_manager`
+
+However, it's recommended to update Supabase directly using the UPDATE statements provided in section 9.
 
 ## 12. Future Enhancements
 

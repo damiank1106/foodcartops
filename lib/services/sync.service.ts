@@ -55,6 +55,26 @@ function stripLocalOnlyColumns(tableName: string, payload: any): any {
   return cleaned;
 }
 
+function normalizeUserRole(role: string): string | null {
+  const roleMap: Record<string, string> = {
+    'boss': 'general_manager',
+    'boss2': 'developer',
+    'worker': 'operation_manager',
+    'inventory_clerk': 'inventory_clerk',
+    'developer': 'developer',
+    'general_manager': 'general_manager',
+    'operation_manager': 'operation_manager',
+  };
+
+  const normalized = roleMap[role];
+  if (!normalized) {
+    console.warn(`[Sync] Unknown role "${role}" - skipping user`);
+    return null;
+  }
+
+  return normalized;
+}
+
 let currentStatus: SyncStatus = {
   isRunning: false,
   currentStep: 'idle',
@@ -323,17 +343,25 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
               const placeholders = columns.map(() => '?').join(', ');
 
               if (tableName === 'users') {
+                const normalizedRole = normalizeUserRole(remoteRow.role);
+                if (!normalizedRole) {
+                  console.warn(`[Sync] Skipping user ${remoteRow.id} with unknown role: ${remoteRow.role}`);
+                  continue;
+                }
+
+                remoteRow.role = normalizedRole;
+
                 const localUser = await db.getFirstAsync<any>(
-                  'SELECT id, role, pin, pin_hash_alg FROM users WHERE id = ?',
+                  'SELECT id, role, pin_hash, pin_hash_alg, is_system FROM users WHERE id = ?',
                   [remoteRow.id]
                 );
 
-                if (localUser && (localUser.role === 'boss' || localUser.role === 'developer')) {
+                if (localUser && localUser.is_system) {
                   console.log(`[Sync] Protecting system user ${localUser.role} pin_hash`);
                   
-                  if (!remoteRow.pin_hash && localUser.pin) {
+                  if (!remoteRow.pin_hash && localUser.pin_hash) {
                     console.log(`[Sync] Remote has empty pin_hash for ${localUser.role}, keeping local`);
-                    remoteRow.pin_hash = localUser.pin;
+                    remoteRow.pin_hash = localUser.pin_hash;
                     remoteRow.pin_hash_alg = localUser.pin_hash_alg;
                   }
                 }
