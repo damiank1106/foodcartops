@@ -3,7 +3,7 @@ import { User, UserRole } from '../types';
 import { hashPin, verifyPin } from '../utils/crypto';
 import { SyncOutboxRepository } from './sync-outbox.repository';
 import { getDeviceId } from '../utils/device-id';
-import { SYSTEM_USER_IDS } from '../utils/seed';
+import { isSystemUserId } from '../utils/seed';
 
 export class UserRepository extends BaseRepository {
   private syncOutbox = new SyncOutboxRepository();
@@ -53,6 +53,7 @@ export class UserRepository extends BaseRepository {
       pin_hash: user.pin,
       pin_hash_alg: user.pin_hash_alg,
       is_active: user.is_active,
+      is_system: false,
       business_id: user.business_id,
       device_id: user.device_id,
       created_at_iso: user.created_at_iso,
@@ -165,6 +166,7 @@ export class UserRepository extends BaseRepository {
         pin_hash: updatedUser.pin,
         pin_hash_alg: updatedUser.pin_hash_alg,
         is_active: updatedUser.is_active,
+        is_system: isSystemUserId(updatedUser.id),
         business_id: updatedUser.business_id,
         device_id: updatedUser.device_id,
         created_at_iso: updatedUser.created_at_iso,
@@ -394,7 +396,7 @@ export class UserRepository extends BaseRepository {
   }
 
   isSystemUser(userId: string): boolean {
-    return userId === SYSTEM_USER_IDS.OPERATION_MANAGER || userId === SYSTEM_USER_IDS.DEVELOPER;
+    return isSystemUserId(userId);
   }
 
   async updateProfileImage(userId: string, imageUri: string | null, actorUserId: string): Promise<void> {

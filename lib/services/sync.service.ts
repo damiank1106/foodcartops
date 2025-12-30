@@ -351,6 +351,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
                 remoteRow.role = normalizedRole;
 
+                const isSystemUser = remoteRow.id && remoteRow.id.startsWith('system-user-');
+                remoteRow.is_system = isSystemUser ? 1 : 0;
+
                 const localUser = await db.getFirstAsync<any>(
                   'SELECT id, role, pin_hash, pin_hash_alg, is_system FROM users WHERE id = ?',
                   [remoteRow.id]
@@ -369,7 +372,8 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                 console.log(`[Sync] DEBUG Pulling user ${remoteRow.id}:`, {
                   role: remoteRow.role,
                   has_pin_hash: !!remoteRow.pin_hash,
-                  pin_hash_alg: remoteRow.pin_hash_alg
+                  pin_hash_alg: remoteRow.pin_hash_alg,
+                  is_system: remoteRow.is_system
                 });
               }
 

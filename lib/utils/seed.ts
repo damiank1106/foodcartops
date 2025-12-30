@@ -7,14 +7,22 @@ import { resetDatabase } from '../database/init';
 const SEED_KEY = 'foodcartops_seeded';
 
 export const SYSTEM_USER_IDS = {
-  OPERATION_MANAGER: 'system-user-operation-manager',
+  GENERAL_MANAGER: 'system-user-general-manager',
   DEVELOPER: 'system-user-developer',
+  OPERATION_MANAGER: 'system-user-operation-manager',
+  INVENTORY_CLERK: 'system-user-inventory-clerk',
 } as const;
 
 export const DEFAULT_PINS = {
-  OPERATION_MANAGER: '1234',
+  GENERAL_MANAGER: '1234',
   DEVELOPER: '2345',
+  OPERATION_MANAGER: '1111',
+  INVENTORY_CLERK: '2222',
 } as const;
+
+export function isSystemUserId(userId: string): boolean {
+  return userId.startsWith('system-user-');
+}
 
 export async function ensureSystemUsers(): Promise<void> {
   if (Platform.OS === 'web') {
@@ -23,41 +31,31 @@ export async function ensureSystemUsers(): Promise<void> {
 
   const userRepo = new UserRepository();
 
-  let boss = await userRepo.findById(SYSTEM_USER_IDS.OPERATION_MANAGER);
-  if (!boss || boss.deleted_at) {
-    console.log('[Seed] Creating/restoring Operation Manager...');
-    await userRepo.createSystemUser(
-      SYSTEM_USER_IDS.OPERATION_MANAGER,
-      'Operation Manager',
-      'operation_manager',
-      DEFAULT_PINS.OPERATION_MANAGER,
-      true
-    );
-    console.log('[Seed] Operation Manager ready (PIN: 1234)');
-  } else {
-    console.log('[Seed] Operation Manager exists:', { id: boss.id, has_pin: !!boss.pin });
-    if (!boss.pin || boss.is_active === 0) {
-      console.log('[Seed] Repairing Operation Manager PIN and activation');
-      await userRepo.repairSystemUserPin(boss.id, DEFAULT_PINS.OPERATION_MANAGER, true);
-    }
-  }
+  const systemUsers = [
+    { id: SYSTEM_USER_IDS.GENERAL_MANAGER, name: 'General Manager', role: 'general_manager' as const, pin: DEFAULT_PINS.GENERAL_MANAGER },
+    { id: SYSTEM_USER_IDS.DEVELOPER, name: 'Developer', role: 'developer' as const, pin: DEFAULT_PINS.DEVELOPER },
+    { id: SYSTEM_USER_IDS.OPERATION_MANAGER, name: 'Operation Manager', role: 'operation_manager' as const, pin: DEFAULT_PINS.OPERATION_MANAGER },
+    { id: SYSTEM_USER_IDS.INVENTORY_CLERK, name: 'Inventory Clerk', role: 'inventory_clerk' as const, pin: DEFAULT_PINS.INVENTORY_CLERK },
+  ];
 
-  let developer = await userRepo.findById(SYSTEM_USER_IDS.DEVELOPER);
-  if (!developer || developer.deleted_at) {
-    console.log('[Seed] Creating/restoring Developer...');
-    await userRepo.createSystemUser(
-      SYSTEM_USER_IDS.DEVELOPER,
-      'Developer',
-      'developer',
-      DEFAULT_PINS.DEVELOPER,
-      true
-    );
-    console.log('[Seed] Developer ready (PIN: 2345)');
-  } else {
-    console.log('[Seed] Developer exists:', { id: developer.id, has_pin: !!developer.pin });
-    if (!developer.pin || developer.is_active === 0) {
-      console.log('[Seed] Repairing Developer PIN and activation');
-      await userRepo.repairSystemUserPin(developer.id, DEFAULT_PINS.DEVELOPER, true);
+  for (const sysUser of systemUsers) {
+    let user = await userRepo.findById(sysUser.id);
+    if (!user || user.deleted_at) {
+      console.log(`[Seed] Creating/restoring ${sysUser.name}...`);
+      await userRepo.createSystemUser(
+        sysUser.id,
+        sysUser.name,
+        sysUser.role,
+        sysUser.pin,
+        true
+      );
+      console.log(`[Seed] ${sysUser.name} ready (PIN: ${sysUser.pin})`);
+    } else {
+      console.log(`[Seed] ${sysUser.name} exists:`, { id: user.id, has_pin: !!user.pin });
+      if (!user.pin || user.is_active === 0 || user.is_system !== 1) {
+        console.log(`[Seed] Repairing ${sysUser.name} PIN and activation`);
+        await userRepo.repairSystemUserPin(user.id, sysUser.pin, true);
+      }
     }
   }
 }
