@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, TextInput, Alert, Modal, ActivityIndicator, RefreshControl, KeyboardAvoidingView, Platform, ActionSheetIOS, InteractionManager } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { Package, Plus, Edit2, Trash2, Minus, Save, Check, X } from 'lucide-react-native';
@@ -8,7 +8,6 @@ import { InventoryItemRepository } from '@/lib/repositories/inventory-item.repos
 import { InventoryStorageGroupRepository } from '@/lib/repositories/inventory-storage-group.repository';
 import type { InventoryItem, InventoryUnit, InventoryStorageGroup } from '@/lib/types';
 import { onSyncComplete } from '@/lib/services/sync.service';
-import { usePreserveScrollOnDataRefresh } from '@/lib/utils/usePreserveScrollOnDataRefresh';
 
 export default function InventoryScreen() {
   const { theme } = useTheme();
@@ -45,27 +44,63 @@ export default function InventoryScreen() {
   const itemRepo = useMemo(() => new InventoryItemRepository(), []);
   const groupRepo = useMemo(() => new InventoryStorageGroupRepository(), []);
 
+  const flatListRef = useRef<FlatList>(null);
+  const scrollOffsetMapRef = useRef<Record<string, number>>({});
+  const isRestoringScrollRef = useRef(false);
+  const pendingDataRef = useRef<{ items: InventoryItem[]; groups: InventoryStorageGroup[] } | null>(null);
+
   const isAnyModalOpen = showItemModal || showRenameModal;
-  const { scrollViewRef, handleScroll, wrapDataLoader } = usePreserveScrollOnDataRefresh(isAnyModalOpen);
+  const isEditing = Object.keys(editingQuantities).length > 0;
+
+  const handleFlatListScroll = useCallback((event: any) => {
+    if (!isRestoringScrollRef.current) {
+      const offset = event.nativeEvent.contentOffset.y;
+      scrollOffsetMapRef.current[selectedGroupId] = offset;
+    }
+  }, [selectedGroupId]);
+
+  const restoreScrollForCurrentTab = useCallback(() => {
+    const offset = scrollOffsetMapRef.current[selectedGroupId] || 0;
+    if (offset > 0 && flatListRef.current) {
+      isRestoringScrollRef.current = true;
+      InteractionManager.runAfterInteractions(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            flatListRef.current?.scrollToOffset({ offset, animated: false });
+            setTimeout(() => {
+              isRestoringScrollRef.current = false;
+            }, 150);
+          });
+        });
+      });
+    } else {
+      isRestoringScrollRef.current = false;
+    }
+  }, [selectedGroupId]);
 
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
-      await wrapDataLoader(async () => {
-        const [itemsData, groupsData] = await Promise.all([
-          itemRepo.listActive(),
-          groupRepo.listActive(),
-        ]);
+      const [itemsData, groupsData] = await Promise.all([
+        itemRepo.listActive(),
+        groupRepo.listActive(),
+      ]);
+      
+      if (isAnyModalOpen || isEditing) {
+        console.log('[Inventory] Modal open or editing - queueing data update');
+        pendingDataRef.current = { items: itemsData, groups: groupsData };
+      } else {
         setItems(itemsData);
         setStorageGroups(groupsData);
-      });
+        restoreScrollForCurrentTab();
+      }
     } catch (error) {
       console.error('[Inventory] Load error:', error);
       Alert.alert('Error', 'Failed to load data');
     } finally {
       setIsLoading(false);
     }
-  }, [itemRepo, groupRepo, wrapDataLoader]);
+  }, [itemRepo, groupRepo, isAnyModalOpen, isEditing, restoreScrollForCurrentTab]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -87,6 +122,17 @@ export default function InventoryScreen() {
     return unsubscribe;
   }, [loadData]);
 
+  useEffect(() => {
+    if (!isAnyModalOpen && !isEditing && pendingDataRef.current) {
+      console.log('[Inventory] Applying pending data after modal/edit close');
+      const pending = pendingDataRef.current;
+      pendingDataRef.current = null;
+      setItems(pending.items);
+      setStorageGroups(pending.groups);
+      restoreScrollForCurrentTab();
+    }
+  }, [isAnyModalOpen, isEditing, restoreScrollForCurrentTab]);
+
   const handleCreateGroupInModal = async () => {
     if (!newGroupNameInModal.trim() || !user?.id || isSavingGroup) return;
 
@@ -99,17 +145,17 @@ export default function InventoryScreen() {
       
       if ((result as any).existing) {
         const existingGroup = (result as any).group;
-        await loadData();
         setItemGroupId(existingGroup.id);
         setNewGroupNameInModal('');
         setShowCreateGroupInModal(false);
         Alert.alert('Group already exists', `Selected existing group: "${existingGroup.name}"`);
-      } else {
         await loadData();
+      } else {
         setItemGroupId((result as any).id);
         setNewGroupNameInModal('');
         setShowCreateGroupInModal(false);
         Alert.alert('Success', 'Storage group created');
+        await loadData();
       }
     } catch (error: any) {
       console.error('[Inventory] Create group error:', error);
@@ -118,8 +164,6 @@ export default function InventoryScreen() {
       setIsSavingGroup(false);
     }
   };
-
-
 
   const openRenameModal = (group: InventoryStorageGroup) => {
     setRenamingGroup(group);
@@ -139,17 +183,17 @@ export default function InventoryScreen() {
       });
       
       if ((result as any).error) {
-        await loadData();
         setShowRenameModal(false);
         setRenamingGroup(null);
         setRenameGroupName('');
         Alert.alert('Group already exists', (result as any).error);
-      } else {
         await loadData();
+      } else {
         setShowRenameModal(false);
         setRenamingGroup(null);
         setRenameGroupName('');
         Alert.alert('Success', 'Group renamed');
+        await loadData();
       }
     } catch (error: any) {
       console.error('[Inventory] Rename error:', error);
@@ -187,8 +231,8 @@ export default function InventoryScreen() {
                       if (selectedGroupId === group.id) {
                         setSelectedGroupId('ALL');
                       }
-                      await loadData();
                       Alert.alert('Success', 'Group deleted');
+                      await loadData();
                     } catch (error: any) {
                       Alert.alert('Error', error.message || 'Failed to delete group');
                     }
@@ -224,8 +268,8 @@ export default function InventoryScreen() {
                       if (selectedGroupId === group.id) {
                         setSelectedGroupId('ALL');
                       }
-                      await loadData();
                       Alert.alert('Success', 'Group deleted');
+                      await loadData();
                     } catch (error: any) {
                       Alert.alert('Error', error.message || 'Failed to delete group');
                     }
@@ -239,7 +283,7 @@ export default function InventoryScreen() {
     }
   };
 
-  const openItemModal = (item?: InventoryItem) => {
+  const openItemModal = useCallback((item?: InventoryItem) => {
     if (item) {
       setEditingItem(item);
       setItemName(item.name);
@@ -258,7 +302,7 @@ export default function InventoryScreen() {
       setItemCurrentQty('0');
     }
     setShowItemModal(true);
-  };
+  }, [selectedGroupId]);
 
   const handleSaveItem = async () => {
     if (!itemName.trim()) {
@@ -302,7 +346,7 @@ export default function InventoryScreen() {
     }
   };
 
-  const handleDeleteItem = (item: InventoryItem) => {
+  const handleDeleteItem = useCallback((item: InventoryItem) => {
     Alert.alert(
       'Delete Item',
       `Are you sure you want to delete "${item.name}"?`,
@@ -324,18 +368,18 @@ export default function InventoryScreen() {
         },
       ]
     );
-  };
+  }, [user?.id, itemRepo, loadData]);
 
-  const handleQuantityChange = (itemId: string, delta: number) => {
+  const handleQuantityChange = useCallback((itemId: string, delta: number) => {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
 
     const currentEditQty = editingQuantities[itemId] ?? item.current_qty;
     const newQty = Math.max(0, currentEditQty + delta);
     setEditingQuantities(prev => ({ ...prev, [itemId]: newQty }));
-  };
+  }, [items, editingQuantities]);
 
-  const handleSaveQuantity = async (itemId: string) => {
+  const handleSaveQuantity = useCallback(async (itemId: string) => {
     if (!user?.id) return;
     const newQty = editingQuantities[itemId];
     if (newQty === undefined) return;
@@ -356,12 +400,118 @@ export default function InventoryScreen() {
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update quantity');
     }
-  };
+  }, [user?.id, editingQuantities, itemRepo, loadData]);
 
   const filteredItems = useMemo(() => {
-    if (selectedGroupId === 'ALL') return items;
-    return items.filter(item => item.storage_group_id === selectedGroupId);
+    let filtered: InventoryItem[];
+    if (selectedGroupId === 'ALL') {
+      filtered = items;
+    } else {
+      filtered = items.filter(item => item.storage_group_id === selectedGroupId);
+    }
+    return filtered.sort((a, b) => {
+      const nameCompare = a.name.localeCompare(b.name);
+      if (nameCompare !== 0) return nameCompare;
+      return a.created_at - b.created_at;
+    });
   }, [items, selectedGroupId]);
+
+  const renderItem = useCallback(({ item }: { item: InventoryItem }) => {
+    const isEditingQty = editingQuantities[item.id] !== undefined;
+    const displayQty = isEditingQty ? editingQuantities[item.id] : item.current_qty;
+    const totalPrice = (item.price_cents / 100) * displayQty;
+    const itemGroup = storageGroups.find(g => g.id === item.storage_group_id);
+
+    return (
+      <View style={[styles.itemCard, { backgroundColor: theme.card }]}>
+        <View style={styles.itemContent}>
+          <TouchableOpacity
+            style={styles.itemLeft}
+            onPress={() => openItemModal(item)}
+          >
+            <View style={styles.itemHeader}>
+              <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+              {itemGroup && (
+                <View style={[styles.groupBadge, { backgroundColor: theme.primary + '20' }]}>
+                  <Text style={[styles.groupBadgeText, { color: theme.primary }]}>
+                    {itemGroup.name}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
+            <View style={styles.qtyRow}>
+              <Text style={[styles.itemQty, { color: theme.text, fontWeight: '600' as const }]}>
+                Qty: {displayQty} {item.unit}
+              </Text>
+              <View style={styles.qtyControls}>
+                <TouchableOpacity
+                  style={[styles.qtyButton, { backgroundColor: theme.error + '20' }]}
+                  onPress={() => handleQuantityChange(item.id, -1)}
+                  disabled={displayQty === 0}
+                >
+                  <Minus size={18} color={displayQty === 0 ? theme.textSecondary : theme.error} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.qtyButton, { backgroundColor: theme.success + '20' }]}
+                  onPress={() => handleQuantityChange(item.id, 1)}
+                >
+                  <Plus size={18} color={theme.success} />
+                </TouchableOpacity>
+                {isEditingQty && (
+                  <TouchableOpacity
+                    style={[styles.qtyButton, { backgroundColor: theme.primary }]}
+                    onPress={() => handleSaveQuantity(item.id)}
+                  >
+                    <Save size={18} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            <Text style={[styles.itemPrice, { color: theme.success, fontWeight: '600' as const }]}>
+              Price: ₱{totalPrice.toFixed(2)}
+            </Text>
+            <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
+              Reorder: {item.reorder_level_qty} {item.unit}
+            </Text>
+          </TouchableOpacity>
+          <View style={styles.itemActions}>
+            <TouchableOpacity
+              style={[styles.actionIcon, { backgroundColor: theme.primary + '20' }]}
+              onPress={() => openItemModal(item)}
+            >
+              <Edit2 size={18} color={theme.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionIcon, { backgroundColor: theme.error + '20' }]}
+              onPress={() => handleDeleteItem(item)}
+            >
+              <Trash2 size={18} color={theme.error} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }, [editingQuantities, storageGroups, theme, handleQuantityChange, handleSaveQuantity, openItemModal, handleDeleteItem]);
+
+  const renderListHeader = useCallback(() => (
+    <TouchableOpacity
+      style={[styles.addButton, { backgroundColor: theme.primary }]}
+      onPress={() => openItemModal()}
+    >
+      <Plus size={20} color="#fff" />
+      <Text style={styles.addButtonText}>Add Item</Text>
+    </TouchableOpacity>
+  ), [theme, openItemModal]);
+
+  const renderListEmpty = useCallback(() => (
+    <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
+      <Package size={48} color={theme.textSecondary} />
+      <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No items in this group</Text>
+    </View>
+  ), [theme]);
+
+  const keyExtractor = useCallback((item: InventoryItem) => item.id, []);
 
   const renderGroupFilter = () => (
     <ScrollView
@@ -394,118 +544,31 @@ export default function InventoryScreen() {
     </ScrollView>
   );
 
-  const renderItemsList = () => (
-    <View style={styles.tabContent}>
-      <TouchableOpacity
-        style={[styles.addButton, { backgroundColor: theme.primary }]}
-        onPress={() => openItemModal()}
-      >
-        <Plus size={20} color="#fff" />
-        <Text style={styles.addButtonText}>Add Item</Text>
-      </TouchableOpacity>
-      {filteredItems.length === 0 ? (
-        <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
-          <Package size={48} color={theme.textSecondary} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No items in this group</Text>
-        </View>
-      ) : (
-        filteredItems.map((item) => {
-          const isEditing = editingQuantities[item.id] !== undefined;
-          const displayQty = isEditing ? editingQuantities[item.id] : item.current_qty;
-          const totalPrice = (item.price_cents / 100) * displayQty;
-          const itemGroup = storageGroups.find(g => g.id === item.storage_group_id);
-
-          return (
-            <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.card }]}>
-              <View style={styles.itemContent}>
-                <TouchableOpacity
-                  style={styles.itemLeft}
-                  onPress={() => openItemModal(item)}
-                >
-                  <View style={styles.itemHeader}>
-                    <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
-                    {itemGroup && (
-                      <View style={[styles.groupBadge, { backgroundColor: theme.primary + '20' }]}>
-                        <Text style={[styles.groupBadgeText, { color: theme.primary }]}>
-                          {itemGroup.name}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={[styles.itemUnit, { color: theme.textSecondary }]}>{item.unit}</Text>
-                  <View style={styles.qtyRow}>
-                    <Text style={[styles.itemQty, { color: theme.text, fontWeight: '600' as const }]}>
-                      Qty: {displayQty} {item.unit}
-                    </Text>
-                    <View style={styles.qtyControls}>
-                      <TouchableOpacity
-                        style={[styles.qtyButton, { backgroundColor: theme.error + '20' }]}
-                        onPress={() => handleQuantityChange(item.id, -1)}
-                        disabled={displayQty === 0}
-                      >
-                        <Minus size={18} color={displayQty === 0 ? theme.textSecondary : theme.error} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.qtyButton, { backgroundColor: theme.success + '20' }]}
-                        onPress={() => handleQuantityChange(item.id, 1)}
-                      >
-                        <Plus size={18} color={theme.success} />
-                      </TouchableOpacity>
-                      {isEditing && (
-                        <TouchableOpacity
-                          style={[styles.qtyButton, { backgroundColor: theme.primary }]}
-                          onPress={() => handleSaveQuantity(item.id)}
-                        >
-                          <Save size={18} color="#fff" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                  <Text style={[styles.itemPrice, { color: theme.success, fontWeight: '600' as const }]}>
-                    Price: ₱{totalPrice.toFixed(2)}
-                  </Text>
-                  <Text style={[styles.itemReorder, { color: theme.textSecondary }]}>
-                    Reorder: {item.reorder_level_qty} {item.unit}
-                  </Text>
-                </TouchableOpacity>
-                <View style={styles.itemActions}>
-                  <TouchableOpacity
-                    style={[styles.actionIcon, { backgroundColor: theme.primary + '20' }]}
-                    onPress={() => openItemModal(item)}
-                  >
-                    <Edit2 size={18} color={theme.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionIcon, { backgroundColor: theme.error + '20' }]}
-                    onPress={() => handleDeleteItem(item)}
-                  >
-                    <Trash2 size={18} color={theme.error} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          );
-        })
-      )}
-    </View>
-  );
-
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {renderGroupFilter()}
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />}
-      >
-        {isLoading ? (
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
-        ) : (
-          renderItemsList()
-        )}
-      </ScrollView>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={filteredItems}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          ListHeaderComponent={renderListHeader}
+          ListEmptyComponent={renderListEmpty}
+          contentContainerStyle={styles.flatListContent}
+          onScroll={handleFlatListScroll}
+          scrollEventThrottle={16}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />}
+          removeClippedSubviews={false}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          windowSize={10}
+        />
+      )}
 
       <Modal visible={showItemModal} animationType="slide" transparent>
         <KeyboardAvoidingView
@@ -734,13 +797,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
   },
-
-  scrollContent: {
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tabContent: {
+  flatListContent: {
     padding: 16,
-    gap: 12,
   },
   loader: {
     marginTop: 40,
@@ -752,6 +815,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     gap: 8,
+    marginBottom: 12,
   },
   addButtonText: {
     color: '#fff',
