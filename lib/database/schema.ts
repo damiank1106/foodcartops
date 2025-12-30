@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 35;
+export const SCHEMA_VERSION = 36;
 
 export const MIGRATIONS = [
   {
@@ -1531,6 +1531,62 @@ export const MIGRATIONS = [
       (lower(hex(randomblob(16))), 'Migrated to plain-text PINs: reset pin_hash/pin_hash_alg to NULL, restored system user PINs', ${Date.now()});
     `,
     down: `
+    `,
+  },
+  {
+    version: 36,
+    up: `
+      ALTER TABLE expenses ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE expenses ADD COLUMN device_id TEXT;
+      ALTER TABLE expenses ADD COLUMN deleted_at TEXT;
+      ALTER TABLE expenses ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE expenses ADD COLUMN updated_at_iso TEXT;
+
+      CREATE INDEX idx_expenses_deleted_at ON expenses(deleted_at);
+
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('expenses');
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added Supabase sync columns to expenses table', ${Date.now()});
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_expenses_deleted_at;
+      
+      DELETE FROM sync_state WHERE table_name = 'expenses';
+
+      CREATE TABLE expenses_new (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT,
+        cart_id TEXT NOT NULL,
+        submitted_by_user_id TEXT NOT NULL,
+        approved_by_user_id TEXT,
+        status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK(status IN ('SUBMITTED', 'APPROVED', 'REJECTED', 'DRAFT')),
+        category TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        paid_from TEXT NOT NULL CHECK(paid_from IN ('CASH_DRAWER', 'PERSONAL', 'COMPANY')),
+        notes TEXT,
+        receipt_image_uri TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        reviewed_at INTEGER,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        FOREIGN KEY (submitted_by_user_id) REFERENCES users(id),
+        FOREIGN KEY (approved_by_user_id) REFERENCES users(id)
+      );
+
+      INSERT INTO expenses_new (id, shift_id, cart_id, submitted_by_user_id, approved_by_user_id, status, category, amount_cents, paid_from, notes, receipt_image_uri, created_at, updated_at, reviewed_at, is_deleted)
+      SELECT id, shift_id, cart_id, submitted_by_user_id, approved_by_user_id, status, category, amount_cents, paid_from, notes, receipt_image_uri, created_at, updated_at, reviewed_at, is_deleted FROM expenses;
+
+      DROP TABLE expenses;
+      ALTER TABLE expenses_new RENAME TO expenses;
+
+      CREATE INDEX idx_expenses_shift_id ON expenses(shift_id);
+      CREATE INDEX idx_expenses_status ON expenses(status);
+      CREATE INDEX idx_expenses_submitted_by ON expenses(submitted_by_user_id);
+      CREATE INDEX idx_expenses_created_at ON expenses(created_at);
+      CREATE INDEX idx_expenses_is_deleted ON expenses(is_deleted);
     `,
   },
 ];

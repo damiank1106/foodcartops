@@ -555,6 +555,52 @@ CREATE POLICY "Allow select on pin_reset_requests for token lookup"
 
 **Production Note:** For production, restrict policies to authenticated users and add business-level isolation.
 
+### Create expenses table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.expenses (
+  id TEXT PRIMARY KEY,
+  shift_id TEXT,
+  cart_id TEXT NOT NULL,
+  submitted_by_user_id TEXT NOT NULL,
+  approved_by_user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED',
+  category TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  paid_from TEXT NOT NULL,
+  notes TEXT,
+  receipt_image_uri TEXT,
+  reviewed_at BIGINT,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at BIGINT NOT NULL,  -- milliseconds since epoch
+  updated_at BIGINT NOT NULL,  -- milliseconds since epoch
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_business_id ON public.expenses(business_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_shift_id ON public.expenses(shift_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_cart_id ON public.expenses(cart_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_submitted_by ON public.expenses(submitted_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_status ON public.expenses(status);
+CREATE INDEX IF NOT EXISTS idx_expenses_updated_at_iso ON public.expenses(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_expenses_deleted_at ON public.expenses(deleted_at);
+```
+
+### Enable RLS for expenses
+
+```sql
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on expenses"
+  ON public.expenses
+  FOR ALL
+  USING (business_id = 'default_business');
+```
+
 ## 10. Current Synced Tables
 
 - `product_categories` - Product categories
@@ -563,6 +609,7 @@ CREATE POLICY "Allow select on pin_reset_requests for token lookup"
 - `inventory_storage_groups` - Inventory storage groups (Freezer, Cart, Packaging Supply, Condiments, etc.)
 - `inventory_items` - Inventory items with quantities and prices
 - `users` - PIN-only users with roles (stored as SHA-256 hashes)
+- `expenses` - Shift and cart expenses with approval workflow
 
 ## 11. Valid User Roles
 

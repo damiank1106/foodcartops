@@ -276,7 +276,8 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       'products',
       'carts',
       'inventory_storage_groups',
-      'inventory_items'
+      'inventory_items',
+      'expenses'
     ];
 
     // TODO PHASE 8.XX-C: Add next sync batch tables
@@ -284,7 +285,6 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     // - sales
     // - sale_items
     // - payments
-    // - expenses
     // - settlements
     // Ensure Supabase tables exist with matching schema before adding to sync
     for (const tableName of tables) {

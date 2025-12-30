@@ -1,8 +1,11 @@
 import { getDatabase } from '../database/init';
 import type { Expense, ExpenseWithDetails, ExpenseStatus, PaidFrom } from '../types';
 import { BaseRepository } from './base';
+import { getDeviceId } from '../utils/device-id';
+import { SyncOutboxRepository } from './sync-outbox.repository';
 
 export class ExpenseRepository extends BaseRepository {
+  private syncOutbox = new SyncOutboxRepository();
   async create(data: {
     shift_id: string | null;
     cart_id: string;
@@ -16,14 +19,16 @@ export class ExpenseRepository extends BaseRepository {
   }): Promise<Expense> {
     const db = await getDatabase();
     const now = Date.now();
+    const nowISO = new Date().toISOString();
     const id = this.generateId();
+    const deviceId = await getDeviceId();
 
     await db.runAsync(
       `INSERT INTO expenses (
         id, shift_id, cart_id, submitted_by_user_id, category, 
         amount_cents, paid_from, notes, receipt_image_uri, 
-        status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.shift_id,
@@ -37,11 +42,17 @@ export class ExpenseRepository extends BaseRepository {
         data.status || 'SUBMITTED',
         now,
         now,
+        'default_business',
+        deviceId,
+        nowISO,
+        nowISO,
       ]
     );
 
     const expense = await this.findById(id);
     if (!expense) throw new Error('Failed to create expense');
+    
+    await this.syncOutbox.add('expenses', id, 'upsert', expense);
     
     return expense;
   }
@@ -62,7 +73,7 @@ export class ExpenseRepository extends BaseRepository {
     status?: ExpenseStatus;
   }): Promise<Expense[]> {
     const db = await getDatabase();
-    let query = 'SELECT * FROM expenses WHERE is_deleted = 0';
+    let query = 'SELECT * FROM expenses WHERE is_deleted = 0 AND deleted_at IS NULL';
     const params: any[] = [];
 
     if (filters?.shift_id) {
@@ -108,7 +119,7 @@ export class ExpenseRepository extends BaseRepository {
       LEFT JOIN users u1 ON e.submitted_by_user_id = u1.id
       LEFT JOIN users u2 ON e.approved_by_user_id = u2.id
       LEFT JOIN carts c ON e.cart_id = c.id
-      WHERE e.is_deleted = 0
+      WHERE e.is_deleted = 0 AND e.deleted_at IS NULL
     `;
     const params: any[] = [];
 
@@ -145,13 +156,19 @@ export class ExpenseRepository extends BaseRepository {
   ): Promise<void> {
     const db = await getDatabase();
     const now = Date.now();
+    const nowISO = new Date().toISOString();
 
     await db.runAsync(
       `UPDATE expenses 
-       SET status = ?, approved_by_user_id = ?, reviewed_at = ?, updated_at = ?
+       SET status = ?, approved_by_user_id = ?, reviewed_at = ?, updated_at = ?, updated_at_iso = ?
        WHERE id = ?`,
-      [status, approved_by_user_id, now, now, id]
+      [status, approved_by_user_id, now, now, nowISO, id]
     );
+
+    const expense = await this.findById(id);
+    if (expense) {
+      await this.syncOutbox.add('expenses', id, 'upsert', expense);
+    }
   }
 
   async getPendingCount(): Promise<number> {
@@ -175,39 +192,51 @@ export class ExpenseRepository extends BaseRepository {
   async approve(id: string, approvedByUserId: string, notes?: string): Promise<void> {
     const db = await getDatabase();
     const now = Date.now();
+    const nowISO = new Date().toISOString();
 
     const old = await this.findById(id);
 
     await db.runAsync(
       `UPDATE expenses 
-       SET status = 'APPROVED', approved_by_user_id = ?, reviewed_at = ?, updated_at = ?
+       SET status = 'APPROVED', approved_by_user_id = ?, reviewed_at = ?, updated_at = ?, updated_at_iso = ?
        WHERE id = ?`,
-      [approvedByUserId, now, now, id]
+      [approvedByUserId, now, now, nowISO, id]
     );
 
     await this.auditLog(approvedByUserId, 'expenses', id, 'approve', old, {
       status: 'APPROVED',
       notes,
     });
+
+    const expense = await this.findById(id);
+    if (expense) {
+      await this.syncOutbox.add('expenses', id, 'upsert', expense);
+    }
   }
 
   async reject(id: string, rejectedByUserId: string, notes?: string): Promise<void> {
     const db = await getDatabase();
     const now = Date.now();
+    const nowISO = new Date().toISOString();
 
     const old = await this.findById(id);
 
     await db.runAsync(
       `UPDATE expenses 
-       SET status = 'REJECTED', approved_by_user_id = ?, reviewed_at = ?, updated_at = ?
+       SET status = 'REJECTED', approved_by_user_id = ?, reviewed_at = ?, updated_at = ?, updated_at_iso = ?
        WHERE id = ?`,
-      [rejectedByUserId, now, now, id]
+      [rejectedByUserId, now, now, nowISO, id]
     );
 
     await this.auditLog(rejectedByUserId, 'expenses', id, 'reject', old, {
       status: 'REJECTED',
       notes,
     });
+
+    const expense = await this.findById(id);
+    if (expense) {
+      await this.syncOutbox.add('expenses', id, 'upsert', expense);
+    }
   }
 
   async delete(id: string): Promise<void> {
@@ -218,15 +247,21 @@ export class ExpenseRepository extends BaseRepository {
   async softDelete(id: string, deletedByUserId: string): Promise<void> {
     const db = await getDatabase();
     const now = Date.now();
+    const nowISO = new Date().toISOString();
     
     const oldExpense = await this.findById(id);
     
     await db.runAsync(
-      'UPDATE expenses SET is_deleted = 1, updated_at = ? WHERE id = ?',
-      [now, id]
+      'UPDATE expenses SET is_deleted = 1, deleted_at = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?',
+      [nowISO, now, nowISO, id]
     );
 
     await this.auditLog(deletedByUserId, 'expense', id, 'delete', oldExpense, null);
+    
+    const expense = await this.findById(id);
+    if (expense) {
+      await this.syncOutbox.add('expenses', id, 'upsert', expense);
+    }
     
     console.log('[ExpenseRepo] Soft deleted expense:', id);
   }
