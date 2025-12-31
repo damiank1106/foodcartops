@@ -1643,6 +1643,8 @@ export const MIGRATIONS = [
   {
     version: 38,
     up: `
+      PRAGMA foreign_keys = OFF;
+
       DROP TABLE IF EXISTS settlements_new;
 
       CREATE TABLE settlements_new (
@@ -1678,40 +1680,27 @@ export const MIGRATIONS = [
         created_at, updated_at, created_at_iso, updated_at_iso
       )
       SELECT 
-        s.id, 
-        s.shift_id, 
-        s.cart_id, 
-        COALESCE(
-          (SELECT seller_user_id FROM settlements WHERE id = s.id),
-          (SELECT worker_user_id FROM settlements WHERE id = s.id),
-          'unknown'
-        ) as seller_user_id,
-        COALESCE(
-          (SELECT settlement_day FROM settlements WHERE id = s.id),
-          date('now')
-        ) as date_iso,
+        id, 
+        shift_id, 
+        cart_id, 
+        COALESCE(worker_user_id, created_by_user_id, 'unknown') as seller_user_id,
+        COALESCE(settlement_day, date('now')) as date_iso,
         CASE 
-          WHEN s.status IN ('DRAFT', 'draft', 'saved', 'SAVED') THEN 'SAVED' 
-          WHEN s.status IN ('FINALIZED', 'finalized') THEN 'FINALIZED' 
+          WHEN UPPER(status) IN ('SAVED', 'DRAFT') THEN 'SAVED' 
+          WHEN UPPER(status) = 'FINALIZED' THEN 'FINALIZED' 
           ELSE 'SAVED' 
         END as status,
-        s.notes,
+        notes,
         0, 0, 0, 0, 0,
-        COALESCE(
-          (SELECT business_id FROM settlements WHERE id = s.id),
-          'default_business'
-        ) as business_id,
-        (SELECT device_id FROM settlements WHERE id = s.id) as device_id,
-        COALESCE(
-          (SELECT is_deleted FROM settlements WHERE id = s.id),
-          0
-        ) as is_deleted,
-        (SELECT deleted_at FROM settlements WHERE id = s.id) as deleted_at,
-        s.created_at, 
-        s.updated_at, 
-        (SELECT created_at_iso FROM settlements WHERE id = s.id) as created_at_iso,
-        (SELECT updated_at_iso FROM settlements WHERE id = s.id) as updated_at_iso
-      FROM (SELECT DISTINCT id, shift_id, cart_id, status, notes, created_at, updated_at FROM settlements) s;
+        'default_business',
+        NULL,
+        0,
+        NULL,
+        created_at, 
+        updated_at, 
+        NULL,
+        NULL
+      FROM settlements;
 
       DROP TABLE settlements;
       ALTER TABLE settlements_new RENAME TO settlements;
@@ -1748,6 +1737,8 @@ export const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_settlement_items_deleted_at ON settlement_items(deleted_at);
       CREATE INDEX IF NOT EXISTS idx_settlement_items_is_deleted ON settlement_items(is_deleted);
       CREATE INDEX IF NOT EXISTS idx_settlement_items_updated_at_iso ON settlement_items(updated_at_iso);
+
+      PRAGMA foreign_keys = ON;
 
       INSERT OR IGNORE INTO sync_state (table_name) VALUES ('settlements');
       INSERT OR IGNORE INTO sync_state (table_name) VALUES ('settlement_items');
