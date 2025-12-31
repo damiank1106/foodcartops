@@ -1643,6 +1643,8 @@ export const MIGRATIONS = [
   {
     version: 38,
     up: `
+      DROP TABLE IF EXISTS settlements_new;
+
       CREATE TABLE settlements_new (
         id TEXT PRIMARY KEY,
         shift_id TEXT NOT NULL,
@@ -1676,38 +1678,51 @@ export const MIGRATIONS = [
         created_at, updated_at, created_at_iso, updated_at_iso
       )
       SELECT 
-        id, 
-        shift_id, 
-        cart_id, 
-        COALESCE(worker_user_id, 'unknown'),
-        COALESCE(settlement_day, date('now')),
+        s.id, 
+        s.shift_id, 
+        s.cart_id, 
+        COALESCE(
+          (SELECT seller_user_id FROM settlements WHERE id = s.id),
+          (SELECT worker_user_id FROM settlements WHERE id = s.id),
+          'unknown'
+        ) as seller_user_id,
+        COALESCE(
+          (SELECT settlement_day FROM settlements WHERE id = s.id),
+          date('now')
+        ) as date_iso,
         CASE 
-          WHEN status IN ('DRAFT', 'draft', 'saved') THEN 'SAVED' 
-          WHEN status IN ('FINALIZED', 'finalized') THEN 'FINALIZED' 
+          WHEN s.status IN ('DRAFT', 'draft', 'saved', 'SAVED') THEN 'SAVED' 
+          WHEN s.status IN ('FINALIZED', 'finalized') THEN 'FINALIZED' 
           ELSE 'SAVED' 
-        END,
-        notes,
+        END as status,
+        s.notes,
         0, 0, 0, 0, 0,
-        COALESCE(business_id, 'default_business'),
-        device_id,
-        COALESCE(is_deleted, 0),
-        deleted_at,
-        created_at, 
-        updated_at, 
-        created_at_iso, 
-        updated_at_iso
-      FROM settlements;
+        COALESCE(
+          (SELECT business_id FROM settlements WHERE id = s.id),
+          'default_business'
+        ) as business_id,
+        (SELECT device_id FROM settlements WHERE id = s.id) as device_id,
+        COALESCE(
+          (SELECT is_deleted FROM settlements WHERE id = s.id),
+          0
+        ) as is_deleted,
+        (SELECT deleted_at FROM settlements WHERE id = s.id) as deleted_at,
+        s.created_at, 
+        s.updated_at, 
+        (SELECT created_at_iso FROM settlements WHERE id = s.id) as created_at_iso,
+        (SELECT updated_at_iso FROM settlements WHERE id = s.id) as updated_at_iso
+      FROM (SELECT DISTINCT id, shift_id, cart_id, status, notes, created_at, updated_at FROM settlements) s;
 
       DROP TABLE settlements;
       ALTER TABLE settlements_new RENAME TO settlements;
 
-      CREATE INDEX idx_settlements_shift_id ON settlements(shift_id);
-      CREATE INDEX idx_settlements_cart_id ON settlements(cart_id);
-      CREATE INDEX idx_settlements_seller_user_id ON settlements(seller_user_id);
-      CREATE INDEX idx_settlements_status ON settlements(status);
-      CREATE INDEX idx_settlements_deleted_at ON settlements(deleted_at);
-      CREATE INDEX idx_settlements_is_deleted ON settlements(is_deleted);
-      CREATE INDEX idx_settlements_updated_at_iso ON settlements(updated_at_iso);
+      CREATE INDEX IF NOT EXISTS idx_settlements_shift_id ON settlements(shift_id);
+      CREATE INDEX IF NOT EXISTS idx_settlements_cart_id ON settlements(cart_id);
+      CREATE INDEX IF NOT EXISTS idx_settlements_seller_user_id ON settlements(seller_user_id);
+      CREATE INDEX IF NOT EXISTS idx_settlements_status ON settlements(status);
+      CREATE INDEX IF NOT EXISTS idx_settlements_deleted_at ON settlements(deleted_at);
+      CREATE INDEX IF NOT EXISTS idx_settlements_is_deleted ON settlements(is_deleted);
+      CREATE INDEX IF NOT EXISTS idx_settlements_updated_at_iso ON settlements(updated_at_iso);
 
       CREATE TABLE IF NOT EXISTS settlement_items (
         id TEXT PRIMARY KEY,
@@ -1728,16 +1743,16 @@ export const MIGRATIONS = [
         FOREIGN KEY (product_id) REFERENCES products(id)
       );
 
-      CREATE INDEX idx_settlement_items_settlement_id ON settlement_items(settlement_id);
-      CREATE INDEX idx_settlement_items_product_id ON settlement_items(product_id);
-      CREATE INDEX idx_settlement_items_deleted_at ON settlement_items(deleted_at);
-      CREATE INDEX idx_settlement_items_is_deleted ON settlement_items(is_deleted);
-      CREATE INDEX idx_settlement_items_updated_at_iso ON settlement_items(updated_at_iso);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_settlement_id ON settlement_items(settlement_id);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_product_id ON settlement_items(product_id);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_deleted_at ON settlement_items(deleted_at);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_is_deleted ON settlement_items(is_deleted);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_updated_at_iso ON settlement_items(updated_at_iso);
 
       INSERT OR IGNORE INTO sync_state (table_name) VALUES ('settlements');
       INSERT OR IGNORE INTO sync_state (table_name) VALUES ('settlement_items');
 
-      INSERT INTO db_change_log (id, message, created_at) VALUES
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
       (lower(hex(randomblob(16))), 'Added Supabase sync columns to settlements table', ${Date.now()}),
       (lower(hex(randomblob(16))), 'Created settlement_items table for synced product-level settlement data', ${Date.now()}),
       (lower(hex(randomblob(16))), 'Migrated settlement status values to uppercase: SAVED, FINALIZED', ${Date.now()});
