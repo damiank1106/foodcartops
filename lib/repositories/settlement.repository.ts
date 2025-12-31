@@ -508,7 +508,39 @@ export class SettlementRepository extends BaseRepository {
 
     await this.queueSync('settlements', id, payload);
     
+    const items = await db.getAllAsync<SettlementItem>(
+      'SELECT * FROM settlement_items WHERE settlement_id = ? AND deleted_at IS NULL AND is_deleted = 0',
+      [id]
+    );
+    
+    for (const item of items) {
+      await db.runAsync(
+        'UPDATE settlement_items SET is_deleted = 1, deleted_at = ?, updated_at = ?, updated_at_iso = ?, device_id = ? WHERE id = ?',
+        [nowISO, now, nowISO, deviceId, item.id]
+      );
+      
+      const itemPayload = {
+        id: item.id,
+        settlement_id: item.settlement_id,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        qty: item.qty,
+        price_cents: item.price_cents,
+        business_id: item.business_id || 'default_business',
+        device_id: deviceId,
+        is_deleted: 1,
+        deleted_at: nowISO,
+        created_at: item.created_at || Date.now(),
+        updated_at: now,
+        created_at_iso: item.created_at_iso,
+        updated_at_iso: nowISO,
+      };
+      
+      await this.queueSync('settlement_items', item.id, itemPayload);
+      console.log('[SettlementRepo] Settlement item soft deleted:', item.id);
+    }
+    
     await this.auditLog(userId, 'settlements', id, 'delete', old, null);
-    console.log('[SettlementRepo] Settlement soft deleted:', id);
+    console.log(`[SettlementRepo] Settlement soft deleted with ${items.length} items:`, id);
   }
 }

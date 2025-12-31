@@ -6,10 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { DollarSign, ChevronRight, Filter } from 'lucide-react-native';
+import { DollarSign, ChevronRight, Filter, Trash2 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -71,6 +72,37 @@ export default function BossSettlementsScreen() {
     },
     enabled: !!(user && (isBoss || isDeveloper)),
   });
+
+  const deleteSettlementMutation = useMutation({
+    mutationFn: async (settlementId: string) => {
+      if (!user?.id) throw new Error('No user');
+      await settlementRepo.delete(settlementId, user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boss-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-all-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
+      Alert.alert('Success', 'Settlement deleted');
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to delete settlement: ${error}`);
+    },
+  });
+
+  const handleDeleteSettlement = (settlementId: string, workerName: string) => {
+    Alert.alert(
+      'Delete Settlement',
+      `Are you sure you want to delete ${workerName}'s settlement? This will also delete all related items and sync the changes to Supabase.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteSettlementMutation.mutate(settlementId),
+        },
+      ]
+    );
+  };
 
   const handleSettlementPress = (shiftId: string) => {
     router.push(`/settlement/${shiftId}` as any);
@@ -150,21 +182,32 @@ export default function BossSettlementsScreen() {
               onPress={() => handleSettlementPress(settlement.shift_id)}
             >
               <View style={styles.settlementHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
-                  <DollarSign size={20} color={theme.primary} />
-                </View>
-                <View style={styles.settlementInfo}>
-                  <Text style={[styles.workerName, { color: theme.text }]}>
-                    {settlement.worker_name}
-                  </Text>
-                  <Text style={[styles.cartName, { color: theme.textSecondary }]}>
-                    {settlement.cart_name}
-                  </Text>
-                  <Text style={[styles.settlementDate, { color: theme.textSecondary }]}>
-                    {format(settlement.created_at, 'MMM d, yyyy • h:mm a')}
-                  </Text>
-                </View>
-                <ChevronRight size={20} color={theme.textSecondary} />
+                <TouchableOpacity
+                  style={styles.settlementTouchable}
+                  onPress={() => handleSettlementPress(settlement.shift_id)}
+                >
+                  <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
+                    <DollarSign size={20} color={theme.primary} />
+                  </View>
+                  <View style={styles.settlementInfo}>
+                    <Text style={[styles.workerName, { color: theme.text }]}>
+                      {settlement.worker_name}
+                    </Text>
+                    <Text style={[styles.cartName, { color: theme.textSecondary }]}>
+                      {settlement.cart_name}
+                    </Text>
+                    <Text style={[styles.settlementDate, { color: theme.textSecondary }]}>
+                      {format(settlement.created_at, 'MMM d, yyyy • h:mm a')}
+                    </Text>
+                  </View>
+                  <ChevronRight size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.deleteButton, { backgroundColor: theme.error + '20' }]}
+                  onPress={() => handleDeleteSettlement(settlement.id, settlement.worker_name)}
+                >
+                  <Trash2 size={18} color={theme.error} />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.settlementDetails}>
@@ -283,6 +326,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  settlementTouchable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   iconContainer: {
     width: 40,

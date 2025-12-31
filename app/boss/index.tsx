@@ -11,7 +11,6 @@ import DatabaseScreen from './database';
 import CalendarScreen from './calendar';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
-import { SavedRecordRepository } from '@/lib/repositories/saved-record.repository';
 import { startOfDay, endOfDay, format } from 'date-fns';
 import { onSyncComplete } from '@/lib/services/sync.service';
 
@@ -21,19 +20,14 @@ export default function BossDashboard() {
   const router = useRouter();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'calendar' | 'settlements' | 'activity' | 'saved' | 'carts' | 'database'>('overview');
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingItem, setEditingItem] = useState<any>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editNotes, setEditNotes] = useState('');
-  const [editStatus, setEditStatus] = useState<'OPEN' | 'RESOLVED'>('OPEN');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'calendar' | 'settlements' | 'activity' | 'carts' | 'database'>('overview');
+
   const [cartModalVisible, setCartModalVisible] = useState(false);
   const [editingCart, setEditingCart] = useState<any>(null);
   const [cartName, setCartName] = useState('');
   const [cartLocation, setCartLocation] = useState('');
   const [cartNotes, setCartNotes] = useState('');
-  const [settlementDetailModalVisible, setSettlementDetailModalVisible] = useState(false);
-  const [selectedSettlement, setSelectedSettlement] = useState<any>(null);
+
   const [showInactive, setShowInactive] = useState(false);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date());
@@ -50,7 +44,6 @@ export default function BossDashboard() {
   const settlementRepo = new SettlementRepository();
   const auditRepo = new AuditRepository();
   const savedItemsRepo = new BossSavedItemsRepository();
-  const savedRecordRepo = new SavedRecordRepository();
 
   useEffect(() => {
     const unsubscribe = onSyncComplete(() => {
@@ -71,7 +64,6 @@ export default function BossDashboard() {
       const notifRepo = new NotificationRepository();
       return await notifRepo.getUnseenCount('settlement_incoming');
     },
-    refetchInterval: 30000,
   });
 
   const { data: allSettlements } = useQuery({
@@ -217,23 +209,7 @@ export default function BossDashboard() {
     );
   };
 
-  const { data: savedItems } = useQuery({
-    queryKey: ['saved-items', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      return savedItemsRepo.findAll({ created_by_user_id: user.id });
-    },
-    enabled: !!user?.id,
-  });
 
-  const { data: savedRecords } = useQuery({
-    queryKey: ['saved-records', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      return savedRecordRepo.listAll();
-    },
-    enabled: !!user?.id,
-  });
 
   const { data: allCarts } = useQuery({
     queryKey: ['all-carts', showInactive],
@@ -268,48 +244,7 @@ export default function BossDashboard() {
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      if (!user?.id) throw new Error('No user');
-      return savedItemsRepo.update(id, data, user.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-items'] });
-      setEditModalVisible(false);
-      Alert.alert('Success', 'Changes saved');
-    },
-    onError: (error) => {
-      Alert.alert('Error', `Failed to update: ${error}`);
-    },
-  });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (!user?.id) throw new Error('No user');
-      return savedItemsRepo.delete(id, user.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-items'] });
-      Alert.alert('Success', 'Item deleted');
-    },
-    onError: (error) => {
-      Alert.alert('Error', `Failed to delete: ${error}`);
-    },
-  });
-
-  const deleteRecordMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (!user?.id) throw new Error('No user');
-      return savedRecordRepo.softDelete(id, user.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-records'] });
-      Alert.alert('Success', 'Settlement deleted');
-    },
-    onError: (error) => {
-      Alert.alert('Error', `Failed to delete: ${error}`);
-    },
-  });
 
   const deleteShiftMutation = useMutation({
     mutationFn: async (shiftId: string) => {
@@ -354,55 +289,7 @@ export default function BossDashboard() {
     );
   };
 
-  const handleEditItem = (item: any) => {
-    setEditingItem(item);
-    setEditTitle(item.title);
-    setEditNotes(item.notes || '');
-    setEditStatus(item.status);
-    setEditModalVisible(true);
-  };
 
-  const handleSaveEdit = () => {
-    if (!editingItem) return;
-    updateMutation.mutate({
-      id: editingItem.id,
-      data: {
-        title: editTitle,
-        notes: editNotes,
-        status: editStatus,
-      },
-    });
-  };
-
-  const handleDeleteItem = (id: string) => {
-    Alert.alert(
-      'Delete Item',
-      'Are you sure you want to delete this saved item?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteMutation.mutate(id),
-        },
-      ]
-    );
-  };
-
-  const handleDeleteRecord = (id: string) => {
-    Alert.alert(
-      'Delete Settlement',
-      'Are you sure you want to delete this settlement?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteRecordMutation.mutate(id),
-        },
-      ]
-    );
-  };
 
   const handleDeleteShift = (shiftId: string, workerName: string) => {
     Alert.alert(
@@ -628,20 +515,7 @@ export default function BossDashboard() {
             )}
             {selectedTab === 'settlements' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tab}
-            onPress={() => setSelectedTab('saved')}
-          >
-            <Text style={[styles.tabText, { color: selectedTab === 'saved' ? theme.primary : theme.textSecondary }]}>
-              Saved
-            </Text>
-            {(savedItems && savedItems.length > 0 || savedRecords && savedRecords.length > 0) && (
-              <View style={[styles.badge, { backgroundColor: theme.primary }]}>
-                <Text style={styles.badgeText}>{(savedItems?.length || 0) + (savedRecords?.length || 0)}</Text>
-              </View>
-            )}
-            {selectedTab === 'saved' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
-          </TouchableOpacity>
+
           {user?.role === 'developer' && (
             <>
               <TouchableOpacity
@@ -1084,108 +958,7 @@ export default function BossDashboard() {
             </>
           )}
 
-          {selectedTab === 'saved' && (
-            <>
-              {savedRecords && savedRecords.length > 0 && (
-                <>
-                  <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 12 }]}>Settlements</Text>
-                  {savedRecords.map((record) => (
-                    <TouchableOpacity
-                      key={record.id}
-                      style={[styles.savedCard, { backgroundColor: theme.card }]}
-                      onPress={() => {
-                        setSelectedSettlement(record);
-                        setSettlementDetailModalVisible(true);
-                      }}
-                    >
-                      <View style={styles.savedHeader}>
-                        <View style={[styles.savedIcon, { backgroundColor: theme.success + '20' }]}>
-                          <CheckCircle size={20} color={theme.success} />
-                        </View>
-                        <View style={styles.savedInfo}>
-                          <Text style={[styles.savedTitle, { color: theme.text }]}>Settlement</Text>
-                          <Text style={[styles.savedType, { color: theme.textSecondary }]}>
-                            {format(record.created_at, 'MMM d, yyyy • h:mm a')}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={[styles.actionButton, { backgroundColor: theme.error + '15' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDeleteRecord(record.id);
-                          }}
-                        >
-                          <Trash2 size={16} color={theme.error} />
-                        </TouchableOpacity>
-                      </View>
-                      {record.notes && (
-                        <Text style={[styles.savedNotes, { color: theme.textSecondary }]} numberOfLines={2}>
-                          {record.notes}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </>
-              )}
 
-              {savedItems && savedItems.length > 0 && (
-                <>
-                  <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 16, marginBottom: 12 }]}>Exceptions</Text>
-                  {savedItems.map((item) => (
-                  <View
-                    key={item.id}
-                    style={[styles.savedCard, { backgroundColor: theme.card }]}
-                  >
-                    <View style={styles.savedHeader}>
-                      <View style={[styles.savedIcon, { backgroundColor: theme.primary + '20' }]}>
-                        <Bookmark size={20} color={theme.primary} />
-                      </View>
-                      <View style={styles.savedInfo}>
-                        <Text style={[styles.savedTitle, { color: theme.text }]}>
-                          {item.title}
-                        </Text>
-                        <Text style={[styles.savedType, { color: theme.textSecondary }]}>
-                          {item.type} • {item.status}
-                        </Text>
-                      </View>
-                      <View style={styles.savedActions}>
-                        <TouchableOpacity
-                          style={[styles.actionButton, { backgroundColor: theme.primary + '15' }]}
-                          onPress={() => handleEditItem(item)}
-                        >
-                          <Edit2 size={16} color={theme.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButton, { backgroundColor: theme.error + '15' }]}
-                          onPress={() => handleDeleteItem(item.id)}
-                        >
-                          <Trash2 size={16} color={theme.error} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    {item.notes && (
-                      <Text style={[styles.savedNotes, { color: theme.textSecondary }]} numberOfLines={2}>
-                        {item.notes}
-                      </Text>
-                    )}
-                  </View>
-                ))}
-                </>
-              )}
-
-              {(!savedItems || savedItems.length === 0) && (!savedRecords || savedRecords.length === 0) && (
-                <View style={styles.emptyState}>
-                  <Bookmark size={64} color={theme.textSecondary} />
-                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                    No saved items
-                  </Text>
-                  <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-                    Save exceptions and alerts for quick access
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
 
           {selectedTab === 'calendar' && (user?.role === 'general_manager' || user?.role === 'developer') && (
             <CalendarScreen selectedDate={pickerDate} />
@@ -1294,90 +1067,6 @@ export default function BossDashboard() {
       </ScrollView>
 
       <Modal
-        visible={editModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Saved Item</Text>
-              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                <XCircle size={24} color={theme.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalBody}>
-              <Text style={[styles.inputLabel, { color: theme.text }]}>Title</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={editTitle}
-                onChangeText={setEditTitle}
-                placeholder="Enter title"
-                placeholderTextColor={theme.textSecondary}
-              />
-
-              <Text style={[styles.inputLabel, { color: theme.text }]}>Notes</Text>
-              <TextInput
-                style={[styles.textArea, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                value={editNotes}
-                onChangeText={setEditNotes}
-                placeholder="Add notes..."
-                placeholderTextColor={theme.textSecondary}
-                multiline
-                numberOfLines={4}
-              />
-
-              <Text style={[styles.inputLabel, { color: theme.text }]}>Status</Text>
-              <View style={styles.statusButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    { borderColor: theme.primary },
-                    editStatus === 'OPEN' && { backgroundColor: theme.primary }
-                  ]}
-                  onPress={() => setEditStatus('OPEN')}
-                >
-                  <Text style={[styles.statusButtonText, { color: editStatus === 'OPEN' ? '#fff' : theme.primary }]}>
-                    Open
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    { borderColor: theme.success },
-                    editStatus === 'RESOLVED' && { backgroundColor: theme.success }
-                  ]}
-                  onPress={() => setEditStatus('RESOLVED')}
-                >
-                  <Text style={[styles.statusButtonText, { color: editStatus === 'RESOLVED' ? '#fff' : theme.success }]}>
-                    Resolved
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.background }]}
-                onPress={() => setEditModalVisible(false)}
-              >
-                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.primary }]}
-                onPress={handleSaveEdit}
-              >
-                <Save size={18} color="#fff" />
-                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Save Changes</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
         visible={cartModalVisible}
         transparent
         animationType="slide"
@@ -1441,119 +1130,6 @@ export default function BossDashboard() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={settlementDetailModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSettlementDetailModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <ScrollView
-            style={styles.settlementDetailScrollView}
-            contentContainerStyle={styles.settlementDetailScrollContent}
-          >
-            <View style={[styles.settlementDetailContent, { backgroundColor: theme.card }]}>
-              <View style={styles.settlementDetailHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>Settlement Details</Text>
-                <TouchableOpacity onPress={() => setSettlementDetailModalVisible(false)}>
-                  <X size={24} color={theme.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              {selectedSettlement && (() => {
-                let payload: any = {};
-                try {
-                  payload = JSON.parse(selectedSettlement.payload_json);
-                } catch {
-                  payload = {};
-                }
-
-                return (
-                  <View style={styles.settlementDetailBody}>
-                    <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
-                      <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Shift Information</Text>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Cart:</Text>
-                        <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.cart_name || '—'}
-                        </Text>
-                      </View>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Seller:</Text>
-                        <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.seller_name || 'Operation Manager'}
-                        </Text>
-                      </View>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>Date:</Text>
-                        <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          {payload.date || '—'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
-                      <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Sales Summary</Text>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary }]}>By Payment Method:</Text>
-                      </View>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary, paddingLeft: 12 }]}>Cash:</Text>
-                        <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          ₱{payload.sales_summary?.cash || '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary, paddingLeft: 12 }]}>GCash:</Text>
-                        <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          ₱{payload.sales_summary?.gcash || '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.settlementRow}>
-                        <Text style={[styles.settlementLabel, { color: theme.textSecondary, paddingLeft: 12 }]}>Card:</Text>
-                        <Text style={[styles.settlementValue, { color: theme.text }]}>
-                          ₱{payload.sales_summary?.card || '0.00'}
-                        </Text>
-                      </View>
-                      <View style={[styles.settlementRow, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.border }]}>
-                        <Text style={[styles.settlementLabel, { color: theme.text, fontWeight: '600' }]}>Gross Sales:</Text>
-                        <Text style={[styles.settlementValue, { color: theme.primary, fontWeight: '700', fontSize: 18 }]}>
-                          ₱{payload.sales_summary?.total || '0.00'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {payload.products_sold && payload.products_sold.length > 0 && (
-                      <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
-                        <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Products Sold</Text>
-                        {payload.products_sold.map((product: any, index: number) => (
-                          <View key={index} style={styles.settlementRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.settlementLabel, { color: theme.text }]}>{product.name}</Text>
-                              <Text style={[styles.settlementValue, { color: theme.textSecondary, fontSize: 12 }]}>Qty: {product.qty}</Text>
-                            </View>
-                            <Text style={[styles.settlementValue, { color: theme.text }]}>₱{product.price}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    {payload.notes && (
-                      <View style={[styles.settlementSection, { backgroundColor: theme.background }]}>
-                        <Text style={[styles.settlementSectionTitle, { color: theme.text }]}>Notes</Text>
-                        <Text style={[styles.settlementNotesText, { color: theme.text }]}>
-                          {payload.notes}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })()}
-            </View>
-          </ScrollView>
         </View>
       </Modal>
 
