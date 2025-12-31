@@ -15,6 +15,7 @@ import { startOfDay, endOfDay, format } from 'date-fns';
 import { onSyncComplete, subscribeSyncStatus, syncNow, SyncStatus } from '@/lib/services/sync.service';
 import { getTodayOverviewSeries } from '@/lib/services/overview-analytics.service';
 import AnimatedDashboardChart, { OverviewPoint } from '@/components/AnimatedDashboardChart';
+import DashboardLoadingOverlay from '@/components/DashboardLoadingOverlay';
 
 export default function BossDashboard() {
   const { theme } = useTheme();
@@ -42,6 +43,7 @@ export default function BossDashboard() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   const [syncModalMessage, setSyncModalMessage] = useState('');
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -67,9 +69,14 @@ export default function BossDashboard() {
   useEffect(() => {
     const unsubscribe = subscribeSyncStatus((status) => {
       setSyncStatus(status);
+      if (status.isRunning) {
+        setShowLoadingOverlay(true);
+      } else if (showLoadingOverlay && !status.lastError) {
+        setShowLoadingOverlay(false);
+      }
     });
     return unsubscribe;
-  }, []);
+  }, [showLoadingOverlay]);
 
   useEffect(() => {
     if (selectedTab === 'overview' && (user?.role === 'general_manager' || user?.role === 'developer')) {
@@ -86,7 +93,7 @@ export default function BossDashboard() {
     }
   };
 
-  const { data: overviewChartData } = useQuery({
+  const { data: overviewChartData, isLoading: isLoadingChart, isFetching: isFetchingChart } = useQuery({
     queryKey: ['overview-chart-data'],
     queryFn: getTodayOverviewSeries,
     enabled: selectedTab === 'overview' && (user?.role === 'general_manager' || user?.role === 'developer'),
@@ -141,7 +148,7 @@ export default function BossDashboard() {
     enabled: selectedTab === 'settlements',
   });
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isFetching: isFetchingStats } = useQuery({
     queryKey: ['boss-monitoring-stats'],
     queryFn: async () => {
       console.log('[Dashboard Overview] Fetching stats...');
@@ -1656,6 +1663,23 @@ export default function BossDashboard() {
           </View>
         </View>
       </Modal>
+
+      {(user?.role === 'general_manager' || user?.role === 'developer') && selectedTab === 'overview' && (
+        <DashboardLoadingOverlay
+          visible={
+            showLoadingOverlay ||
+            ((isLoadingChart || isFetchingChart || isFetchingStats) && !chartPoints.length)
+          }
+          currentStep={syncStatus?.currentStep || 'Loading data...'}
+          progress={syncStatus?.progress}
+          pendingCount={syncStatus?.pendingCount}
+          lastSyncAt={syncStatus?.lastSyncAt}
+          lastError={syncStatus?.lastError}
+          onClose={syncStatus?.lastError ? () => {
+            setShowLoadingOverlay(false);
+          } : undefined}
+        />
+      )}
     </View>
   );
 }
