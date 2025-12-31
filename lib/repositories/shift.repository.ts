@@ -224,7 +224,106 @@ export class ShiftRepository extends BaseRepository {
       await this.syncOutbox.add('worker_shifts', shift_id, 'upsert', updatedShift);
     }
 
+    await this.createSettlementForShift(shift_id, shift.worker_id, shift.cart_id, now);
+
     console.log('[ShiftRepo] Shift ended:', shift_id);
+  }
+
+  private async createSettlementForShift(
+    shiftId: string,
+    workerId: string,
+    cartId: string,
+    clockOut: number
+  ): Promise<void> {
+    try {
+      const { SettlementRepository } = await import('./settlement.repository');
+      const { SaleRepository } = await import('./sale.repository');
+      const { PaymentRepository } = await import('./payment.repository');
+      const settlementRepo = new SettlementRepository();
+      const saleRepo = new SaleRepository();
+      const paymentRepo = new PaymentRepository();
+
+      const existingSettlement = await settlementRepo.findByShiftId(shiftId);
+      if (existingSettlement) {
+        console.log('[ShiftRepo] Settlement already exists for shift:', shiftId);
+        return;
+      }
+
+      const sales = (await saleRepo.findAll()).filter(sale => sale.shift_id === shiftId);
+      
+      const payments = await Promise.all(
+        sales.map(sale => paymentRepo.findBySaleId(sale.id))
+      );
+      const flatPayments = payments.flat();
+
+      const cashCents = flatPayments
+        .filter(p => p.method === 'CASH')
+        .reduce((sum, p) => sum + p.amount_cents, 0);
+      const gcashCents = flatPayments
+        .filter(p => p.method === 'GCASH')
+        .reduce((sum, p) => sum + p.amount_cents, 0);
+      const cardCents = flatPayments
+        .filter(p => p.method === 'CARD')
+        .reduce((sum, p) => sum + p.amount_cents, 0);
+      const totalSalesCents = sales.reduce((sum, sale) => sum + sale.total_cents, 0);
+
+      const dateIso = new Date(clockOut).toISOString().split('T')[0];
+
+      const settlement = await settlementRepo.create(
+        shiftId,
+        cartId,
+        workerId,
+        dateIso,
+        'SAVED',
+        undefined,
+        cashCents,
+        gcashCents,
+        cardCents,
+        totalSalesCents,
+        totalSalesCents,
+        workerId
+      );
+
+      const db = await this.getDb();
+      const saleItems = await db.getAllAsync<any>(
+        `SELECT si.*, p.name as product_name 
+         FROM sale_items si 
+         LEFT JOIN products p ON si.product_id = p.id 
+         WHERE si.sale_id IN (${sales.map(() => '?').join(',')})`,
+        sales.map(s => s.id)
+      );
+
+      const productsSold = saleItems.reduce((acc: any[], item: any) => {
+        const existing = acc.find(p => p.product_id === item.product_id);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.total_cents += item.line_total_cents;
+        } else {
+          acc.push({
+            product_id: item.product_id,
+            product_name: item.product_name || 'Unknown Product',
+            quantity: item.quantity,
+            total_cents: item.line_total_cents,
+          });
+        }
+        return acc;
+      }, []);
+
+      for (const product of productsSold) {
+        await settlementRepo.createSettlementItem(
+          settlement.id,
+          product.product_id,
+          product.product_name,
+          product.quantity,
+          product.total_cents,
+          workerId
+        );
+      }
+
+      console.log('[ShiftRepo] Created settlement for shift:', shiftId, 'settlement:', settlement.id);
+    } catch (error) {
+      console.error('[ShiftRepo] Failed to create settlement for shift:', shiftId, error);
+    }
   }
 
   async getActiveShift(worker_id: string): Promise<WorkerShift | null> {

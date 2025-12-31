@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 38;
+export const SCHEMA_VERSION = 39;
 
 export const MIGRATIONS = [
   {
@@ -1764,6 +1764,38 @@ export const MIGRATIONS = [
       DROP INDEX IF EXISTS idx_settlements_updated_at_iso;
       
       DELETE FROM sync_state WHERE table_name IN ('settlements', 'settlement_items');
+    `,
+  },
+  {
+    version: 39,
+    up: `
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK(type IN ('settlement_incoming', 'expense_pending', 'shift_ended')),
+        entity_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT,
+        seen_at INTEGER,
+        created_at INTEGER NOT NULL,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+      CREATE INDEX IF NOT EXISTS idx_notifications_entity_id ON notifications(entity_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_seen_at ON notifications(seen_at);
+      CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Created notifications table for settlement badges and alerts', ${Date.now()});
+    `,
+    down: `
+      DROP TABLE IF EXISTS notifications;
+      DROP INDEX IF EXISTS idx_notifications_type;
+      DROP INDEX IF EXISTS idx_notifications_entity_id;
+      DROP INDEX IF EXISTS idx_notifications_seen_at;
+      DROP INDEX IF EXISTS idx_notifications_created_at;
     `,
   },
 ];

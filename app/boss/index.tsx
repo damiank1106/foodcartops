@@ -51,6 +51,16 @@ export default function BossDashboard() {
   const savedItemsRepo = new BossSavedItemsRepository();
   const savedRecordRepo = new SavedRecordRepository();
 
+  const { data: settlementNotifications } = useQuery({
+    queryKey: ['settlement-notifications'],
+    queryFn: async () => {
+      const { NotificationRepository } = await import('@/lib/repositories/notification.repository');
+      const notifRepo = new NotificationRepository();
+      return await notifRepo.getUnseenCount('settlement_incoming');
+    },
+    refetchInterval: 30000,
+  });
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ['boss-monitoring-stats'],
     queryFn: async () => {
@@ -566,15 +576,25 @@ export default function BossDashboard() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tab}
-            onPress={() => setSelectedTab('settlements')}
+            onPress={() => {
+              setSelectedTab('settlements');
+              if (settlementNotifications && settlementNotifications > 0) {
+                (async () => {
+                  const { NotificationRepository } = await import('@/lib/repositories/notification.repository');
+                  const notifRepo = new NotificationRepository();
+                  await notifRepo.markAllSeenByType('settlement_incoming');
+                  queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
+                })();
+              }
+            }}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'settlements' ? theme.primary : theme.textSecondary }]}>
               Settlements
             </Text>
-            {(stats && (stats.unsettled_shifts_count > 0 || stats.pending_expenses_count > 0 || stats.cash_differences.length > 0)) && (
+            {(stats && (stats.unsettled_shifts_count > 0 || stats.pending_expenses_count > 0 || stats.cash_differences.length > 0 || (settlementNotifications && settlementNotifications > 0))) && (
               <View style={[styles.badge, { backgroundColor: theme.error }]}>
                 <Text style={styles.badgeText}>
-                  {stats.unsettled_shifts_count + stats.pending_expenses_count + stats.cash_differences.length}
+                  {stats.unsettled_shifts_count + stats.pending_expenses_count + stats.cash_differences.length + (settlementNotifications || 0)}
                 </Text>
               </View>
             )}

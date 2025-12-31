@@ -388,6 +388,24 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                 );
               }
             } else {
+              if (tableName === 'settlements') {
+                console.log(`[Sync] Processing settlement ${remoteRow.id} - status: ${remoteRow.status}`);
+                const NotificationRepository = (await import('../repositories/notification.repository')).NotificationRepository;
+                const notifRepo = new NotificationRepository();
+                
+                const alreadyExists = await notifRepo.checkIfExists('settlement_incoming', remoteRow.id);
+                if (!alreadyExists && remoteRow.status === 'SAVED') {
+                  await notifRepo.create(
+                    'settlement_incoming',
+                    remoteRow.id,
+                    'settlement',
+                    'New Settlement',
+                    `Settlement from shift ${remoteRow.shift_id}`
+                  );
+                  console.log(`[Sync] Created notification for settlement ${remoteRow.id}`);
+                }
+              }
+
               const localSchema = await db.getAllAsync<{ name: string }>(
                 `PRAGMA table_info(${tableName})`
               );
