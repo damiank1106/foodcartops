@@ -54,6 +54,19 @@ export class InventoryItemRepository extends BaseRepository {
     const nowISO = new Date(now).toISOString();
     const deviceId = await getDeviceId();
 
+    let storageGroupId = data.storage_group_id || null;
+    if (storageGroupId) {
+      const groupExists = await db.getFirstAsync<{ id: string }>(
+        'SELECT id FROM inventory_storage_groups WHERE id = ? AND is_active = 1 AND deleted_at IS NULL',
+        [storageGroupId]
+      );
+      if (!groupExists) {
+        console.warn(`[InventoryItemRepository] Storage group ${storageGroupId} not found, setting to null`);
+        console.log('[InventoryItemRepository] ⚠️ Storage group missing, moved item to None');
+        storageGroupId = null;
+      }
+    }
+
     const item: InventoryItem = {
       id,
       name: data.name,
@@ -61,7 +74,7 @@ export class InventoryItemRepository extends BaseRepository {
       current_qty: data.current_qty || 0,
       reorder_level_qty: data.reorder_level_qty || 0,
       storage_group: data.storage_group || 'FREEZER',
-      storage_group_id: data.storage_group_id || null,
+      storage_group_id: storageGroupId,
       price_cents: data.price_cents || 0,
       is_active: 1,
       created_at: now,
@@ -127,6 +140,19 @@ export class InventoryItemRepository extends BaseRepository {
       throw new Error('Inventory item not found');
     }
 
+    let storageGroupId = data.storage_group_id !== undefined ? data.storage_group_id : existing.storage_group_id;
+    if (storageGroupId) {
+      const groupExists = await db.getFirstAsync<{ id: string }>(
+        'SELECT id FROM inventory_storage_groups WHERE id = ? AND is_active = 1 AND deleted_at IS NULL',
+        [storageGroupId]
+      );
+      if (!groupExists) {
+        console.warn(`[InventoryItemRepository] Storage group ${storageGroupId} not found, setting to null`);
+        console.log('[InventoryItemRepository] ⚠️ Storage group missing, moved item to None');
+        storageGroupId = null;
+      }
+    }
+
     const now = this.now();
     const nowISO = new Date(now).toISOString();
     const updated: InventoryItem = {
@@ -136,7 +162,7 @@ export class InventoryItemRepository extends BaseRepository {
       current_qty: data.current_qty !== undefined ? data.current_qty : existing.current_qty,
       reorder_level_qty: data.reorder_level_qty !== undefined ? data.reorder_level_qty : existing.reorder_level_qty,
       storage_group: data.storage_group !== undefined ? data.storage_group : existing.storage_group,
-      storage_group_id: data.storage_group_id !== undefined ? data.storage_group_id : existing.storage_group_id,
+      storage_group_id: storageGroupId,
       price_cents: data.price_cents !== undefined ? data.price_cents : existing.price_cents,
       updated_at: now,
       updated_at_iso: nowISO,

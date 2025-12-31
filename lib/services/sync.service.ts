@@ -173,14 +173,30 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     );
     console.log(`[Sync] Pending outbox: ${outboxRows.length}`);
 
-    updateStatus({ progress: { total: outboxRows.length, current: 0 } });
+    const sortedOutbox = outboxRows.sort((a, b) => {
+      const order = [
+        'inventory_storage_groups',
+        'inventory_items',
+      ];
+      const aIndex = order.indexOf(a.table_name);
+      const bIndex = order.indexOf(b.table_name);
+      
+      if (aIndex !== -1 && bIndex !== -1) {
+        return aIndex - bIndex;
+      }
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return 0;
+    });
 
-    for (let i = 0; i < outboxRows.length; i++) {
-      const row = outboxRows[i];
+    updateStatus({ progress: { total: sortedOutbox.length, current: 0 } });
+
+    for (let i = 0; i < sortedOutbox.length; i++) {
+      const row = sortedOutbox[i];
       didWork = true;
       updateStatus({ 
-        currentStep: `Pushing ${row.table_name} (${i + 1}/${outboxRows.length})`,
-        progress: { total: outboxRows.length, current: i, table: row.table_name }
+        currentStep: `Pushing ${row.table_name} (${i + 1}/${sortedOutbox.length})`,
+        progress: { total: sortedOutbox.length, current: i, table: row.table_name }
       });
 
       try {
@@ -249,9 +265,49 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         }
 
         if (row.op === 'upsert') {
-          const { error } = await supabase
+          let { error } = await supabase
             .from(row.table_name)
             .upsert(syncPayload, { onConflict: 'id' });
+
+          if (error && row.table_name === 'inventory_items' && error.code === '23503' && error.message?.includes('inventory_storage_groups')) {
+            console.log(`[Sync] ⚠️ FK error for inventory_item ${row.row_id}: missing storage group ${syncPayload.storage_group_id}`);
+            
+            if (syncPayload.storage_group_id) {
+              try {
+                const localGroup = await db.getFirstAsync<any>(
+                  'SELECT * FROM inventory_storage_groups WHERE id = ?',
+                  [syncPayload.storage_group_id]
+                );
+                
+                if (localGroup) {
+                  console.log(`[Sync] Pushing missing storage group ${localGroup.id} (${localGroup.name})`);
+                  
+                  const groupPayload = stripLocalOnlyColumns('inventory_storage_groups', localGroup);
+                  const { error: groupError } = await supabase
+                    .from('inventory_storage_groups')
+                    .upsert(groupPayload, { onConflict: 'id' });
+                  
+                  if (groupError) {
+                    console.error('[Sync] Failed to push missing group:', groupError);
+                  } else {
+                    console.log('[Sync] FK missing group, pushed group then retrying item');
+                    
+                    const retryResult = await supabase
+                      .from(row.table_name)
+                      .upsert(syncPayload, { onConflict: 'id' });
+                    
+                    error = retryResult.error ?? null;
+                    
+                    if (!error) {
+                      console.log(`[Sync] ✅ Retry successful for inventory_item ${row.row_id}`);
+                    }
+                  }
+                }
+              } catch (retryError) {
+                console.error('[Sync] Error during FK retry:', retryError);
+              }
+            }
+          }
 
           if (error) {
             throw error;
