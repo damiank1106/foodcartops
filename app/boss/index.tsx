@@ -72,6 +72,17 @@ export default function BossDashboard() {
     refetchInterval: 30000,
   });
 
+  const { data: allSettlements } = useQuery({
+    queryKey: ['dashboard-all-settlements'],
+    queryFn: async () => {
+      console.log('[Dashboard Settlements Tab] Fetching all settlements');
+      const settlements = await settlementRepo.getAllSettlements(100);
+      console.log(`[Dashboard Settlements Tab] Got ${settlements.length} settlements`);
+      return settlements;
+    },
+    enabled: selectedTab === 'settlements',
+  });
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ['boss-monitoring-stats'],
     queryFn: async () => {
@@ -784,6 +795,61 @@ export default function BossDashboard() {
           {selectedTab === 'settlements' && (
             <>
               <Text style={[styles.pageTitle, { color: theme.text }]}>Settlements & Exceptions</Text>
+
+              {allSettlements && allSettlements.length > 0 && (
+                <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
+                  <View style={styles.exceptionMainContent}>
+                    <View style={styles.exceptionHeader}>
+                      <View style={[styles.exceptionIcon, { backgroundColor: theme.success + '20' }]}>
+                        <CheckCircle size={20} color={theme.success} />
+                      </View>
+                      <View style={styles.exceptionInfo}>
+                        <Text style={[styles.exceptionTitle, { color: theme.text }]}>
+                          All Settlements
+                        </Text>
+                        <Text style={[styles.exceptionCount, { color: theme.success }]}>
+                          {allSettlements.length} settlement{allSettlements.length !== 1 ? 's' : ''} in database
+                        </Text>
+                      </View>
+                    </View>
+                    {allSettlements.slice(0, 5).map((settlement) => (
+                      <TouchableOpacity
+                        key={settlement.id}
+                        style={styles.exceptionDetailRow}
+                        onPress={() => router.push(`/settlement/${settlement.shift_id}` as any)}
+                      >
+                        <View style={styles.exceptionDetail}>
+                          <Text style={[styles.exceptionDetailText, { color: theme.textSecondary }]}>
+                            {settlement.worker_name} • {settlement.cart_name}
+                          </Text>
+                          <Text style={[styles.exceptionDetailTime, { color: theme.textSecondary }]}>
+                            {format(settlement.created_at, 'MMM d, h:mm a')} • ₱{(settlement.total_cents / 100).toFixed(2)}
+                          </Text>
+                        </View>
+                        <View style={[
+                          styles.statusBadgeSmall,
+                          { backgroundColor: settlement.status === 'FINALIZED' ? theme.success + '20' : theme.warning + '20' }
+                        ]}>
+                          <Text style={[
+                            styles.statusBadgeText,
+                            { color: settlement.status === 'FINALIZED' ? theme.success : theme.warning }
+                          ]}>
+                            {settlement.status === 'FINALIZED' ? 'Final' : 'Draft'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    {allSettlements.length > 5 && (
+                      <TouchableOpacity
+                        style={[styles.viewAllButton, { backgroundColor: theme.primary + '10', marginTop: 8 }]}
+                        onPress={() => router.push('/boss/settlements' as any)}
+                      >
+                        <Text style={[styles.viewAllText, { color: theme.primary }]}>View All ({allSettlements.length})</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
 
               {stats && stats.unsettled_shifts_count > 0 && (
                 <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
@@ -2533,5 +2599,13 @@ const styles = StyleSheet.create({
   overviewModalSaleCard: {
     marginBottom: 12,
   },
-
+  statusBadgeSmall: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
 });

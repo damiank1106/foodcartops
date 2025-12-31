@@ -2,6 +2,7 @@ import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
 import { SaleRepository } from '../repositories/sale.repository';
 import { ExpenseRepository } from '../repositories/expense.repository';
 import { OtherExpenseRepository } from '../repositories/other-expense.repository';
+import { SettlementRepository } from '../repositories/settlement.repository';
 
 export type PeriodType = 'day' | 'week' | 'month' | 'year';
 
@@ -39,23 +40,34 @@ export interface CalendarAnalytics {
     amount_cents: number;
     notes?: string;
   }[];
+  settlements: {
+    id: string;
+    shift_id: string;
+    worker_name: string;
+    cart_name: string;
+    status: string;
+    total_cents: number;
+    created_at: number;
+  }[];
 }
 
 export class CalendarAnalyticsService {
   private saleRepo: SaleRepository;
   private expenseRepo: ExpenseRepository;
   private otherExpenseRepo: OtherExpenseRepository;
+  private settlementRepo: SettlementRepository;
 
   constructor() {
     this.saleRepo = new SaleRepository();
     this.expenseRepo = new ExpenseRepository();
     this.otherExpenseRepo = new OtherExpenseRepository();
+    this.settlementRepo = new SettlementRepository();
   }
 
   async getAnalytics(periodType: PeriodType, anchorDate: Date): Promise<CalendarAnalytics> {
     const dateRange = this.getDateRange(periodType, anchorDate);
 
-    const [sales, expenses, otherExpenses] = await Promise.all([
+    const [sales, expenses, otherExpenses, allSettlements] = await Promise.all([
       this.saleRepo.findAll({
         start_date: dateRange.start,
         end_date: dateRange.end,
@@ -65,7 +77,15 @@ export class CalendarAnalyticsService {
         format(dateRange.start, 'yyyy-MM-dd'),
         format(dateRange.end, 'yyyy-MM-dd')
       ),
+      this.settlementRepo.getAllSettlements(500),
     ]);
+
+    const settlements = allSettlements.filter((s: any) => {
+      const settlementDate = s.created_at;
+      return settlementDate >= dateRange.start.getTime() && settlementDate <= dateRange.end.getTime();
+    });
+
+    console.log(`[CalendarAnalytics] Found ${settlements.length} settlements in date range ${format(dateRange.start, 'yyyy-MM-dd')} to ${format(dateRange.end, 'yyyy-MM-dd')}`);
 
     const filteredExpenses = expenses.filter(
       (e) =>
@@ -118,6 +138,15 @@ export class CalendarAnalyticsService {
         name: oe.name,
         amount_cents: oe.amount_cents,
         notes: oe.notes,
+      })),
+      settlements: settlements.map((s: any) => ({
+        id: s.id,
+        shift_id: s.shift_id,
+        worker_name: s.worker_name || 'Unknown',
+        cart_name: s.cart_name || 'Unknown',
+        status: s.status,
+        total_cents: s.total_cents || 0,
+        created_at: s.created_at,
       })),
     };
   }
