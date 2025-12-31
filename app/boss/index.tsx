@@ -564,7 +564,7 @@ export default function BossDashboard() {
     }
   }, [selectedTab, navigation, theme]);
 
-  if (isLoading && !stats) {
+  if (isLoading && !stats && selectedTab !== 'overview') {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
@@ -1668,9 +1668,12 @@ export default function BossDashboard() {
         <DashboardLoadingOverlay
           visible={
             showLoadingOverlay ||
-            ((isLoadingChart || isFetchingChart || isFetchingStats) && !chartPoints.length)
+            isLoading ||
+            isLoadingChart ||
+            isFetchingChart ||
+            isFetchingStats
           }
-          currentStep={syncStatus?.currentStep || 'Loading data...'}
+          currentStep={syncStatus?.currentStep || (isLoading || isLoadingChart ? 'Loading data...' : 'idle')}
           progress={syncStatus?.progress}
           pendingCount={syncStatus?.pendingCount}
           lastSyncAt={syncStatus?.lastSyncAt}
