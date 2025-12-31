@@ -37,13 +37,26 @@ export default function BossSettlementsScreen() {
   const { data: settlements, isLoading } = useQuery({
     queryKey: ['boss-settlements', filterStatus],
     queryFn: async () => {
-      console.log('[Settlements] Fetching all settlements from local DB');
+      console.log('[Settlements Tab] Fetching all settlements from local DB');
       const allSettlements = await settlementRepo.getAllSettlements(100);
-      console.log(`[Settlements] Got ${allSettlements.length} settlements from DB`);
+      console.log(`[Settlements Tab] Got ${allSettlements.length} settlements from DB`);
+      
+      if (allSettlements.length > 0) {
+        console.log('[Settlements Tab] First 3 settlements:', allSettlements.slice(0, 3).map(s => ({
+          id: s.id,
+          status: s.status,
+          worker_name: s.worker_name,
+          cart_name: s.cart_name,
+          total_cents: s.total_cents
+        })));
+      }
 
-      if (filterStatus === 'ALL') return allSettlements;
+      if (filterStatus === 'ALL') {
+        console.log(`[Settlements Tab] Returning all ${allSettlements.length} settlements`);
+        return allSettlements;
+      }
       const filtered = allSettlements.filter((s) => s.status === filterStatus);
-      console.log(`[Settlements] Filtered to ${filtered.length} ${filterStatus} settlements`);
+      console.log(`[Settlements Tab] Filtered to ${filtered.length} ${filterStatus} settlements (looking for status=${filterStatus})`);
       return filtered;
     },
     enabled: !!(user && (isBoss || isDeveloper)),

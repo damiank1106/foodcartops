@@ -373,6 +373,15 @@ export class SettlementRepository extends BaseRepository {
   async getAllSettlements(limit: number = 100): Promise<SettlementWithDetails[]> {
     const db = await this.getDb();
     
+    const countResult = await db.getFirstAsync<{ total: number; deleted: number; active: number }>(
+      `SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN deleted_at IS NOT NULL OR is_deleted = 1 THEN 1 ELSE 0 END) as deleted,
+        SUM(CASE WHEN deleted_at IS NULL AND is_deleted = 0 THEN 1 ELSE 0 END) as active
+      FROM settlements`
+    );
+    console.log('[SettlementRepo] getAllSettlements - DB state:', countResult);
+    
     const query = `
       SELECT 
         s.*,
@@ -391,7 +400,19 @@ export class SettlementRepository extends BaseRepository {
     `;
 
     const results = await db.getAllAsync<SettlementWithDetails>(query, [limit]);
-    console.log(`[SettlementRepo] getAllSettlements returned ${results.length} settlements`);
+    console.log(`[SettlementRepo] getAllSettlements returned ${results.length} settlements (limit=${limit})`);
+    
+    if (results.length > 0) {
+      console.log('[SettlementRepo] Sample settlements:', results.slice(0, 3).map(s => ({
+        id: s.id,
+        status: s.status,
+        worker_name: s.worker_name,
+        business_id: (s as any).business_id,
+        is_deleted: (s as any).is_deleted,
+        deleted_at: (s as any).deleted_at
+      })));
+    }
+    
     return results;
   }
 

@@ -75,6 +75,7 @@ export default function BossDashboard() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['boss-monitoring-stats'],
     queryFn: async () => {
+      console.log('[Dashboard Overview] Fetching stats...');
       const today = new Date();
       const startOfToday = startOfDay(today);
       const endOfToday = endOfDay(today);
@@ -95,8 +96,20 @@ export default function BossDashboard() {
       const estimatedProfitCents = todayRevenueCents - todayExpensesCents;
 
       const unsettledShifts = await settlementRepo.getAllUnsettledShifts();
-      console.log(`[Dashboard] Unsettled shifts count: ${unsettledShifts.length}`);
+      console.log(`[Dashboard Overview] Unsettled shifts count: ${unsettledShifts.length}`);
       const cashDifferences = await settlementRepo.getCashDifferences();
+      console.log(`[Dashboard Overview] Cash differences count: ${cashDifferences.length}`);
+      
+      const allSettlements = await settlementRepo.getAllSettlements(100);
+      console.log(`[Dashboard Overview] Total settlements in DB: ${allSettlements.length}`);
+      if (allSettlements.length > 0) {
+        console.log('[Dashboard Overview] Sample settlement:', {
+          id: allSettlements[0].id,
+          status: allSettlements[0].status,
+          worker_name: allSettlements[0].worker_name,
+          created_at: allSettlements[0].created_at
+        });
+      }
       const cashDifferencesSumCents = cashDifferences.reduce((sum, d) => sum + d.cash_difference_cents, 0);
 
       const pendingExpensesCount = await expenseRepo.getPendingCount();
