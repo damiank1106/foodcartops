@@ -5,7 +5,7 @@ import { getDeviceId } from '../utils/device-id';
 interface SettlementItem {
   id: string;
   settlement_id: string;
-  product_id: string;
+  product_id: string | null;
   product_name: string;
   qty: number;
   price_cents: number;
@@ -91,7 +91,7 @@ export class SettlementRepository extends BaseRepository {
 
   async createSettlementItem(
     settlementId: string,
-    productId: string,
+    productId: string | null,
     productName: string,
     qty: number,
     priceCents: number,
@@ -117,7 +117,7 @@ export class SettlementRepository extends BaseRepository {
     );
 
     const payload = {
-      id, settlement_id: settlementId, product_id: productId,
+      id, settlement_id: settlementId, product_id: productId ?? null,
       product_name: productName, qty, price_cents: priceCents,
       business_id: businessId, device_id: deviceId,
       is_deleted: 0, deleted_at: null,
@@ -522,7 +522,7 @@ export class SettlementRepository extends BaseRepository {
       const itemPayload = {
         id: item.id,
         settlement_id: item.settlement_id,
-        product_id: item.product_id,
+        product_id: item.product_id ?? null,
         product_name: item.product_name,
         qty: item.qty,
         price_cents: item.price_cents,

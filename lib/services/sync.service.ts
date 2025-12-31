@@ -216,10 +216,18 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         }
 
         if (row.table_name === 'settlement_items') {
+          if (syncPayload.product_id === undefined) {
+            console.log(`[Sync] ⚠️ settlement_items ${row.row_id} has undefined product_id, converting to null`);
+            syncPayload.product_id = null;
+          }
+          if (syncPayload.product_id === null) {
+            console.log(`[Sync] ℹ️ settlement_items ${row.row_id} has NULL product_id (product may be deleted)`);
+          }
           console.log('[Sync] ✅ Pushing settlement_items:', row.row_id);
           console.log('[Sync] settlement_items payload:', {
             id: syncPayload.id,
             settlement_id: syncPayload.settlement_id,
+            product_id: syncPayload.product_id,
             product_name: syncPayload.product_name,
             keys: Object.keys(syncPayload)
           });
@@ -468,14 +476,23 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                   continue;
                 }
 
-                const productExists = await db.getFirstAsync<{ id: string }>(
-                  'SELECT id FROM products WHERE id = ?',
-                  [remoteRow.product_id]
-                );
-
-                if (!productExists) {
-                  console.log(`[Sync] ⚠️ Settlement item ${remoteRow.id} references missing product ${remoteRow.product_id}, setting product_id to NULL`);
+                if (remoteRow.product_id === undefined || remoteRow.product_id === '') {
+                  console.log(`[Sync] ℹ️ settlement_item ${remoteRow.id} has empty product_id from Supabase, converting to NULL`);
                   remoteRow.product_id = null;
+                }
+
+                if (remoteRow.product_id === null) {
+                  console.log(`[Sync] ℹ️ settlement_item ${remoteRow.id} has NULL product_id (product deleted or missing)`);
+                } else {
+                  const productExists = await db.getFirstAsync<{ id: string }>(
+                    'SELECT id FROM products WHERE id = ?',
+                    [remoteRow.product_id]
+                  );
+
+                  if (!productExists) {
+                    console.log(`[Sync] ⚠️ Settlement item ${remoteRow.id} references missing product ${remoteRow.product_id}, setting product_id to NULL`);
+                    remoteRow.product_id = null;
+                  }
                 }
               }
 
@@ -601,14 +618,21 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             continue;
           }
 
-          const productExists = await db.getFirstAsync<{ id: string }>(
-            'SELECT id FROM products WHERE id = ?',
-            [remoteRow.product_id]
-          );
-
-          if (!productExists) {
-            console.log(`[Sync] ⚠️ RETRY: Product ${remoteRow.product_id} not found, setting to NULL for settlement_item ${remoteRow.id}`);
+          if (remoteRow.product_id === undefined || remoteRow.product_id === '') {
+            console.log(`[Sync] ℹ️ RETRY: settlement_item ${remoteRow.id} has empty product_id, converting to NULL`);
             remoteRow.product_id = null;
+          }
+
+          if (remoteRow.product_id !== null) {
+            const productExists = await db.getFirstAsync<{ id: string }>(
+              'SELECT id FROM products WHERE id = ?',
+              [remoteRow.product_id]
+            );
+
+            if (!productExists) {
+              console.log(`[Sync] ⚠️ RETRY: Product ${remoteRow.product_id} not found, setting to NULL for settlement_item ${remoteRow.id}`);
+              remoteRow.product_id = null;
+            }
           }
 
           const localSchema = await db.getAllAsync<{ name: string }>(
