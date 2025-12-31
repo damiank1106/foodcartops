@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database, Calendar as CalendarIcon } from 'lucide-react-native';
@@ -13,6 +13,7 @@ import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
 import { SavedRecordRepository } from '@/lib/repositories/saved-record.repository';
 import { startOfDay, endOfDay, format } from 'date-fns';
+import { onSyncComplete } from '@/lib/services/sync.service';
 
 export default function BossDashboard() {
   const { theme } = useTheme();
@@ -51,6 +52,16 @@ export default function BossDashboard() {
   const savedItemsRepo = new BossSavedItemsRepository();
   const savedRecordRepo = new SavedRecordRepository();
 
+  useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[Dashboard] Sync completed, refetching stats');
+      queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['boss-activity-feed'] });
+    });
+    return unsubscribe;
+  }, [queryClient]);
+
   const { data: settlementNotifications } = useQuery({
     queryKey: ['settlement-notifications'],
     queryFn: async () => {
@@ -83,7 +94,8 @@ export default function BossDashboard() {
 
       const estimatedProfitCents = todayRevenueCents - todayExpensesCents;
 
-      const unsettledShifts = await settlementRepo.getUnsettledShifts();
+      const unsettledShifts = await settlementRepo.getAllUnsettledShifts();
+      console.log(`[Dashboard] Unsettled shifts count: ${unsettledShifts.length}`);
       const cashDifferences = await settlementRepo.getCashDifferences();
       const cashDifferencesSumCents = cashDifferences.reduce((sum, d) => sum + d.cash_difference_cents, 0);
 

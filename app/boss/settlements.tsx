@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,35 +7,46 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { DollarSign, ChevronRight, Filter } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
-import { ShiftRepository } from '@/lib/repositories';
+import { onSyncComplete } from '@/lib/services/sync.service';
 
 export default function BossSettlementsScreen() {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, isBoss, isDeveloper } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const settlementRepo = new SettlementRepository();
-  const shiftRepo = new ShiftRepository();
 
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'SAVED' | 'FINALIZED'>('ALL');
+
+  useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[Settlements] Sync completed, refetching settlements');
+      queryClient.invalidateQueries({ queryKey: ['boss-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
+    });
+    return unsubscribe;
+  }, [queryClient]);
 
   const { data: settlements, isLoading } = useQuery({
     queryKey: ['boss-settlements', filterStatus],
     queryFn: async () => {
-      const shifts = await shiftRepo.getShifts();
-      const cartIds = [...new Set(shifts.map((s) => s.cart_id))] as string[];
-      const allSettlements = await settlementRepo.getSettlementsByCartIds(cartIds, 100);
+      console.log('[Settlements] Fetching all settlements from local DB');
+      const allSettlements = await settlementRepo.getAllSettlements(100);
+      console.log(`[Settlements] Got ${allSettlements.length} settlements from DB`);
 
       if (filterStatus === 'ALL') return allSettlements;
-      return allSettlements.filter((s) => s.status === filterStatus);
+      const filtered = allSettlements.filter((s) => s.status === filterStatus);
+      console.log(`[Settlements] Filtered to ${filtered.length} ${filterStatus} settlements`);
+      return filtered;
     },
-    enabled: !!user,
+    enabled: !!(user && (isBoss || isDeveloper)),
   });
 
   const handleSettlementPress = (shiftId: string) => {

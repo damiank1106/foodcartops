@@ -320,6 +320,28 @@ export class SettlementRepository extends BaseRepository {
     console.log('[SettlementRepo] Settlement finalized:', id);
   }
 
+  async getAllUnsettledShifts(): Promise<{ shift_id: string; worker_name: string; cart_name: string; clock_out: number }[]> {
+    const db = await this.getDb();
+    
+    const query = `
+      SELECT 
+        ws.id as shift_id,
+        u.name as worker_name,
+        c.name as cart_name,
+        ws.clock_out
+      FROM worker_shifts ws
+      LEFT JOIN users u ON ws.worker_id = u.id
+      LEFT JOIN carts c ON ws.cart_id = c.id
+      LEFT JOIN settlements s ON ws.id = s.shift_id AND s.deleted_at IS NULL AND s.is_deleted = 0
+      WHERE ws.status = 'ended' AND ws.deleted_at IS NULL AND ws.is_deleted = 0 AND s.id IS NULL
+      ORDER BY ws.clock_out DESC
+    `;
+
+    const results = await db.getAllAsync<{ shift_id: string; worker_name: string; cart_name: string; clock_out: number }>(query);
+    console.log(`[SettlementRepo] getAllUnsettledShifts returned ${results.length} shifts`);
+    return results;
+  }
+
   async getUnsettledShifts(cartIds?: string[]): Promise<{ shift_id: string; worker_name: string; cart_name: string; clock_out: number }[]> {
     const db = await this.getDb();
     
@@ -345,6 +367,31 @@ export class SettlementRepository extends BaseRepository {
     query += ' ORDER BY ws.clock_out DESC';
 
     const results = await db.getAllAsync<{ shift_id: string; worker_name: string; cart_name: string; clock_out: number }>(query, params);
+    return results;
+  }
+
+  async getAllSettlements(limit: number = 100): Promise<SettlementWithDetails[]> {
+    const db = await this.getDb();
+    
+    const query = `
+      SELECT 
+        s.*,
+        w.name as worker_name,
+        c.name as cart_name,
+        u1.name as created_by_name,
+        u2.name as finalized_by_name
+      FROM settlements s
+      LEFT JOIN users w ON s.seller_user_id = w.id
+      LEFT JOIN carts c ON s.cart_id = c.id
+      LEFT JOIN users u1 ON s.seller_user_id = u1.id
+      LEFT JOIN users u2 ON s.seller_user_id = u2.id
+      WHERE s.deleted_at IS NULL AND s.is_deleted = 0
+      ORDER BY s.created_at DESC
+      LIMIT ?
+    `;
+
+    const results = await db.getAllAsync<SettlementWithDetails>(query, [limit]);
+    console.log(`[SettlementRepo] getAllSettlements returned ${results.length} settlements`);
     return results;
   }
 

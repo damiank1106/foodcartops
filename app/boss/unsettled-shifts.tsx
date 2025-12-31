@@ -1,30 +1,43 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, Stack } from 'expo-router';
 import { Clock, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
+import { onSyncComplete } from '@/lib/services/sync.service';
 
 export default function UnsettledShiftsScreen() {
   const { theme } = useTheme();
-  const { user, assignedCartIds, isBoss, isDeveloper } = useAuth();
+  const { user, isBoss, isDeveloper } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const settlementRepo = new SettlementRepository();
 
   const handleBackToExceptions = () => {
     router.replace('/boss' as any);
   };
 
+  useEffect(() => {
+    const unsubscribe = onSyncComplete(() => {
+      console.log('[UnsettledShifts] Sync completed, refetching unsettled shifts');
+      queryClient.invalidateQueries({ queryKey: ['unsettled-shifts'] });
+    });
+    return unsubscribe;
+  }, [queryClient]);
+
   const { data: unsettledShifts, isLoading } = useQuery({
-    queryKey: ['unsettled-shifts', assignedCartIds, isBoss, isDeveloper],
-    queryFn: () => {
+    queryKey: ['unsettled-shifts', isBoss, isDeveloper],
+    queryFn: async () => {
       if (isBoss || isDeveloper) {
-        return settlementRepo.getUnsettledShifts();
+        console.log('[UnsettledShifts] Fetching all unsettled shifts from local DB');
+        const shifts = await settlementRepo.getAllUnsettledShifts();
+        console.log(`[UnsettledShifts] Got ${shifts.length} unsettled shifts`);
+        return shifts;
       }
-      return Promise.resolve([]);
+      return [];
     },
     enabled: !!(isBoss || isDeveloper),
   });
