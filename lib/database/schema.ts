@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 43;
+export const SCHEMA_VERSION = 44;
 
 export const MIGRATIONS = [
   {
@@ -1908,6 +1908,18 @@ export const MIGRATIONS = [
       (lower(hex(randomblob(16))), 'Migration 43: No-op (settlements already fixed in migration 38)', ${Date.now()});
     `,
     down: `
+    `,
+  },
+  {
+    version: 44,
+    up: `
+      ALTER TABLE user_preferences ADD COLUMN last_seen_expenses_at TEXT;
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added last_seen_expenses_at to user_preferences for expenses badge', ${Date.now()});
+    `,
+    down: `
+      ALTER TABLE user_preferences DROP COLUMN last_seen_expenses_at;
     `,
   },
 ];

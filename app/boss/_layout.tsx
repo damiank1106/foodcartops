@@ -4,11 +4,13 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import { useExpensesBadge } from '@/lib/utils/useExpensesBadge';
 
 export default function BossLayout() {
   const { theme } = useTheme();
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const expensesBadgeCount = useExpensesBadge();
 
   useEffect(() => {
     if (!isLoading && (!user || (user.role !== 'general_manager' && user.role !== 'developer'))) {
@@ -66,6 +68,7 @@ export default function BossLayout() {
         options={{
           title: 'Expenses',
           tabBarIcon: ({ color }) => <Receipt size={24} color={color} />,
+          tabBarBadge: expensesBadgeCount > 0 ? expensesBadgeCount : undefined,
         }}
       />
       <Tabs.Screen

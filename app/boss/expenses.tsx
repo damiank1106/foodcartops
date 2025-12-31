@@ -11,10 +11,12 @@ import {
   Image,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect } from 'expo-router';
 import { CheckCircle, XCircle, Coins, Eye, X, Clock, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { ExpenseRepository, AuditRepository } from '@/lib/repositories';
+import { UserPreferencesRepository } from '@/lib/repositories/user-preferences.repository';
 import type { ExpenseWithDetails } from '@/lib/types';
 import { format } from 'date-fns';
 
@@ -28,6 +30,22 @@ export default function BossExpensesScreen() {
 
   const expenseRepo = new ExpenseRepository();
   const auditRepo = new AuditRepository();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        const prefsRepo = new UserPreferencesRepository();
+        const clearBadge = async () => {
+          await prefsRepo.upsert(
+            { user_id: user.id, last_seen_expenses_at: new Date().toISOString() },
+            user.id
+          );
+          queryClient.invalidateQueries({ queryKey: ['expenses-badge-count'] });
+        };
+        clearBadge();
+      }
+    }, [user, queryClient])
+  );
 
   const { data: expenses, isLoading } = useQuery({
     queryKey: ['boss-expenses', filter],

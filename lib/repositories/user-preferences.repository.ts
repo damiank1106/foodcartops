@@ -10,6 +10,7 @@ export interface UserPreferences {
   light_bg_intensity: LightBgIntensity;
   food_icons_enabled: number;
   food_icons_intensity: FoodIconsIntensity;
+  last_seen_expenses_at: string | null;
   updated_at: number;
 }
 
@@ -36,6 +37,7 @@ export class UserPreferencesRepository extends BaseRepository {
       light_bg_intensity: 'medium',
       food_icons_enabled: 0,
       food_icons_intensity: 'medium',
+      last_seen_expenses_at: null,
       updated_at: this.now(),
     };
 
@@ -51,8 +53,8 @@ export class UserPreferencesRepository extends BaseRepository {
 
     await db.runAsync(
       `INSERT OR REPLACE INTO user_preferences 
-       (user_id, dark_mode, light_bg_color, light_bg_intensity, food_icons_enabled, food_icons_intensity, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       (user_id, dark_mode, light_bg_color, light_bg_intensity, food_icons_enabled, food_icons_intensity, last_seen_expenses_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         prefs.user_id,
         prefs.dark_mode ?? (existing?.dark_mode ?? 1),
@@ -60,6 +62,7 @@ export class UserPreferencesRepository extends BaseRepository {
         prefs.light_bg_intensity ?? (existing?.light_bg_intensity ?? 'medium'),
         prefs.food_icons_enabled ?? (existing?.food_icons_enabled ?? 0),
         prefs.food_icons_intensity ?? (existing?.food_icons_intensity ?? 'medium'),
+        prefs.last_seen_expenses_at ?? (existing?.last_seen_expenses_at ?? null),
         now,
       ]
     );
