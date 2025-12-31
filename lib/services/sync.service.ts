@@ -326,13 +326,13 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
     const tables = [
       'users',
+      'carts',
       'product_categories',
       'products',
-      'carts',
       'inventory_storage_groups',
       'inventory_items',
-      'expenses',
       'worker_shifts',
+      'expenses',
       'settlements',
       'settlement_items'
     ];
