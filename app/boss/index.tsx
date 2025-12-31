@@ -84,13 +84,24 @@ export default function BossDashboard() {
       const today = new Date();
       const startOfToday = startOfDay(today);
       const endOfToday = endOfDay(today);
+      const todayDateIso = format(today, 'yyyy-MM-dd');
 
       const todaySales = await saleRepo.findAll({
         start_date: startOfToday,
         end_date: endOfToday,
       });
 
-      const todayRevenueCents = todaySales.reduce((sum, sale) => sum + sale.total_cents, 0);
+      const allSettlementsForToday = await settlementRepo.getAllSettlements(500);
+      const todaySettlements = allSettlementsForToday.filter(
+        s => s.date_iso === todayDateIso || (s.created_at >= startOfToday.getTime() && s.created_at <= endOfToday.getTime())
+      );
+      console.log(`[Dashboard Overview] Found ${todaySettlements.length} settlements for today (${todayDateIso})`);
+
+      const todaySalesRevenueCents = todaySales.reduce((sum, sale) => sum + sale.total_cents, 0);
+      const todaySettlementsRevenueCents = todaySettlements.reduce((sum, s) => sum + s.total_cents, 0);
+      const todayRevenueCents = todaySalesRevenueCents + todaySettlementsRevenueCents;
+      console.log(`[Dashboard Overview] Revenue breakdown: Sales=${todaySalesRevenueCents}, Settlements=${todaySettlementsRevenueCents}, Total=${todayRevenueCents}`);
+      
       const activeWorkerCount = await shiftRepo.getActiveWorkerCount();
       
       const todayExpenses = (await expenseRepo.findAll()).filter(
@@ -124,25 +135,50 @@ export default function BossDashboard() {
       const carts = await cartRepo.findAll();
       const revenueByCart = carts.map((cart) => {
         const cartSales = todaySales.filter((sale) => sale.cart_id === cart.id);
-        const revenue = cartSales.reduce((sum, sale) => sum + sale.total_cents, 0);
+        const cartSettlements = todaySettlements.filter((s) => s.cart_id === cart.id);
+        const salesRevenue = cartSales.reduce((sum, sale) => sum + sale.total_cents, 0);
+        const settlementsRevenue = cartSettlements.reduce((sum, s) => sum + s.total_cents, 0);
+        const revenue = salesRevenue + settlementsRevenue;
         return { cart_name: cart.name, revenue_cents: revenue };
       });
 
-      const revenueByPayment = (['CASH', 'CARD', 'GCASH', 'OTHER'] as const).map((method) => {
-        const revenue = todaySales.reduce((sum, sale) => {
-          const paymentTotal = sale.payments
-            .filter(p => p.method === method)
-            .reduce((s, p) => s + p.amount_cents, 0);
-          return sum + paymentTotal;
-        }, 0);
-        return { payment_method: method, revenue_cents: revenue };
-      });
+      const revenueByPayment = [
+        {
+          payment_method: 'CASH' as const,
+          revenue_cents: todaySales.reduce((sum, sale) => {
+            const paymentTotal = sale.payments.filter(p => p.method === 'CASH').reduce((s, p) => s + p.amount_cents, 0);
+            return sum + paymentTotal;
+          }, 0) + todaySettlements.reduce((sum, s) => sum + s.cash_cents, 0)
+        },
+        {
+          payment_method: 'GCASH' as const,
+          revenue_cents: todaySales.reduce((sum, sale) => {
+            const paymentTotal = sale.payments.filter(p => p.method === 'GCASH').reduce((s, p) => s + p.amount_cents, 0);
+            return sum + paymentTotal;
+          }, 0) + todaySettlements.reduce((sum, s) => sum + s.gcash_cents, 0)
+        },
+        {
+          payment_method: 'CARD' as const,
+          revenue_cents: todaySales.reduce((sum, sale) => {
+            const paymentTotal = sale.payments.filter(p => p.method === 'CARD').reduce((s, p) => s + p.amount_cents, 0);
+            return sum + paymentTotal;
+          }, 0) + todaySettlements.reduce((sum, s) => sum + s.card_cents, 0)
+        },
+        {
+          payment_method: 'OTHER' as const,
+          revenue_cents: todaySales.reduce((sum, sale) => {
+            const paymentTotal = sale.payments.filter(p => p.method === 'OTHER').reduce((s, p) => s + p.amount_cents, 0);
+            return sum + paymentTotal;
+          }, 0)
+        }
+      ];
 
       const activeShifts = await shiftRepo.getActiveShifts();
       const lastShift = await shiftRepo.getLastCompletedShift();
 
       return {
         today_sales: todaySales.length,
+        today_transactions: todaySales.length + todaySettlements.length,
         today_revenue_cents: todayRevenueCents,
         today_expenses_cents: todayExpensesCents,
         estimated_profit_cents: estimatedProfitCents,
@@ -156,6 +192,7 @@ export default function BossDashboard() {
         unsettled_shifts: unsettledShifts,
         cash_differences: cashDifferences,
         today_sales_list: todaySales,
+        today_settlements_list: todaySettlements,
         today_expenses_list: todayExpenses,
         active_shifts: activeShifts,
         last_shift: lastShift,
@@ -611,7 +648,7 @@ export default function BossDashboard() {
                   <View style={[styles.iconContainer, { backgroundColor: theme.success + '20' }]}>
                     <ShoppingBag size={24} color={theme.success} />
                   </View>
-                  <Text style={[styles.statValue, { color: theme.text }]}>{stats?.today_sales}</Text>
+                  <Text style={[styles.statValue, { color: theme.text }]}>{stats?.today_transactions || stats?.today_sales}</Text>
                   <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Transactions</Text>
                 </TouchableOpacity>
 
@@ -1255,12 +1292,12 @@ export default function BossDashboard() {
               {overviewModalType === 'sales' && (
                 <View>
                   <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, marginBottom: 16 }]}>
-                    All sales recorded today across all carts and users. This includes items sold and their prices.
+                    All sales and settlements recorded today across all carts and users.
                   </Text>
                   <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16, fontWeight: '700' }]}>
-                    Total Sales Today: ₱{((stats?.today_revenue_cents || 0) / 100).toFixed(2)}
+                    Total Revenue Today: ₱{((stats?.today_revenue_cents || 0) / 100).toFixed(2)}
                   </Text>
-                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Items Sold:</Text>
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Sales:</Text>
                   {stats?.today_sales_list && stats.today_sales_list.length > 0 ? (
                     stats.today_sales_list.map((sale) => (
                       <View key={sale.id} style={[styles.overviewModalSaleCard, { backgroundColor: theme.background, marginBottom: 12, padding: 12, borderRadius: 8 }]}>
@@ -1284,6 +1321,28 @@ export default function BossDashboard() {
                   ) : (
                     <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No sales today</Text>
                   )}
+                  
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text, marginTop: 16 }]}>Settlements:</Text>
+                  {(stats as any)?.today_settlements_list && (stats as any).today_settlements_list.length > 0 ? (
+                    (stats as any).today_settlements_list.map((settlement: any) => (
+                      <View key={settlement.id} style={[styles.overviewModalSaleCard, { backgroundColor: theme.background, marginBottom: 12, padding: 12, borderRadius: 8 }]}>
+                        <View style={styles.overviewModalRow}>
+                          <Text style={[styles.overviewModalLabel, { color: theme.text, fontWeight: '600' }]}>{settlement.cart_name}</Text>
+                          <Text style={[styles.overviewModalValue, { color: theme.primary, fontWeight: '600' }]}>₱{(settlement.total_cents / 100).toFixed(2)}</Text>
+                        </View>
+                        <View style={[styles.overviewModalRow, { paddingVertical: 4 }]}>
+                          <Text style={[styles.overviewModalLabel, { color: theme.textSecondary, fontSize: 14 }]}>Cash: ₱{(settlement.cash_cents / 100).toFixed(2)}</Text>
+                          <Text style={[styles.overviewModalLabel, { color: theme.textSecondary, fontSize: 14 }]}>GCash: ₱{(settlement.gcash_cents / 100).toFixed(2)}</Text>
+                        </View>
+                        <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12, marginTop: 4 }]}>
+                          {format(settlement.created_at, 'h:mm a')} • {settlement.worker_name}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No settlements today</Text>
+                  )}
+                  
                   <Text style={[styles.overviewModalSectionTitle, { color: theme.text, marginTop: 16 }]}>By Payment Method:</Text>
                   {stats?.revenue_by_payment.map((item, index) => (
                     <View key={index} style={styles.overviewModalRow}>
@@ -1349,12 +1408,12 @@ export default function BossDashboard() {
               {overviewModalType === 'transactions' && (
                 <View>
                   <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, marginBottom: 16 }]}>
-                    Individual sales transactions recorded today. Each transaction represents a completed sale at a cart.
+                    Individual sales and settlements recorded today. Each transaction represents a completed sale or settlement at a cart.
                   </Text>
                   <Text style={[styles.overviewModalText, { color: theme.text, marginBottom: 16, fontWeight: '700' }]}>
-                    Total Transactions Today: {stats?.today_sales || 0}
+                    Total Transactions Today: {stats?.today_transactions || stats?.today_sales || 0}
                   </Text>
-                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Transaction List:</Text>
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text }]}>Sales:</Text>
                   {stats?.today_sales_list && stats.today_sales_list.length > 0 ? (
                     stats.today_sales_list.map((sale) => (
                       <View key={sale.id} style={[styles.overviewModalRow, { paddingVertical: 8 }]}>
@@ -1368,7 +1427,24 @@ export default function BossDashboard() {
                       </View>
                     ))
                   ) : (
-                    <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No transactions today</Text>
+                    <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No sales today</Text>
+                  )}
+                  
+                  <Text style={[styles.overviewModalSectionTitle, { color: theme.text, marginTop: 16 }]}>Settlements:</Text>
+                  {(stats as any)?.today_settlements_list && (stats as any).today_settlements_list.length > 0 ? (
+                    (stats as any).today_settlements_list.map((settlement: any) => (
+                      <View key={settlement.id} style={[styles.overviewModalRow, { paddingVertical: 8 }]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.overviewModalLabel, { color: theme.text }]}>{settlement.cart_name}</Text>
+                          <Text style={[styles.overviewModalInfo, { color: theme.textSecondary, fontSize: 12 }]}>
+                            {format(settlement.created_at, 'h:mm a')} • {settlement.worker_name}
+                          </Text>
+                        </View>
+                        <Text style={[styles.overviewModalValue, { color: theme.primary, fontWeight: '600' }]}>₱{(settlement.total_cents / 100).toFixed(2)}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={[styles.overviewModalInfo, { color: theme.textSecondary }]}>No settlements today</Text>
                   )}
                 </View>
               )}
