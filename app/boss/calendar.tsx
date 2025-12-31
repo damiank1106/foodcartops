@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,15 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { subscribeSyncStatus, SyncStatus } from '@/lib/services/sync.service';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
-import { CalendarAnalyticsService, PeriodType } from '@/lib/services/calendar-analytics.service';
+import { CalendarAnalyticsService, PeriodType, CalendarAnalytics } from '@/lib/services/calendar-analytics.service';
 import { OtherExpenseRepository } from '@/lib/repositories/other-expense.repository';
 import { Calendar as CalendarIcon, Plus, X, Trash2, ChevronLeft, ChevronRight, Download, FileText, BarChart3 } from 'lucide-react-native';
+import DashboardLoadingOverlay from '@/components/DashboardLoadingOverlay';
 import { format, addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'date-fns';
 import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
@@ -53,15 +56,58 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
   const [progressModalVisible, setProgressModalVisible] = useState(false);
   const [progressSteps, setProgressSteps] = useState<{ label: string; state: 'pending' | 'done' | 'error' }[]>([]);
   const [exportStatus, setExportStatus] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const [syncInterval, setSyncInterval] = useState<number>(300000);
+  const hasLoadedOnceRef = useRef(false);
+  const isLoadingRef = useRef(false);
 
   const analyticsService = new CalendarAnalyticsService();
   const otherExpenseRepo = new OtherExpenseRepository();
 
-  const { data: analytics, isLoading } = useQuery({
+  useEffect(() => {
+    const loadSyncInterval = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('sync_interval');
+        const interval = saved ? parseInt(saved, 10) : 300000;
+        setSyncInterval(interval);
+        console.log('[Calendar] Sync interval loaded:', interval, interval === 0 ? '(Manual)' : `(${interval}ms)`);
+      } catch (error) {
+        console.error('[Calendar] Failed to load sync interval:', error);
+        setSyncInterval(300000);
+      }
+    };
+    loadSyncInterval();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStatus((status) => {
+      setSyncStatus(status);
+      
+      if (status.isRunning && isLoadingRef.current) {
+        setShowLoadingOverlay(true);
+      } else if (!status.isRunning && showLoadingOverlay) {
+        setShowLoadingOverlay(false);
+        isLoadingRef.current = false;
+      }
+    });
+    return unsubscribe;
+  }, [showLoadingOverlay]);
+
+  const { data: analytics, isLoading } = useQuery<CalendarAnalytics>({
     queryKey: ['calendar-analytics', periodType, format(anchorDate, 'yyyy-MM-dd')],
-    queryFn: async () => {
-      return analyticsService.getAnalytics(periodType, anchorDate);
+    queryFn: async (): Promise<CalendarAnalytics> => {
+      console.log('[Calendar] load start');
+      
+      const result = await analyticsService.getAnalytics(periodType, anchorDate);
+      console.log('[Calendar] load end');
+      
+      return result;
     },
+    staleTime: syncInterval === 0 ? Infinity : 60000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const createOtherExpenseMutation = useMutation({
@@ -262,14 +308,14 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         break;
       case 'revenues':
         csvContent = 'Payment Method,Amount\n';
-        analytics.revenue_by_payment.forEach((r) => {
+        analytics.revenue_by_payment.forEach((r: { method: string; amount_cents: number }) => {
           csvContent += `${r.method},₱${(r.amount_cents / 100).toFixed(2)}\n`;
         });
         filename = `revenues_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
         break;
       case 'other_expenses':
         csvContent = 'Date,Name,Amount,Notes\n';
-        analytics.other_expenses.forEach((oe) => {
+        analytics.other_expenses.forEach((oe: { date: string; name: string; amount_cents: number; notes?: string }) => {
           csvContent += `${oe.date},"${oe.name}",₱${(oe.amount_cents / 100).toFixed(2)},"${oe.notes || ''}"\n`;
         });
         filename = `other_expenses_${format(anchorDate, 'yyyy-MM-dd')}.csv`;
@@ -277,7 +323,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
       case 'split_70_30':
         csvContent = 'Period,Net Sales,Operation Manager (70%),General Manager (30%),Cash,GCash,Card\n';
         csvContent += `${analytics.date_range.label},₱${(analytics.totals.net_sales_cents / 100).toFixed(2)},₱${(analytics.totals.manager_share_cents / 100).toFixed(2)},₱${(analytics.totals.owner_share_cents / 100).toFixed(2)}`;
-        analytics.revenue_by_payment.forEach((r) => {
+        analytics.revenue_by_payment.forEach((r: { method: string; amount_cents: number }) => {
           csvContent += `,₱${(r.amount_cents / 100).toFixed(2)}`;
         });
         csvContent += '\n';
@@ -371,11 +417,11 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         csvContent += `SALES,${analytics.date_range.label},,Total Sales,,₱${(analytics.totals.sales_cents / 100).toFixed(2)},\n`;
         csvContent += `EXPENSES,${analytics.date_range.label},,Total Expenses,,₱${(analytics.totals.expenses_cents / 100).toFixed(2)},\n`;
         
-        analytics.revenue_by_payment.forEach((r) => {
+        analytics.revenue_by_payment.forEach((r: { method: string; amount_cents: number }) => {
           csvContent += `REVENUES,${analytics.date_range.label},,${r.method},${r.method},₱${(r.amount_cents / 100).toFixed(2)},\n`;
         });
         
-        analytics.other_expenses.forEach((oe) => {
+        analytics.other_expenses.forEach((oe: { id: string; date: string; name: string; amount_cents: number; notes?: string }) => {
           const escapedName = oe.name.replace(/"/g, '""');
           const escapedNotes = (oe.notes || '').replace(/"/g, '""');
           csvContent += `OTHER_EXPENSES,${oe.date},${oe.id},"${escapedName}",,₱${(oe.amount_cents / 100).toFixed(2)},"${escapedNotes}"\n`;
@@ -538,7 +584,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
           <h2>Payment Method Revenue</h2>
           <table>
             <tr><th>Method</th><th>Amount</th></tr>
-            ${analytics.revenue_by_payment.map((r) => `<tr><td>${r.method}</td><td>₱${(r.amount_cents / 100).toFixed(2)}</td></tr>`).join('')}
+            ${analytics.revenue_by_payment.map((r: { method: string; amount_cents: number }) => `<tr><td>${r.method}</td><td>₱${(r.amount_cents / 100).toFixed(2)}</td></tr>`).join('')}
           </table>
         </body>
       </html>
@@ -566,13 +612,13 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     }
   };
 
-  if (isLoading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (isLoading && !hasLoadedOnceRef.current) {
+      setShowLoadingOverlay(true);
+    } else if (!isLoading && hasLoadedOnceRef.current) {
+      setShowLoadingOverlay(false);
+    }
+  }, [isLoading]);
 
   const renderDonutChart = (data: { label: string; value: number; color: string }[], total: number) => {
     const size = 200;
@@ -661,7 +707,16 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <>
+      <DashboardLoadingOverlay
+        visible={showLoadingOverlay}
+        currentStep={syncStatus?.currentStep || 'Loading calendar data...'}
+        progress={syncStatus?.progress}
+        pendingCount={syncStatus?.pendingCount}
+        lastSyncAt={syncStatus?.lastSyncAt}
+        lastError={syncStatus?.lastError}
+      />
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.periodSelector, { borderBottomColor: theme.border }]}>
         <View style={styles.periodTypeRow}>
           {(['day', 'week', 'month', 'year'] as PeriodType[]).map((type) => (
@@ -810,7 +865,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
 
             <View style={[styles.card, { backgroundColor: theme.card }]}>
               <Text style={[styles.cardTitle, { color: theme.text }]}>Revenue by Payment Method</Text>
-              {analytics.revenue_by_payment.map((item, index) => (
+              {analytics.revenue_by_payment.map((item: { method: string; amount_cents: number }, index: number) => (
                 <View key={index} style={styles.summaryRow}>
                   <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>{item.method}</Text>
                   <Text style={[styles.summaryValue, { color: theme.text }]}>
@@ -833,7 +888,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                 </View>
               </View>
               {analytics.other_expenses.length > 0 ? (
-                analytics.other_expenses.map((oe) => (
+                analytics.other_expenses.map((oe: { id: string; date: string; name: string; amount_cents: number; notes?: string }) => (
                   <View key={oe.id} style={[styles.otherExpenseRow, { borderBottomColor: theme.border }]}>
                     <View style={styles.otherExpenseInfo}>
                       <Text style={[styles.otherExpenseName, { color: theme.text }]}>{oe.name}</Text>
@@ -1065,6 +1120,7 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         </View>
       </Modal>
     </View>
+    </>
   );
 }
 
