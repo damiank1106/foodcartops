@@ -1,7 +1,7 @@
 import React, { useState, useLayoutEffect, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database, Calendar as CalendarIcon } from 'lucide-react-native';
+import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database, Calendar as CalendarIcon, RefreshCw } from 'lucide-react-native';
 import { useRouter, useNavigation } from 'expo-router';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -12,7 +12,9 @@ import CalendarScreen from './calendar';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
 import { startOfDay, endOfDay, format } from 'date-fns';
-import { onSyncComplete } from '@/lib/services/sync.service';
+import { onSyncComplete, subscribeSyncStatus, syncNow, getSyncStatus, SyncStatus } from '@/lib/services/sync.service';
+import { getTodayOverviewSeries } from '@/lib/services/overview-analytics.service';
+import AnimatedDashboardChart, { OverviewPoint } from '@/components/AnimatedDashboardChart';
 
 export default function BossDashboard() {
   const { theme } = useTheme();
@@ -36,6 +38,10 @@ export default function BossDashboard() {
   const [datesWithEntries, setDatesWithEntries] = useState<Set<string>>(new Set());
   const [overviewModalVisible, setOverviewModalVisible] = useState(false);
   const [overviewModalType, setOverviewModalType] = useState<'sales' | 'expenses' | 'profit' | 'transactions' | 'active' | null>(null);
+  const [chartPoints, setChartPoints] = useState<OverviewPoint[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [syncModalVisible, setSyncModalVisible] = useState(false);
+  const [syncModalMessage, setSyncModalMessage] = useState('');
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -53,9 +59,72 @@ export default function BossDashboard() {
       queryClient.invalidateQueries({ queryKey: ['boss-activity-feed'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-all-settlements'] });
       queryClient.invalidateQueries({ queryKey: ['boss-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['overview-chart-data'] });
     });
     return unsubscribe;
   }, [queryClient]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStatus((status) => {
+      setSyncStatus(status);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (selectedTab === 'overview' && (user?.role === 'general_manager' || user?.role === 'developer')) {
+      loadChartData();
+    }
+  }, [selectedTab, user?.role]);
+
+  const loadChartData = async () => {
+    try {
+      const points = await getTodayOverviewSeries();
+      setChartPoints(points);
+    } catch (error) {
+      console.error('[Dashboard] Error loading chart data:', error);
+    }
+  };
+
+  const { data: overviewChartData } = useQuery({
+    queryKey: ['overview-chart-data'],
+    queryFn: getTodayOverviewSeries,
+    enabled: selectedTab === 'overview' && (user?.role === 'general_manager' || user?.role === 'developer'),
+    staleTime: 60000,
+  });
+
+  useEffect(() => {
+    if (overviewChartData) {
+      setChartPoints(overviewChartData);
+    }
+  }, [overviewChartData]);
+
+  const handleSyncNow = async () => {
+    try {
+      const currentStatus = await getSyncStatus();
+      const hadPendingBefore = currentStatus.pendingCount > 0;
+
+      const result = await syncNow('manual_overview');
+      
+      if (result.success) {
+        const newStatus = await getSyncStatus();
+        const hadPendingAfter = newStatus.pendingCount > 0;
+        
+        if (!hadPendingBefore && !hadPendingAfter) {
+          setSyncModalMessage('No new data available. Please check later again or contact with Operation Manager or Developer for any new available Data. Operation Manager needs to provide new Sales first, so they might be displayed.');
+          setSyncModalVisible(true);
+        } else {
+          setSyncModalMessage('Sync completed ✅');
+          setSyncModalVisible(true);
+          await loadChartData();
+        }
+      } else {
+        Alert.alert('Sync Failed', result.error || 'Unknown error');
+      }
+    } catch (error: any) {
+      Alert.alert('Sync Error', error.message || 'Failed to sync');
+    }
+  };
 
   const { data: settlementNotifications } = useQuery({
     queryKey: ['settlement-notifications'],
@@ -586,12 +655,66 @@ export default function BossDashboard() {
         <View style={styles.content}>
           {selectedTab === 'overview' && (
             <>
-              <View style={styles.header}>
-                <Text style={[styles.date, { color: theme.textSecondary }]}>
-                  {format(new Date(), 'EEEE, MMMM d')}
-                </Text>
-                <Text style={[styles.greeting, { color: theme.text }]}>Today&apos;s Overview</Text>
-              </View>
+              {(user?.role === 'general_manager' || user?.role === 'developer') ? (
+                <>
+                  <View style={styles.header}>
+                    <Text style={[styles.date, { color: theme.textSecondary }]}>
+                      {format(new Date(), 'EEEE, MMMM d')}
+                    </Text>
+                    <Text style={[styles.greeting, { color: theme.text }]}>Today&apos;s Overview</Text>
+                  </View>
+
+                  <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
+                    <AnimatedDashboardChart points={chartPoints} />
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.syncButton, { backgroundColor: theme.primary }]}
+                    onPress={handleSyncNow}
+                    disabled={syncStatus?.isRunning}
+                  >
+                    <RefreshCw 
+                      size={18} 
+                      color="#fff" 
+                      style={syncStatus?.isRunning ? { transform: [{ rotate: '180deg' }] } : undefined}
+                    />
+                    <Text style={styles.syncButtonText}>
+                      {syncStatus?.isRunning ? 'Syncing...' : 'Sync Now'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <View style={[styles.syncStatusRow, { backgroundColor: theme.card }]}>
+                    <View style={styles.syncStatusItem}>
+                      <Text style={[styles.syncStatusLabel, { color: theme.textSecondary }]}>Last Sync</Text>
+                      <Text style={[styles.syncStatusValue, { color: theme.text }]}>
+                        {syncStatus?.lastSyncAt 
+                          ? format(new Date(syncStatus.lastSyncAt), 'h:mm a')
+                          : 'Never'}
+                      </Text>
+                    </View>
+                    <View style={styles.syncStatusItem}>
+                      <Text style={[styles.syncStatusLabel, { color: theme.textSecondary }]}>Pending</Text>
+                      <Text style={[styles.syncStatusValue, { color: theme.text }]}>
+                        {syncStatus?.pendingCount || 0}
+                      </Text>
+                    </View>
+                    {syncStatus?.isRunning && (
+                      <View style={styles.syncStatusItem}>
+                        <Text style={[styles.syncStatusLabel, { color: theme.primary }]}>
+                          {syncStatus.currentStep}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.header}>
+                    <Text style={[styles.date, { color: theme.textSecondary }]}>
+                      {format(new Date(), 'EEEE, MMMM d')}
+                    </Text>
+                    <Text style={[styles.greeting, { color: theme.text }]}>Today&apos;s Overview</Text>
+                  </View>
 
               <View style={styles.statsRow}>
                 <TouchableOpacity
@@ -695,6 +818,8 @@ export default function BossDashboard() {
                   </View>
                 ))}
               </View>
+                </>
+              )}
             </>
           )}
 
@@ -1509,6 +1634,33 @@ export default function BossDashboard() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={syncModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSyncModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.syncModalContent, { backgroundColor: theme.card }]}>
+            <View style={styles.syncModalHeader}>
+              <Text style={[styles.syncModalTitle, { color: theme.text }]}>Sync Status</Text>
+              <TouchableOpacity onPress={() => setSyncModalVisible(false)}>
+                <X size={24} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.syncModalMessage, { color: theme.text }]}>
+              {syncModalMessage}
+            </Text>
+            <TouchableOpacity
+              style={[styles.syncModalButton, { backgroundColor: theme.primary }]}
+              onPress={() => setSyncModalVisible(false)}
+            >
+              <Text style={styles.syncModalButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2253,6 +2405,95 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 11,
+    fontWeight: '600',
+  },
+  chartCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  syncButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  syncStatusRow: {
+    flexDirection: 'row',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  syncStatusItem: {
+    flex: 1,
+  },
+  syncStatusLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  syncStatusValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  syncModalContent: {
+    width: '85%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  syncModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  syncModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  syncModalMessage: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  syncModalButton: {
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  syncModalButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

@@ -27,7 +27,6 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 const DATA_POINTS_COUNT = 15;
 
 export type OverviewPoint = {
-  // x is 0..14
   x: number;
   sales?: number;
   expenses?: number;
@@ -35,33 +34,37 @@ export type OverviewPoint = {
   activeUsers?: number;
 };
 
-function normalizeData(raw: OverviewPoint[], key: keyof OverviewPoint) {
+function normalizeData(raw: OverviewPoint[], key: keyof OverviewPoint): { x: number; y: number }[] {
   const safe = Array.isArray(raw) ? raw : [];
   if (safe.length === 0) {
     return Array.from({ length: DATA_POINTS_COUNT }, (_, i) => ({ x: i, y: 50 }));
   }
 
   const sliced = safe.slice(-DATA_POINTS_COUNT);
-  const padded =
+  const defaultPoint: OverviewPoint = { x: 0, sales: 50, expenses: 50, transactions: 50, activeUsers: 50 };
+  const padded: OverviewPoint[] =
     sliced.length < DATA_POINTS_COUNT
       ? [
-          ...Array.from({ length: DATA_POINTS_COUNT - sliced.length }, (_, i) => ({ x: i, y: 50 })),
+          ...Array.from({ length: DATA_POINTS_COUNT - sliced.length }, (_, i) => ({ ...defaultPoint, x: i })),
           ...sliced,
         ]
       : sliced;
 
-  return padded.map((item, idx) => ({
-    x: idx,
-    y: typeof item[key] === 'number' ? (item[key] as number) : 50,
-  }));
+  return padded.map((item, idx) => {
+    const value = item[key];
+    return {
+      x: idx,
+      y: typeof value === 'number' ? value : 50,
+    };
+  });
 }
 
 function generateD3Path(data: { x: number; y: number }[], width: number, height: number) {
   if (!data || data.length === 0) return '';
 
-  const xDomain = d3Array.extent(data, (d) => d.x) as [number, number];
-  const yMin = d3Array.min(data, (d) => d.y) ?? 0;
-  const yMax = d3Array.max(data, (d) => d.y) ?? 100;
+  const xDomain = d3Array.extent(data, (d: { x: number; y: number }) => d.x) as [number, number];
+  const yMin = d3Array.min(data, (d: { x: number; y: number }) => d.y) ?? 0;
+  const yMax = d3Array.max(data, (d: { x: number; y: number }) => d.y) ?? 100;
 
   const xScale = d3Scale.scaleLinear().domain(xDomain).range([0, width]);
   const yScale = d3Scale
@@ -71,12 +74,11 @@ function generateD3Path(data: { x: number; y: number }[], width: number, height:
 
   const line = d3
     .line<{ x: number; y: number }>()
-    .x((d) => xScale(d.x))
-    .y((d) => yScale(d.y))
+    .x((d: { x: number; y: number }) => xScale(d.x))
+    .y((d: { x: number; y: number }) => yScale(d.y))
     .curve(d3.curveBasis);
 
   let path = line(data) || '';
-  // Close to fill area
   path += ` L ${width} ${height} L 0 ${height} Z`;
   return path;
 }
@@ -108,7 +110,6 @@ function SingleChartLine({
     animatedOpacity.value = withTiming(isVisible ? 0.6 : 0, { duration: 250 });
   }, [normalized, width, height, isVisible]);
 
-  // “No data” breathing animation
   useEffect(() => {
     if (!points || points.length === 0) {
       const breathing = normalized.map((d) => ({ x: d.x, y: d.y + (Math.random() * 10 - 5) }));
