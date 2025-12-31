@@ -40,6 +40,7 @@ function stripLocalOnlyColumns(tableName: string, payload: any): any {
   const localOnlyColumns: Record<string, string[]> = {
     inventory_items: ['storage_group'],
     users: ['email', 'password_hash', 'profile_image_uri', 'pin_hash', 'pin_hash_alg'],
+    carts: ['created_by_user_id'],
   };
 
   const columnsToStrip = localOnlyColumns[tableName] || [];
