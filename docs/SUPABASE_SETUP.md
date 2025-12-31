@@ -724,9 +724,92 @@ If you have users with old role values in Supabase, they will be automatically n
 
 However, it's recommended to update Supabase directly using the UPDATE statements provided in section 9.
 
-## 12. Future Enhancements
+## 12. Settlements + Settlement Items
 
-- Sync more tables (users, sales, shifts, expenses, etc.)
+### Create settlements table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.settlements (
+  id TEXT PRIMARY KEY,
+  shift_id TEXT NOT NULL,
+  cart_id TEXT NOT NULL,
+  seller_user_id TEXT NOT NULL,
+  date_iso TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'saved',
+  notes TEXT,
+  cash_cents INTEGER NOT NULL DEFAULT 0,
+  gcash_cents INTEGER NOT NULL DEFAULT 0,
+  card_cents INTEGER NOT NULL DEFAULT 0,
+  gross_sales_cents INTEGER NOT NULL DEFAULT 0,
+  total_cents INTEGER NOT NULL DEFAULT 0,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_settlements_business_id ON public.settlements(business_id);
+CREATE INDEX IF NOT EXISTS idx_settlements_shift_id ON public.settlements(shift_id);
+CREATE INDEX IF NOT EXISTS idx_settlements_cart_id ON public.settlements(cart_id);
+CREATE INDEX IF NOT EXISTS idx_settlements_seller_user_id ON public.settlements(seller_user_id);
+CREATE INDEX IF NOT EXISTS idx_settlements_status ON public.settlements(status);
+CREATE INDEX IF NOT EXISTS idx_settlements_updated_at_iso ON public.settlements(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_settlements_deleted_at ON public.settlements(deleted_at);
+```
+
+### Create settlement_items table
+
+```sql
+CREATE TABLE IF NOT EXISTS public.settlement_items (
+  id TEXT PRIMARY KEY,
+  settlement_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  qty INTEGER NOT NULL,
+  price_cents INTEGER NOT NULL,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
+  business_id TEXT NOT NULL DEFAULT 'default_business',
+  device_id TEXT,
+  deleted_at TIMESTAMPTZ,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  created_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at_iso TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  FOREIGN KEY (settlement_id) REFERENCES public.settlements(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_settlement_items_business_id ON public.settlement_items(business_id);
+CREATE INDEX IF NOT EXISTS idx_settlement_items_settlement_id ON public.settlement_items(settlement_id);
+CREATE INDEX IF NOT EXISTS idx_settlement_items_product_id ON public.settlement_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_settlement_items_updated_at_iso ON public.settlement_items(updated_at_iso);
+CREATE INDEX IF NOT EXISTS idx_settlement_items_deleted_at ON public.settlement_items(deleted_at);
+```
+
+### Enable RLS for settlements and settlement_items
+
+```sql
+ALTER TABLE public.settlements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on settlements"
+  ON public.settlements
+  FOR ALL
+  USING (business_id = 'default_business');
+
+ALTER TABLE public.settlement_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on settlement_items"
+  ON public.settlement_items
+  FOR ALL
+  USING (business_id = 'default_business');
+```
+
+## 13. Future Enhancements
+
+- Sync more tables (sales, payments, etc.)
 - Real-time sync using Supabase Realtime
 - Conflict resolution UI
 - Selective sync (choose what to sync)

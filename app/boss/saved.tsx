@@ -151,15 +151,32 @@ export default function BossSavedScreen() {
 
     switch (item.linked_entity_type) {
       case 'shift':
-        const repo = new (await import('@/lib/repositories/saved-record.repository')).SavedRecordRepository();
-        const savedRecord = await repo.findById(item.id);
-        if (savedRecord && savedRecord.payload_json) {
+        const settlementRepo = new (await import('@/lib/repositories/settlement.repository')).SettlementRepository();
+        const settlement = await settlementRepo.findByShiftId(item.linked_entity_id);
+        if (settlement) {
           try {
-            const payload = JSON.parse(savedRecord.payload_json);
+            const settlementDetails = await settlementRepo.findWithDetails(settlement.id);
+            const settlementItems = await settlementRepo.getSettlementItems(settlement.id);
+            
+            const payload = {
+              cart_name: settlementDetails?.cart_name || 'Unknown Cart',
+              seller_name: settlementDetails?.worker_name || 'Unknown Worker',
+              date: settlement.date_iso || new Date(settlement.created_at).toLocaleDateString(),
+              sales_summary: {
+                total: ((settlement as any).gross_sales_cents / 100).toFixed(2),
+              },
+              products_sold: settlementItems.map(item => ({
+                name: item.product_name,
+                qty: item.qty,
+                price: (item.price_cents / 100).toFixed(2),
+              })),
+              notes: settlement.notes || '',
+            };
+            
             setSettlementDetailsPayload(payload);
             setShowSettlementDetailsModal(true);
           } catch (error) {
-            console.error('[BossSaved] Failed to parse settlement payload:', error);
+            console.error('[BossSaved] Failed to load settlement:', error);
             Alert.alert('Error', 'Failed to load settlement details');
           }
         } else {
@@ -167,15 +184,32 @@ export default function BossSavedScreen() {
         }
         break;
       case 'settlement':
-        const repoSettlement = new (await import('@/lib/repositories/saved-record.repository')).SavedRecordRepository();
-        const savedRecordSettlement = await repoSettlement.findById(item.id);
-        if (savedRecordSettlement && savedRecordSettlement.payload_json) {
+        const settlementRepoForSettlement = new (await import('@/lib/repositories/settlement.repository')).SettlementRepository();
+        const settlementById = await settlementRepoForSettlement.findById(item.linked_entity_id);
+        if (settlementById) {
           try {
-            const payload = JSON.parse(savedRecordSettlement.payload_json);
+            const settlementDetails = await settlementRepoForSettlement.findWithDetails(settlementById.id);
+            const settlementItems = await settlementRepoForSettlement.getSettlementItems(settlementById.id);
+            
+            const payload = {
+              cart_name: settlementDetails?.cart_name || 'Unknown Cart',
+              seller_name: settlementDetails?.worker_name || 'Unknown Worker',
+              date: settlementById.date_iso || new Date(settlementById.created_at).toLocaleDateString(),
+              sales_summary: {
+                total: ((settlementById as any).gross_sales_cents / 100).toFixed(2),
+              },
+              products_sold: settlementItems.map(item => ({
+                name: item.product_name,
+                qty: item.qty,
+                price: (item.price_cents / 100).toFixed(2),
+              })),
+              notes: settlementById.notes || '',
+            };
+            
             setSettlementDetailsPayload(payload);
             setShowSettlementDetailsModal(true);
           } catch (error) {
-            console.error('[BossSaved] Failed to parse settlement payload:', error);
+            console.error('[BossSaved] Failed to load settlement:', error);
             Alert.alert('Error', 'Failed to load settlement details');
           }
         } else {
