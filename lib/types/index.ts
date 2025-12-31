@@ -10,7 +10,7 @@ export type ExpenseStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'DRAFT';
 
 export type PaidFrom = 'CASH_DRAWER' | 'PERSONAL' | 'COMPANY';
 
-export type SettlementStatus = 'saved' | 'finalized';
+export type SettlementStatus = 'SAVED' | 'FINALIZED';
 
 export type CommissionType = 'NONE' | 'PERCENT_OF_SALES' | 'PERCENT_OF_PROFIT';
 

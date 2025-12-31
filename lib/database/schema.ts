@@ -1658,8 +1658,8 @@ export const MIGRATIONS = [
       ALTER TABLE settlements ADD COLUMN updated_at_iso TEXT;
 
       UPDATE settlements SET seller_user_id = worker_user_id WHERE seller_user_id IS NULL;
-      UPDATE settlements SET status = 'saved' WHERE status = 'DRAFT';
-      UPDATE settlements SET status = 'finalized' WHERE status = 'FINALIZED';
+      UPDATE settlements SET status = 'SAVED' WHERE status IN ('DRAFT', 'draft', 'saved');
+      UPDATE settlements SET status = 'FINALIZED' WHERE status IN ('FINALIZED', 'finalized');
 
       CREATE TABLE settlements_new (
         id TEXT PRIMARY KEY,
@@ -1667,7 +1667,7 @@ export const MIGRATIONS = [
         cart_id TEXT NOT NULL,
         seller_user_id TEXT NOT NULL,
         date_iso TEXT,
-        status TEXT NOT NULL DEFAULT 'saved' CHECK(status IN ('saved', 'finalized')),
+        status TEXT NOT NULL DEFAULT 'SAVED' CHECK(status IN ('SAVED', 'FINALIZED')),
         notes TEXT,
         cash_cents INTEGER NOT NULL DEFAULT 0,
         gcash_cents INTEGER NOT NULL DEFAULT 0,
@@ -1695,7 +1695,11 @@ export const MIGRATIONS = [
       )
       SELECT 
         id, shift_id, cart_id, seller_user_id, settlement_day, 
-        CASE WHEN status = 'DRAFT' THEN 'saved' WHEN status = 'FINALIZED' THEN 'finalized' ELSE status END,
+        CASE 
+          WHEN status IN ('DRAFT', 'draft', 'saved') THEN 'SAVED' 
+          WHEN status IN ('FINALIZED', 'finalized') THEN 'FINALIZED' 
+          ELSE 'SAVED' 
+        END,
         notes,
         0, 0, 0, 0, 0,
         business_id, device_id, is_deleted, deleted_at,
@@ -1744,7 +1748,7 @@ export const MIGRATIONS = [
       INSERT INTO db_change_log (id, message, created_at) VALUES
       (lower(hex(randomblob(16))), 'Added Supabase sync columns to settlements table', ${Date.now()}),
       (lower(hex(randomblob(16))), 'Created settlement_items table for synced product-level settlement data', ${Date.now()}),
-      (lower(hex(randomblob(16))), 'Migrated settlement status values: DRAFT->saved, FINALIZED->finalized', ${Date.now()});
+      (lower(hex(randomblob(16))), 'Migrated settlement status values to uppercase: SAVED, FINALIZED', ${Date.now()});
     `,
     down: `
       DROP TABLE IF EXISTS settlement_items;

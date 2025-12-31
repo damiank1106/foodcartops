@@ -23,7 +23,7 @@ export default function BossSettlementsScreen() {
   const settlementRepo = new SettlementRepository();
   const shiftRepo = new ShiftRepository();
 
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'saved' | 'finalized'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'SAVED' | 'FINALIZED'>('ALL');
 
   const { data: settlements, isLoading } = useQuery({
     queryKey: ['boss-settlements', filterStatus],
@@ -75,14 +75,14 @@ export default function BossSettlementsScreen() {
           <TouchableOpacity
             style={[
               styles.filterButton,
-              filterStatus === 'saved' && { backgroundColor: theme.warning + '20' },
+              filterStatus === 'SAVED' && { backgroundColor: theme.warning + '20' },
             ]}
-            onPress={() => setFilterStatus('saved')}
+            onPress={() => setFilterStatus('SAVED')}
           >
             <Text
               style={[
                 styles.filterText,
-                { color: filterStatus === 'saved' ? theme.warning : theme.textSecondary },
+                { color: filterStatus === 'SAVED' ? theme.warning : theme.textSecondary },
               ]}
             >
               Saved
@@ -91,14 +91,14 @@ export default function BossSettlementsScreen() {
           <TouchableOpacity
             style={[
               styles.filterButton,
-              filterStatus === 'finalized' && { backgroundColor: theme.success + '20' },
+              filterStatus === 'FINALIZED' && { backgroundColor: theme.success + '20' },
             ]}
-            onPress={() => setFilterStatus('finalized')}
+            onPress={() => setFilterStatus('FINALIZED')}
           >
             <Text
               style={[
                 styles.filterText,
-                { color: filterStatus === 'finalized' ? theme.success : theme.textSecondary },
+                { color: filterStatus === 'FINALIZED' ? theme.success : theme.textSecondary },
               ]}
             >
               Finalized
@@ -170,7 +170,7 @@ export default function BossSettlementsScreen() {
               </View>
 
               <View style={styles.statusContainer}>
-                {settlement.status === 'finalized' ? (
+                {settlement.status === 'FINALIZED' ? (
                   <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
                     <Text style={[styles.statusText, { color: theme.success }]}>Finalized</Text>
                   </View>

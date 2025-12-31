@@ -15,7 +15,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { CheckCircle, Lock } from 'lucide-react-native';
 import { format } from 'date-fns';
-import type { SettlementStatus } from '@/lib/types';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
@@ -202,7 +201,7 @@ export default function SettlementEditorScreen() {
       let settlementId: string;
 
       if (shiftData.existingSettlement) {
-        if (shiftData.existingSettlement.status === 'finalized' as SettlementStatus) {
+        if (shiftData.existingSettlement.status === 'FINALIZED') {
           throw new Error('Settlement already finalized');
         }
         settlementId = shiftData.existingSettlement.id;
@@ -215,7 +214,7 @@ export default function SettlementEditorScreen() {
           shiftData.shift.cart_id,
           shiftData.shift.worker_id,
           dateIso,
-          'saved',
+          'SAVED',
           notes,
           shiftData.paymentsByMethod.CASH,
           shiftData.paymentsByMethod.GCASH,
@@ -327,7 +326,7 @@ export default function SettlementEditorScreen() {
     );
   }
 
-  const isFinalized = shiftData.existingSettlement?.status === 'finalized' as SettlementStatus;
+  const isFinalized = shiftData.existingSettlement?.status === 'FINALIZED';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

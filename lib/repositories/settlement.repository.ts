@@ -36,7 +36,7 @@ export class SettlementRepository extends BaseRepository {
     cartId: string,
     sellerUserId: string,
     dateIso: string,
-    status: 'saved' | 'finalized',
+    status: 'SAVED' | 'FINALIZED',
     notes: string | undefined,
     cashCents: number,
     gcashCents: number,
@@ -279,7 +279,7 @@ export class SettlementRepository extends BaseRepository {
 
     await db.runAsync(
       `UPDATE settlements 
-       SET status = 'finalized', updated_at = ?, updated_at_iso = ?, device_id = ?
+       SET status = 'FINALIZED', updated_at = ?, updated_at_iso = ?, device_id = ?
        WHERE id = ?`,
       [now, nowISO, deviceId, id]
     );
@@ -292,7 +292,7 @@ export class SettlementRepository extends BaseRepository {
         cart_id: updated.cart_id,
         seller_user_id: (updated as any).seller_user_id,
         date_iso: (updated as any).date_iso,
-        status: 'finalized',
+        status: 'FINALIZED',
         notes: updated.notes || null,
         cash_cents: (updated as any).cash_cents || 0,
         gcash_cents: (updated as any).gcash_cents || 0,
@@ -310,7 +310,7 @@ export class SettlementRepository extends BaseRepository {
       await this.queueSync('settlements', id, payload);
     }
 
-    await this.auditLog(userId, 'settlements', id, 'finalize', old, { status: 'finalized' });
+    await this.auditLog(userId, 'settlements', id, 'finalize', old, { status: 'FINALIZED' });
     console.log('[SettlementRepo] Settlement finalized:', id);
   }
 
