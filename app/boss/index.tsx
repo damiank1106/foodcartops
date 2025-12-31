@@ -1,5 +1,6 @@
-import React, { useState, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Coins, Users, ShoppingBag, AlertTriangle, TrendingDown, Clock, XCircle, Bookmark, Trash2, Edit2, Save, X, Plus, CheckCircle, Database, Calendar as CalendarIcon, RefreshCw } from 'lucide-react-native';
 import { useRouter, useNavigation } from 'expo-router';
@@ -44,6 +45,9 @@ export default function BossDashboard() {
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   const [syncModalMessage, setSyncModalMessage] = useState('');
   const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const [syncInterval, setSyncInterval] = useState<number>(300000);
+  const hasLoadedOnceRef = useRef(false);
+  const isManualRefreshingRef = useRef(false);
   
   const saleRepo = new SaleRepository();
   const shiftRepo = new ShiftRepository();
@@ -54,25 +58,51 @@ export default function BossDashboard() {
   const savedItemsRepo = new BossSavedItemsRepository();
 
   useEffect(() => {
+    const loadSyncInterval = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('sync_interval');
+        const interval = saved ? parseInt(saved, 10) : 300000;
+        setSyncInterval(interval);
+        console.log('[Dashboard] Sync interval loaded:', interval, interval === 0 ? '(Manual)' : `(${interval}ms)`);
+      } catch (error) {
+        console.error('[Dashboard] Failed to load sync interval:', error);
+        setSyncInterval(300000);
+      }
+    };
+    loadSyncInterval();
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onSyncComplete(() => {
-      console.log('[Dashboard] Sync completed, refetching stats');
-      queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['boss-activity-feed'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-all-settlements'] });
-      queryClient.invalidateQueries({ queryKey: ['boss-settlements'] });
-      queryClient.invalidateQueries({ queryKey: ['overview-chart-data'] });
+      console.log('[Dashboard] Sync completed callback fired');
+      
+      if (syncInterval === 0) {
+        console.log('[Dashboard] refresh reason=blocked (manual mode)');
+        return;
+      }
+      
+      if (!isManualRefreshingRef.current) {
+        console.log('[Dashboard] refresh reason=sync_completed');
+        queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
+        queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['boss-activity-feed'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-all-settlements'] });
+        queryClient.invalidateQueries({ queryKey: ['boss-settlements'] });
+        queryClient.invalidateQueries({ queryKey: ['overview-chart-data'] });
+      }
     });
     return unsubscribe;
-  }, [queryClient]);
+  }, [queryClient, syncInterval]);
 
   useEffect(() => {
     const unsubscribe = subscribeSyncStatus((status) => {
       setSyncStatus(status);
-      if (status.isRunning) {
+      
+      if (status.isRunning && isManualRefreshingRef.current) {
         setShowLoadingOverlay(true);
-      } else if (showLoadingOverlay && !status.lastError) {
+      } else if (!status.isRunning && showLoadingOverlay) {
         setShowLoadingOverlay(false);
+        isManualRefreshingRef.current = false;
       }
     });
     return unsubscribe;
@@ -80,7 +110,11 @@ export default function BossDashboard() {
 
   useEffect(() => {
     if (selectedTab === 'overview' && (user?.role === 'general_manager' || user?.role === 'developer')) {
-      loadChartData();
+      if (!hasLoadedOnceRef.current) {
+        console.log('[Dashboard Overview] refresh reason=initial');
+        loadChartData();
+        hasLoadedOnceRef.current = true;
+      }
     }
   }, [selectedTab, user?.role]);
 
@@ -93,11 +127,14 @@ export default function BossDashboard() {
     }
   };
 
-  const { data: overviewChartData, isLoading: isLoadingChart, isFetching: isFetchingChart } = useQuery({
+  const { data: overviewChartData, isLoading: isLoadingChart } = useQuery({
     queryKey: ['overview-chart-data'],
     queryFn: getTodayOverviewSeries,
-    enabled: selectedTab === 'overview' && (user?.role === 'general_manager' || user?.role === 'developer'),
-    staleTime: 60000,
+    enabled: selectedTab === 'overview' && (user?.role === 'general_manager' || user?.role === 'developer') && !hasLoadedOnceRef.current,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   useEffect(() => {
@@ -107,11 +144,17 @@ export default function BossDashboard() {
   }, [overviewChartData]);
 
   const handleSyncNow = async () => {
+    console.log('[Dashboard Overview] refresh reason=manual_sync');
+    isManualRefreshingRef.current = true;
+    setShowLoadingOverlay(true);
+    
     try {
       const result = await syncNow('manual_overview');
       
       if (!result.success) {
         Alert.alert('Sync Failed', result.error || 'Unknown error');
+        isManualRefreshingRef.current = false;
+        setShowLoadingOverlay(false);
         return;
       }
 
@@ -121,10 +164,16 @@ export default function BossDashboard() {
       } else {
         setSyncModalMessage('Sync completed ✅');
         setSyncModalVisible(true);
+        
+        console.log('[Dashboard Overview] Refetching after manual sync');
+        queryClient.invalidateQueries({ queryKey: ['overview-chart-data'] });
+        queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
         await loadChartData();
       }
     } catch (error: any) {
       Alert.alert('Sync Error', error.message || 'Failed to sync');
+      isManualRefreshingRef.current = false;
+      setShowLoadingOverlay(false);
     }
   };
 
@@ -148,7 +197,7 @@ export default function BossDashboard() {
     enabled: selectedTab === 'settlements',
   });
 
-  const { data: stats, isLoading, isFetching: isFetchingStats } = useQuery({
+  const { data: stats, isLoading } = useQuery({
     queryKey: ['boss-monitoring-stats'],
     queryFn: async () => {
       console.log('[Dashboard Overview] Fetching stats...');
@@ -269,9 +318,10 @@ export default function BossDashboard() {
         last_shift: lastShift,
       };
     },
-    staleTime: 30000,
-    refetchOnMount: true,
+    staleTime: Infinity,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const { data: recentActivity } = useQuery({
@@ -1668,10 +1718,8 @@ export default function BossDashboard() {
         <DashboardLoadingOverlay
           visible={
             showLoadingOverlay ||
-            isLoading ||
-            isLoadingChart ||
-            isFetchingChart ||
-            isFetchingStats
+            (isLoading && !hasLoadedOnceRef.current) ||
+            (isLoadingChart && !hasLoadedOnceRef.current)
           }
           currentStep={syncStatus?.currentStep || (isLoading || isLoadingChart ? 'Loading data...' : 'idle')}
           progress={syncStatus?.progress}
@@ -1680,6 +1728,7 @@ export default function BossDashboard() {
           lastError={syncStatus?.lastError}
           onClose={syncStatus?.lastError ? () => {
             setShowLoadingOverlay(false);
+            isManualRefreshingRef.current = false;
           } : undefined}
         />
       )}
