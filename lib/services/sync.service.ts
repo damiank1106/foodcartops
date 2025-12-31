@@ -183,6 +183,25 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
       try {
         const payload = JSON.parse(row.payload_json);
+        
+        if (row.table_name === 'settlement_items') {
+          if (!payload.created_at || !payload.updated_at) {
+            console.warn(`[Sync] settlement_items ${row.row_id} missing timestamps, setting now`);
+            const now = Date.now();
+            const nowISO = new Date().toISOString();
+            payload.created_at = payload.created_at || now;
+            payload.updated_at = payload.updated_at || now;
+            payload.created_at_iso = payload.created_at_iso || nowISO;
+            payload.updated_at_iso = payload.updated_at_iso || nowISO;
+            
+            db = await getDatabase();
+            await db.runAsync(
+              'UPDATE settlement_items SET created_at = ?, updated_at = ?, created_at_iso = ?, updated_at_iso = ? WHERE id = ?',
+              [now, now, nowISO, nowISO, row.row_id]
+            );
+          }
+        }
+        
         const syncPayload = stripLocalOnlyColumns(row.table_name, payload);
 
         if (row.table_name === 'settlements') {

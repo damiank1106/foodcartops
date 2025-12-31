@@ -120,6 +120,7 @@ export class SettlementRepository extends BaseRepository {
       product_name: productName, qty, price_cents: priceCents,
       business_id: businessId, device_id: deviceId,
       is_deleted: 0, deleted_at: null,
+      created_at: now, updated_at: now,
       created_at_iso: nowISO, updated_at_iso: nowISO,
     };
 
