@@ -1643,24 +1643,6 @@ export const MIGRATIONS = [
   {
     version: 38,
     up: `
-      ALTER TABLE settlements ADD COLUMN seller_user_id TEXT;
-      ALTER TABLE settlements ADD COLUMN date_iso TEXT;
-      ALTER TABLE settlements ADD COLUMN cash_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE settlements ADD COLUMN gcash_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE settlements ADD COLUMN card_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE settlements ADD COLUMN gross_sales_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE settlements ADD COLUMN total_cents INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE settlements ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
-      ALTER TABLE settlements ADD COLUMN device_id TEXT;
-      ALTER TABLE settlements ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE settlements ADD COLUMN deleted_at TEXT;
-      ALTER TABLE settlements ADD COLUMN created_at_iso TEXT;
-      ALTER TABLE settlements ADD COLUMN updated_at_iso TEXT;
-
-      UPDATE settlements SET seller_user_id = worker_user_id WHERE seller_user_id IS NULL;
-      UPDATE settlements SET status = 'SAVED' WHERE status IN ('DRAFT', 'draft', 'saved');
-      UPDATE settlements SET status = 'FINALIZED' WHERE status IN ('FINALIZED', 'finalized');
-
       CREATE TABLE settlements_new (
         id TEXT PRIMARY KEY,
         shift_id TEXT NOT NULL,
@@ -1694,7 +1676,11 @@ export const MIGRATIONS = [
         created_at, updated_at, created_at_iso, updated_at_iso
       )
       SELECT 
-        id, shift_id, cart_id, seller_user_id, settlement_day, 
+        id, 
+        shift_id, 
+        cart_id, 
+        COALESCE(worker_user_id, 'unknown'),
+        COALESCE(settlement_day, date('now')),
         CASE 
           WHEN status IN ('DRAFT', 'draft', 'saved') THEN 'SAVED' 
           WHEN status IN ('FINALIZED', 'finalized') THEN 'FINALIZED' 
@@ -1702,8 +1688,14 @@ export const MIGRATIONS = [
         END,
         notes,
         0, 0, 0, 0, 0,
-        business_id, device_id, is_deleted, deleted_at,
-        created_at, updated_at, created_at_iso, updated_at_iso
+        COALESCE(business_id, 'default_business'),
+        device_id,
+        COALESCE(is_deleted, 0),
+        deleted_at,
+        created_at, 
+        updated_at, 
+        created_at_iso, 
+        updated_at_iso
       FROM settlements;
 
       DROP TABLE settlements;
