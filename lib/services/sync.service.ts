@@ -139,14 +139,15 @@ export async function getSyncStatus(): Promise<SyncStatus> {
   }
 }
 
-export async function syncNow(reason: string = 'manual'): Promise<{ success: boolean; error?: string }> {
+export async function syncNow(reason: string = 'manual'): Promise<{ success: boolean; didWork: boolean; error?: string }> {
   if (syncInProgress) {
     console.log('[Sync] Already in progress, skipping');
-    return { success: false, error: 'Sync already in progress' };
+    return { success: false, didWork: false, error: 'Sync already in progress' };
   }
 
   console.log(`[Sync] Starting (reason=${reason})`);
   syncInProgress = true;
+  let didWork = false;
   updateStatus({ isRunning: true, currentStep: 'Preparing...', progress: { total: 0, current: 0 }, lastError: null });
 
   try {
@@ -155,7 +156,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       console.log('[Sync] Offline, skipping');
       updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Offline' });
       syncInProgress = false;
-      return { success: false, error: 'No internet connection' };
+      return { success: false, didWork: false, error: 'No internet connection' };
     }
 
     const supabase = await initSupabaseClient();
@@ -163,7 +164,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       console.log('[Sync] Supabase not configured');
       updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Supabase not configured' });
       syncInProgress = false;
-      return { success: false, error: 'Supabase not configured' };
+      return { success: false, didWork: false, error: 'Supabase not configured' };
     }
 
     let db = await getDatabase();
@@ -176,6 +177,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
     for (let i = 0; i < outboxRows.length; i++) {
       const row = outboxRows[i];
+      didWork = true;
       updateStatus({ 
         currentStep: `Pushing ${row.table_name} (${i + 1}/${outboxRows.length})`,
         progress: { total: outboxRows.length, current: i, table: row.table_name }
@@ -333,7 +335,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             lastError: 'Invalid API key. Please check your credentials.' 
           });
           syncInProgress = false;
-          return { success: false, error: 'Invalid API key. Please check your credentials.' };
+          return { success: false, didWork: false, error: 'Invalid API key. Please check your credentials.' };
         }
         
         db = await getDatabase();
@@ -404,6 +406,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
         if (data && data.length > 0) {
           console.log(`[Sync] Received ${data.length} ${tableName} rows`);
+          didWork = true;
 
           updateStatus({ currentStep: `Applying ${tableName} updates...` });
 
@@ -683,7 +686,8 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     notifySyncComplete();
 
     syncInProgress = false;
-    return { success: true };
+    console.log(`[Sync] Completed with didWork=${didWork}`);
+    return { success: true, didWork };
   } catch (error: any) {
     console.error('[Sync] Error:', error);
     updateStatus({ 
@@ -692,7 +696,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       lastError: error.message || String(error) 
     });
     syncInProgress = false;
-    return { success: false, error: error.message || String(error) };
+    return { success: false, didWork: false, error: error.message || String(error) };
   }
 }
 

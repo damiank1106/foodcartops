@@ -1,14 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
-import Animated, {
-  useSharedValue,
-  useAnimatedProps,
-  withTiming,
-  Easing,
-  withRepeat,
-  withSequence,
-} from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedProps, withTiming } from 'react-native-reanimated';
 import * as d3 from 'd3-shape';
 import * as d3Scale from 'd3-scale';
 import * as d3Array from 'd3-array';
@@ -21,10 +14,9 @@ const COLORS = {
   expenses: { primary: '#F44336', label: 'Expenses' },
   transactions: { primary: '#4CAF50', label: 'Transactions' },
   activeUsers: { primary: '#FF9800', label: 'Active Users' },
-};
+} as const;
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const DATA_POINTS_COUNT = 15;
+type Key = keyof typeof COLORS;
 
 export type OverviewPoint = {
   x: number;
@@ -34,117 +26,115 @@ export type OverviewPoint = {
   activeUsers?: number;
 };
 
-function normalizeData(raw: OverviewPoint[], key: keyof OverviewPoint): { x: number; y: number }[] {
-  const safe = Array.isArray(raw) ? raw : [];
-  if (safe.length === 0) {
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+const DATA_POINTS_COUNT = 15;
+
+function normalize(raw: OverviewPoint[], key: Key) {
+  if (!raw || raw.length === 0) {
     return Array.from({ length: DATA_POINTS_COUNT }, (_, i) => ({ x: i, y: 50 }));
   }
 
-  const sliced = safe.slice(-DATA_POINTS_COUNT);
-  const defaultPoint: OverviewPoint = { x: 0, sales: 50, expenses: 50, transactions: 50, activeUsers: 50 };
-  const padded: OverviewPoint[] =
-    sliced.length < DATA_POINTS_COUNT
+  const last = raw.slice(-DATA_POINTS_COUNT);
+  const padded =
+    last.length < DATA_POINTS_COUNT
       ? [
-          ...Array.from({ length: DATA_POINTS_COUNT - sliced.length }, (_, i) => ({ ...defaultPoint, x: i })),
-          ...sliced,
+          ...Array.from({ length: DATA_POINTS_COUNT - last.length }, (_, i) => ({ x: i, y: 50 })),
+          ...last.map((v) => v),
         ]
-      : sliced;
+      : last;
 
-  return padded.map((item, idx) => {
-    const value = item[key];
-    return {
-      x: idx,
-      y: typeof value === 'number' ? value : 50,
-    };
+  return padded.map((item, index) => {
+    const value = (item as any)?.[key];
+    const y = Number.isFinite(value) ? Number(value) : 50;
+    return { x: index, y };
   });
 }
 
-function generateD3Path(data: { x: number; y: number }[], width: number, height: number) {
-  if (!data || data.length === 0) return '';
+function safeGeneratePath(data: { x: number; y: number }[], width: number, height: number) {
+  if (!data || data.length < 2) return '';
 
-  const xDomain = d3Array.extent(data, (d: { x: number; y: number }) => d.x) as [number, number];
-  const yMin = d3Array.min(data, (d: { x: number; y: number }) => d.y) ?? 0;
-  const yMax = d3Array.max(data, (d: { x: number; y: number }) => d.y) ?? 100;
+  const xDomain = d3Array.extent(data, (d) => d.x) as [number, number];
+  let yMin = d3Array.min(data, (d) => d.y);
+  let yMax = d3Array.max(data, (d) => d.y);
+
+  if (yMin == null || yMax == null) return '';
+
+  if (yMin === yMax) {
+    yMin -= 1;
+    yMax += 1;
+  }
 
   const xScale = d3Scale.scaleLinear().domain(xDomain).range([0, width]);
   const yScale = d3Scale
     .scaleLinear()
-    .domain([yMin * 0.8, yMax * 1.2])
+    .domain([yMin * 0.9, yMax * 1.1])
     .range([height, 0]);
 
   const line = d3
     .line<{ x: number; y: number }>()
-    .x((d: { x: number; y: number }) => xScale(d.x))
-    .y((d: { x: number; y: number }) => yScale(d.y))
+    .x((d) => xScale(d.x))
+    .y((d) => yScale(d.y))
     .curve(d3.curveBasis);
 
-  let path = line(data) || '';
-  path += ` L ${width} ${height} L 0 ${height} Z`;
-  return path;
+  const linePath = line(data);
+  if (!linePath) return '';
+
+  const closed = `${linePath} L ${width} ${height} L 0 ${height} Z`;
+
+  if (closed.includes('NaN') || closed.includes('null') || closed.includes('undefined')) return '';
+
+  return closed;
 }
 
 function SingleChartLine({
-  points,
+  raw,
   dataKey,
-  color,
-  isVisible,
+  visible,
   width,
   height,
 }: {
-  points: OverviewPoint[];
-  dataKey: keyof OverviewPoint;
-  color: string;
-  isVisible: boolean;
+  raw: OverviewPoint[];
+  dataKey: Key;
+  visible: boolean;
   width: number;
   height: number;
 }) {
-  const normalized = useMemo(() => normalizeData(points, dataKey), [points, dataKey]);
-  const initialPath = useMemo(() => generateD3Path(normalized, width, height), [normalized, width, height]);
+  const opacity = useSharedValue(visible ? 0.6 : 0);
 
-  const animatedPath = useSharedValue(initialPath);
-  const animatedOpacity = useSharedValue(isVisible ? 0.6 : 0);
-
-  useEffect(() => {
-    const newPath = generateD3Path(normalized, width, height);
-    animatedPath.value = withTiming(newPath, { duration: 900, easing: Easing.inOut(Easing.cubic) });
-    animatedOpacity.value = withTiming(isVisible ? 0.6 : 0, { duration: 250 });
-  }, [normalized, width, height, isVisible]);
+  const pathD = useMemo(() => {
+    const pts = normalize(raw, dataKey);
+    return safeGeneratePath(pts, width, height);
+  }, [raw, dataKey, width, height]);
 
   useEffect(() => {
-    if (!points || points.length === 0) {
-      const breathing = normalized.map((d) => ({ x: d.x, y: d.y + (Math.random() * 10 - 5) }));
-      const breathingPath = generateD3Path(breathing, width, height);
-      animatedPath.value = withRepeat(
-        withSequence(
-          withTiming(breathingPath, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
-          withTiming(initialPath, { duration: 2000, easing: Easing.inOut(Easing.sin) })
-        ),
-        -1,
-        true
-      );
-    }
-  }, [points, normalized, width, height, initialPath]);
+    opacity.value = withTiming(visible ? 0.6 : 0, { duration: 250 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const animatedProps = useAnimatedProps(() => ({
-    d: animatedPath.value,
-    fillOpacity: animatedOpacity.value,
-    strokeOpacity: animatedOpacity.value === 0 ? 0 : 1,
+    fillOpacity: opacity.value,
+    strokeOpacity: opacity.value === 0 ? 0 : 1,
   }));
 
-  const gradientId = `grad-${String(dataKey)}`;
+  if (!pathD) return null;
+
+  const gradientId = `grad-${dataKey}`;
 
   return (
     <>
       <Defs>
         <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%" stopColor={color} stopOpacity="0.85" />
-          <Stop offset="100%" stopColor={color} stopOpacity="0.10" />
+          <Stop offset="0%" stopColor={COLORS[dataKey].primary} stopOpacity="0.8" />
+          <Stop offset="100%" stopColor={COLORS[dataKey].primary} stopOpacity="0.1" />
         </LinearGradient>
       </Defs>
+
       <AnimatedPath
         animatedProps={animatedProps}
+        d={pathD}
         fill={`url(#${gradientId})`}
-        stroke={color}
+        stroke={COLORS[dataKey].primary}
         strokeWidth={2}
       />
     </>
@@ -153,49 +143,58 @@ function SingleChartLine({
 
 export default function AnimatedDashboardChart({
   points,
+  title,
 }: {
   points: OverviewPoint[];
+  title?: string;
 }) {
-  const [dims, setDims] = useState({ width: SCREEN_WIDTH - 24, height: CHART_HEIGHT });
-  const [toggles, setToggles] = useState({
+  const [dims, setDims] = useState({ width: SCREEN_WIDTH - 20, height: CHART_HEIGHT });
+
+  const [toggles, setToggles] = useState<Record<Key, boolean>>({
     sales: true,
     expenses: true,
     transactions: false,
     activeUsers: false,
   });
 
+  const onLayout = (e: any) => {
+    const { width, height } = e.nativeEvent.layout;
+    setDims({ width, height });
+  };
+
   return (
     <View style={styles.container}>
-      <View
-        style={styles.chartContainer}
-        onLayout={(e) => {
-          const w = e.nativeEvent.layout.width;
-          const h = e.nativeEvent.layout.height;
-          setDims({ width: w, height: h });
-        }}
-      >
+      {!!title && <Text style={styles.title}>{title}</Text>}
+
+      <View style={styles.chartContainer} onLayout={onLayout}>
         <Svg width={dims.width} height={dims.height} style={StyleSheet.absoluteFill}>
-          <SingleChartLine points={points} dataKey="sales" color={COLORS.sales.primary} isVisible={toggles.sales} width={dims.width} height={dims.height} />
-          <SingleChartLine points={points} dataKey="expenses" color={COLORS.expenses.primary} isVisible={toggles.expenses} width={dims.width} height={dims.height} />
-          <SingleChartLine points={points} dataKey="transactions" color={COLORS.transactions.primary} isVisible={toggles.transactions} width={dims.width} height={dims.height} />
-          <SingleChartLine points={points} dataKey="activeUsers" color={COLORS.activeUsers.primary} isVisible={toggles.activeUsers} width={dims.width} height={dims.height} />
+          {(Object.keys(COLORS) as Key[]).map((k) => (
+            <SingleChartLine
+              key={k}
+              raw={points}
+              dataKey={k}
+              visible={toggles[k]}
+              width={dims.width}
+              height={dims.height}
+            />
+          ))}
         </Svg>
       </View>
 
       <View style={styles.controlsContainer}>
-        {Object.entries(COLORS).map(([key, cfg]) => (
+        {(Object.keys(COLORS) as Key[]).map((k) => (
           <TouchableOpacity
-            key={key}
-            activeOpacity={0.75}
-            onPress={() => setToggles((p) => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+            key={k}
             style={[
               styles.toggleButton,
-              { backgroundColor: toggles[key as keyof typeof toggles] ? cfg.primary : '#2A2A2A' },
+              { backgroundColor: toggles[k] ? COLORS[k].primary : '#2A2A2A' },
             ]}
+            onPress={() => setToggles((p) => ({ ...p, [k]: !p[k] }))}
+            activeOpacity={0.7}
           >
-            <View style={[styles.dot, { backgroundColor: cfg.primary }]} />
-            <Text style={[styles.toggleText, { color: toggles[key as keyof typeof toggles] ? '#fff' : '#aaa' }]}>
-              {cfg.label}
+            <View style={[styles.dot, { backgroundColor: COLORS[k].primary }]} />
+            <Text style={[styles.toggleText, { color: toggles[k] ? 'white' : '#888' }]}>
+              {COLORS[k].label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -205,34 +204,26 @@ export default function AnimatedDashboardChart({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#121212',
-    padding: 12,
-    borderRadius: 18,
-  },
+  container: { backgroundColor: '#121212', padding: 15, borderRadius: 20, margin: 10 },
+  title: { color: 'white', fontWeight: '700', fontSize: 16, marginBottom: 10 },
   chartContainer: {
     height: CHART_HEIGHT,
     width: '100%',
-    borderRadius: 14,
+    borderRadius: 15,
     overflow: 'hidden',
     backgroundColor: '#1A1A1A',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  controlsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 10 as any,
-  },
+  controlsContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   toggleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#333',
   },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  toggleText: { fontWeight: '700', fontSize: 12 },
+  toggleText: { fontWeight: '600', fontSize: 12 },
 });
