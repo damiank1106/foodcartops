@@ -351,6 +351,8 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       'settlement_items'
     ];
 
+    const pendingSettlementItems: any[] = [];
+
     // TODO PHASE 8.XX-D: Add next sync batch tables
     // - sales
     // - sale_items
@@ -454,6 +456,29 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                 }
               }
 
+              if (tableName === 'settlement_items') {
+                const parentExists = await db.getFirstAsync<{ id: string }>(
+                  'SELECT id FROM settlements WHERE id = ? AND deleted_at IS NULL AND is_deleted = 0',
+                  [remoteRow.settlement_id]
+                );
+
+                if (!parentExists) {
+                  console.log(`[Sync] ⚠️ Skipping settlement_item ${remoteRow.id} - parent settlement ${remoteRow.settlement_id} not found, will retry after settlements pull completes`);
+                  pendingSettlementItems.push(remoteRow);
+                  continue;
+                }
+
+                const productExists = await db.getFirstAsync<{ id: string }>(
+                  'SELECT id FROM products WHERE id = ?',
+                  [remoteRow.product_id]
+                );
+
+                if (!productExists) {
+                  console.log(`[Sync] ⚠️ Settlement item ${remoteRow.id} references missing product ${remoteRow.product_id}, setting product_id to NULL`);
+                  remoteRow.product_id = null;
+                }
+              }
+
               const localSchema = await db.getAllAsync<{ name: string }>(
                 `PRAGMA table_info(${tableName})`
               );
@@ -518,7 +543,17 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
               const insertSQL = `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
               const values = columns.map(col => remoteRow[col]);
 
-              await db.runAsync(insertSQL, values);
+              try {
+                await db.runAsync(insertSQL, values);
+              } catch (insertError: any) {
+                if (tableName === 'settlement_items' && insertError.message?.includes('FOREIGN KEY')) {
+                  console.error(`[Sync] ❌ FK constraint failed for settlement_item ${remoteRow.id}:`, insertError.message);
+                  console.log('[Sync] Adding to pending queue for retry');
+                  pendingSettlementItems.push(remoteRow);
+                  continue;
+                }
+                throw insertError;
+              }
             }
 
             if (remoteRow.updated_at_iso && remoteRow.updated_at_iso > maxUpdatedAt) {
@@ -544,6 +579,72 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         console.error(`[Sync] Failed to pull ${tableName}:`, error);
         updateStatus({ lastError: error.message || String(error) });
       }
+    }
+
+    if (pendingSettlementItems.length > 0) {
+      console.log(`[Sync] 🔄 Retrying ${pendingSettlementItems.length} pending settlement_items after settlements pull`);
+      
+      db = await getDatabase();
+      let retrySuccess = 0;
+      let retryFailed = 0;
+
+      for (const remoteRow of pendingSettlementItems) {
+        try {
+          const parentExists = await db.getFirstAsync<{ id: string }>(
+            'SELECT id FROM settlements WHERE id = ? AND deleted_at IS NULL AND is_deleted = 0',
+            [remoteRow.settlement_id]
+          );
+
+          if (!parentExists) {
+            console.error(`[Sync] ⚠️ RETRY FAILED: Parent settlement ${remoteRow.settlement_id} still not found for settlement_item ${remoteRow.id}`);
+            retryFailed++;
+            continue;
+          }
+
+          const productExists = await db.getFirstAsync<{ id: string }>(
+            'SELECT id FROM products WHERE id = ?',
+            [remoteRow.product_id]
+          );
+
+          if (!productExists) {
+            console.log(`[Sync] ⚠️ RETRY: Product ${remoteRow.product_id} not found, setting to NULL for settlement_item ${remoteRow.id}`);
+            remoteRow.product_id = null;
+          }
+
+          const localSchema = await db.getAllAsync<{ name: string }>(
+            'PRAGMA table_info(settlement_items)'
+          );
+          const localColumns = new Set(localSchema.map(col => col.name));
+          const columns = Object.keys(remoteRow).filter(col => localColumns.has(col));
+          const placeholders = columns.map(() => '?').join(', ');
+          const insertSQL = `INSERT OR REPLACE INTO settlement_items (${columns.join(', ')}) VALUES (${placeholders})`;
+          const values = columns.map(col => remoteRow[col]);
+
+          await db.runAsync(insertSQL, values);
+          retrySuccess++;
+          console.log(`[Sync] ✅ RETRY SUCCESS: Applied settlement_item ${remoteRow.id}`);
+
+          if (remoteRow.updated_at_iso) {
+            const stateRows = await db.getAllAsync<SyncStateRow>(
+              'SELECT last_sync_at FROM sync_state WHERE table_name = ?',
+              ['settlement_items']
+            );
+            const lastSyncAt = stateRows[0]?.last_sync_at || '1970-01-01T00:00:00Z';
+            
+            if (remoteRow.updated_at_iso > lastSyncAt) {
+              await db.runAsync(
+                'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
+                [remoteRow.updated_at_iso, 'settlement_items']
+              );
+            }
+          }
+        } catch (retryError: any) {
+          console.error(`[Sync] ❌ RETRY ERROR for settlement_item ${remoteRow.id}:`, retryError.message);
+          retryFailed++;
+        }
+      }
+
+      console.log(`[Sync] 📊 Retry summary: ${retrySuccess} success, ${retryFailed} failed out of ${pendingSettlementItems.length} pending`);
     }
 
     console.log('[Sync] Completed');
