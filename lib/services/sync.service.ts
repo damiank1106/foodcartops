@@ -185,6 +185,27 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         const payload = JSON.parse(row.payload_json);
         const syncPayload = stripLocalOnlyColumns(row.table_name, payload);
 
+        if (row.table_name === 'settlements') {
+          console.log('[Sync] ✅ Pushing settlements:', row.row_id);
+          console.log('[Sync] settlements payload:', {
+            id: syncPayload.id,
+            shift_id: syncPayload.shift_id,
+            status: syncPayload.status,
+            total_cents: syncPayload.total_cents,
+            keys: Object.keys(syncPayload)
+          });
+        }
+
+        if (row.table_name === 'settlement_items') {
+          console.log('[Sync] ✅ Pushing settlement_items:', row.row_id);
+          console.log('[Sync] settlement_items payload:', {
+            id: syncPayload.id,
+            settlement_id: syncPayload.settlement_id,
+            product_name: syncPayload.product_name,
+            keys: Object.keys(syncPayload)
+          });
+        }
+
         if (row.table_name === 'inventory_items') {
           console.log('[Sync] inventory_items payload keys:', Object.keys(syncPayload));
           console.log(`[Sync] DEBUG inventory_items payload for ${row.row_id}:`, {
@@ -207,7 +228,11 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             throw error;
           }
 
-          console.log(`[Sync] Pushed ${row.table_name} upsert: ${row.row_id}`);
+          if (row.table_name === 'settlements' || row.table_name === 'settlement_items') {
+            console.log(`[Sync] ✅ SUCCESS: Pushed ${row.table_name} upsert: ${row.row_id}`);
+          } else {
+            console.log(`[Sync] Pushed ${row.table_name} upsert: ${row.row_id}`);
+          }
 
           if (row.table_name === 'inventory_items') {
             const { data: verifyData, error: verifyError } = await supabase
@@ -237,7 +262,17 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         db = await getDatabase();
         await db.runAsync('DELETE FROM sync_outbox WHERE id = ?', [row.id]);
       } catch (error: any) {
-        console.error(`[Sync] Failed to push ${row.table_name}:`, error);
+        if (row.table_name === 'settlements' || row.table_name === 'settlement_items') {
+          console.error(`[Sync] ❌ FAILED to push ${row.table_name}:`, error);
+          console.error('[Sync] Error details:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
+        } else {
+          console.error(`[Sync] Failed to push ${row.table_name}:`, error);
+        }
         const errorMsg = error.message || String(error);
         
         if (errorMsg.toLowerCase().includes('invalid api key')) {

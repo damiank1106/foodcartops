@@ -118,6 +118,12 @@ export default function BackupDataScreen() {
       );
       setOutboxRows(rows);
       setShowOutboxModal(true);
+      
+      const tableBreakdown = rows.reduce((acc: Record<string, number>, row: any) => {
+        acc[row.table_name] = (acc[row.table_name] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('[BackupData] ✅ Outbox breakdown by table:', tableBreakdown);
     } catch (error) {
       console.error('[BackupData] Failed to load outbox:', error);
       Alert.alert('Error', 'Failed to load outbox');
@@ -527,22 +533,38 @@ export default function BackupDataScreen() {
               {outboxRows.length === 0 ? (
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No pending items</Text>
               ) : (
-                outboxRows.map((row: any) => (
-                  <View key={row.id} style={[styles.outboxItem, { borderBottomColor: theme.border }]}>
-                    <Text style={[styles.outboxTable, { color: theme.text }]}>{row.table_name}</Text>
-                    <Text style={[styles.outboxOp, { color: theme.textSecondary }]}>
-                      {row.op.toUpperCase()} · Attempts: {row.attempts}
-                    </Text>
-                    <Text style={[styles.outboxDate, { color: theme.textSecondary, fontSize: 12 }]}>
-                      {new Date(row.created_at).toLocaleString()}
-                    </Text>
-                    {row.last_error && (
-                      <Text style={[styles.outboxError, { color: theme.error, fontSize: 12 }]} numberOfLines={2}>
-                        {row.last_error}
-                      </Text>
-                    )}
+                <>
+                  <View style={[styles.tableBreakdown, { backgroundColor: theme.background, marginBottom: 16, padding: 12, borderRadius: 8 }]}>
+                    <Text style={[styles.tableBreakdownTitle, { color: theme.text, fontWeight: '600', marginBottom: 8 }]}>By Table</Text>
+                    {Object.entries(
+                      outboxRows.reduce((acc: Record<string, number>, row: any) => {
+                        acc[row.table_name] = (acc[row.table_name] || 0) + 1;
+                        return acc;
+                      }, {})
+                    ).map(([table, count]) => (
+                      <View key={table} style={[styles.tableBreakdownRow, { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }]}>
+                        <Text style={[styles.tableBreakdownTable, { color: theme.textSecondary }]}>{table}</Text>
+                        <Text style={[styles.tableBreakdownCount, { color: theme.text, fontWeight: '600' }]}>{count}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))
+                  {outboxRows.map((row: any) => (
+                    <View key={row.id} style={[styles.outboxItem, { borderBottomColor: theme.border }]}>
+                      <Text style={[styles.outboxTable, { color: theme.text }]}>{row.table_name}</Text>
+                      <Text style={[styles.outboxOp, { color: theme.textSecondary }]}>
+                        {row.op.toUpperCase()} · Attempts: {row.attempts}
+                      </Text>
+                      <Text style={[styles.outboxDate, { color: theme.textSecondary, fontSize: 12 }]}>
+                        {new Date(row.created_at).toLocaleString()}
+                      </Text>
+                      {row.last_error && (
+                        <Text style={[styles.outboxError, { color: theme.error, fontSize: 12 }]} numberOfLines={2}>
+                          {row.last_error}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                </>
               )}
             </ScrollView>
           </View>
@@ -841,5 +863,15 @@ const styles = StyleSheet.create({
   syncTimingButtonText: {
     fontSize: 14,
     fontWeight: '600' as const,
+  },
+  tableBreakdown: {
+  },
+  tableBreakdownTitle: {
+  },
+  tableBreakdownRow: {
+  },
+  tableBreakdownTable: {
+  },
+  tableBreakdownCount: {
   },
 });
