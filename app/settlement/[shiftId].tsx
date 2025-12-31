@@ -15,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { CheckCircle, Lock } from 'lucide-react-native';
 import { format } from 'date-fns';
+import type { SettlementStatus } from '@/lib/types';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
@@ -198,35 +199,43 @@ export default function SettlementEditorScreen() {
     mutationFn: async () => {
       if (!user || !shiftData) throw new Error('Missing data');
 
-      const cashCountedCents = 0;
-      const cashDifferenceCents = 0;
-
       let settlementId: string;
 
       if (shiftData.existingSettlement) {
-        if (shiftData.existingSettlement.status === 'FINALIZED') {
+        if (shiftData.existingSettlement.status === 'finalized' as SettlementStatus) {
           throw new Error('Settlement already finalized');
         }
         settlementId = shiftData.existingSettlement.id;
       } else {
+        const dateIso = format(shiftData.shift.clock_out || shiftData.shift.clock_in, 'yyyy-MM-dd');
+        const totalSalesCents = shiftData.computation.total_sales_cents || 0;
+        
         const settlement = await settlementRepo.create(
           shiftId!,
           shiftData.shift.cart_id,
           shiftData.shift.worker_id,
-          user.id,
-          shiftData.computation.cash_expected_cents,
-          cashCountedCents,
-          cashDifferenceCents,
-          shiftData.computation.net_due_to_worker_cents,
-          shiftData.computation.net_due_to_boss_cents,
-          JSON.stringify(shiftData.computation),
-          shiftData.settlementDay,
-          shiftData.dailyNetSalesCents,
-          shiftData.managerShareCents,
-          shiftData.ownerShareCents,
-          notes
+          dateIso,
+          'saved',
+          notes,
+          shiftData.paymentsByMethod.CASH,
+          shiftData.paymentsByMethod.GCASH,
+          shiftData.paymentsByMethod.CARD,
+          totalSalesCents,
+          totalSalesCents,
+          user.id
         );
         settlementId = settlement.id;
+
+        for (const product of shiftData.productsSold) {
+          await settlementRepo.createSettlementItem(
+            settlementId,
+            product.product_id,
+            product.product_name,
+            product.quantity,
+            product.total_cents,
+            user.id
+          );
+        }
       }
 
       await settlementRepo.finalize(settlementId, user.id);
@@ -318,7 +327,7 @@ export default function SettlementEditorScreen() {
     );
   }
 
-  const isFinalized = shiftData.existingSettlement?.status === 'FINALIZED';
+  const isFinalized = shiftData.existingSettlement?.status === 'finalized' as SettlementStatus;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>

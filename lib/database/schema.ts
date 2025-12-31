@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 37;
+export const SCHEMA_VERSION = 38;
 
 export const MIGRATIONS = [
   {
@@ -1638,6 +1638,121 @@ export const MIGRATIONS = [
 
       CREATE INDEX idx_worker_shifts_worker_id ON worker_shifts(worker_id);
       CREATE INDEX idx_worker_shifts_cart_id ON worker_shifts(cart_id);
+    `,
+  },
+  {
+    version: 38,
+    up: `
+      ALTER TABLE settlements ADD COLUMN seller_user_id TEXT;
+      ALTER TABLE settlements ADD COLUMN date_iso TEXT;
+      ALTER TABLE settlements ADD COLUMN cash_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN gcash_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN card_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN gross_sales_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN total_cents INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN business_id TEXT NOT NULL DEFAULT 'default_business';
+      ALTER TABLE settlements ADD COLUMN device_id TEXT;
+      ALTER TABLE settlements ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE settlements ADD COLUMN deleted_at TEXT;
+      ALTER TABLE settlements ADD COLUMN created_at_iso TEXT;
+      ALTER TABLE settlements ADD COLUMN updated_at_iso TEXT;
+
+      UPDATE settlements SET seller_user_id = worker_user_id WHERE seller_user_id IS NULL;
+      UPDATE settlements SET status = 'saved' WHERE status = 'DRAFT';
+      UPDATE settlements SET status = 'finalized' WHERE status = 'FINALIZED';
+
+      CREATE TABLE settlements_new (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT NOT NULL,
+        cart_id TEXT NOT NULL,
+        seller_user_id TEXT NOT NULL,
+        date_iso TEXT,
+        status TEXT NOT NULL DEFAULT 'saved' CHECK(status IN ('saved', 'finalized')),
+        notes TEXT,
+        cash_cents INTEGER NOT NULL DEFAULT 0,
+        gcash_cents INTEGER NOT NULL DEFAULT 0,
+        card_cents INTEGER NOT NULL DEFAULT 0,
+        gross_sales_cents INTEGER NOT NULL DEFAULT 0,
+        total_cents INTEGER NOT NULL DEFAULT 0,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_at_iso TEXT,
+        updated_at_iso TEXT,
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        FOREIGN KEY (seller_user_id) REFERENCES users(id)
+      );
+
+      INSERT INTO settlements_new (
+        id, shift_id, cart_id, seller_user_id, date_iso, status, notes,
+        cash_cents, gcash_cents, card_cents, gross_sales_cents, total_cents,
+        business_id, device_id, is_deleted, deleted_at,
+        created_at, updated_at, created_at_iso, updated_at_iso
+      )
+      SELECT 
+        id, shift_id, cart_id, seller_user_id, settlement_day, 
+        CASE WHEN status = 'DRAFT' THEN 'saved' WHEN status = 'FINALIZED' THEN 'finalized' ELSE status END,
+        notes,
+        0, 0, 0, 0, 0,
+        business_id, device_id, is_deleted, deleted_at,
+        created_at, updated_at, created_at_iso, updated_at_iso
+      FROM settlements;
+
+      DROP TABLE settlements;
+      ALTER TABLE settlements_new RENAME TO settlements;
+
+      CREATE INDEX idx_settlements_shift_id ON settlements(shift_id);
+      CREATE INDEX idx_settlements_cart_id ON settlements(cart_id);
+      CREATE INDEX idx_settlements_seller_user_id ON settlements(seller_user_id);
+      CREATE INDEX idx_settlements_status ON settlements(status);
+      CREATE INDEX idx_settlements_deleted_at ON settlements(deleted_at);
+      CREATE INDEX idx_settlements_is_deleted ON settlements(is_deleted);
+      CREATE INDEX idx_settlements_updated_at_iso ON settlements(updated_at_iso);
+
+      CREATE TABLE IF NOT EXISTS settlement_items (
+        id TEXT PRIMARY KEY,
+        settlement_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        qty INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_at_iso TEXT,
+        updated_at_iso TEXT,
+        FOREIGN KEY (settlement_id) REFERENCES settlements(id),
+        FOREIGN KEY (product_id) REFERENCES products(id)
+      );
+
+      CREATE INDEX idx_settlement_items_settlement_id ON settlement_items(settlement_id);
+      CREATE INDEX idx_settlement_items_product_id ON settlement_items(product_id);
+      CREATE INDEX idx_settlement_items_deleted_at ON settlement_items(deleted_at);
+      CREATE INDEX idx_settlement_items_is_deleted ON settlement_items(is_deleted);
+      CREATE INDEX idx_settlement_items_updated_at_iso ON settlement_items(updated_at_iso);
+
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('settlements');
+      INSERT OR IGNORE INTO sync_state (table_name) VALUES ('settlement_items');
+
+      INSERT INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Added Supabase sync columns to settlements table', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Created settlement_items table for synced product-level settlement data', ${Date.now()}),
+      (lower(hex(randomblob(16))), 'Migrated settlement status values: DRAFT->saved, FINALIZED->finalized', ${Date.now()});
+    `,
+    down: `
+      DROP TABLE IF EXISTS settlement_items;
+      DROP INDEX IF EXISTS idx_settlements_deleted_at;
+      DROP INDEX IF EXISTS idx_settlements_is_deleted;
+      DROP INDEX IF EXISTS idx_settlements_updated_at_iso;
+      
+      DELETE FROM sync_state WHERE table_name IN ('settlements', 'settlement_items');
     `,
   },
 ];

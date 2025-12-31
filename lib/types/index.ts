@@ -10,7 +10,7 @@ export type ExpenseStatus = 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'DRAFT';
 
 export type PaidFrom = 'CASH_DRAWER' | 'PERSONAL' | 'COMPANY';
 
-export type SettlementStatus = 'DRAFT' | 'FINALIZED';
+export type SettlementStatus = 'saved' | 'finalized';
 
 export type CommissionType = 'NONE' | 'PERCENT_OF_SALES' | 'PERCENT_OF_PROFIT';
 
@@ -254,24 +254,40 @@ export interface Settlement {
   id: string;
   shift_id: string;
   cart_id: string;
-  worker_user_id: string;
-  created_by_user_id: string;
-  finalized_by_user_id?: string;
-  computed_json?: string;
-  cash_expected_cents: number;
-  cash_counted_cents: number;
-  cash_difference_cents: number;
-  net_due_to_worker_cents: number;
-  net_due_to_boss_cents: number;
+  seller_user_id: string;
+  date_iso?: string;
   status: SettlementStatus;
   notes?: string;
-  settlement_day?: string;
-  daily_net_sales_cents: number;
-  manager_share_cents: number;
-  owner_share_cents: number;
+  cash_cents: number;
+  gcash_cents: number;
+  card_cents: number;
+  gross_sales_cents: number;
+  total_cents: number;
+  business_id?: string;
+  device_id?: string;
+  is_deleted?: number;
+  deleted_at?: string;
   created_at: number;
   updated_at: number;
-  finalized_at?: number;
+  created_at_iso?: string;
+  updated_at_iso?: string;
+}
+
+export interface SettlementItem {
+  id: string;
+  settlement_id: string;
+  product_id: string;
+  product_name: string;
+  qty: number;
+  price_cents: number;
+  business_id?: string;
+  device_id?: string;
+  is_deleted?: number;
+  deleted_at?: string;
+  created_at: number;
+  updated_at: number;
+  created_at_iso?: string;
+  updated_at_iso?: string;
 }
 
 export interface SettlementWithDetails extends Settlement {

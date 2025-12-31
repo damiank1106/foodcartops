@@ -23,7 +23,7 @@ export default function BossSettlementsScreen() {
   const settlementRepo = new SettlementRepository();
   const shiftRepo = new ShiftRepository();
 
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'DRAFT' | 'FINALIZED'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'saved' | 'finalized'>('ALL');
 
   const { data: settlements, isLoading } = useQuery({
     queryKey: ['boss-settlements', filterStatus],
@@ -75,30 +75,30 @@ export default function BossSettlementsScreen() {
           <TouchableOpacity
             style={[
               styles.filterButton,
-              filterStatus === 'DRAFT' && { backgroundColor: theme.warning + '20' },
+              filterStatus === 'saved' && { backgroundColor: theme.warning + '20' },
             ]}
-            onPress={() => setFilterStatus('DRAFT')}
+            onPress={() => setFilterStatus('saved')}
           >
             <Text
               style={[
                 styles.filterText,
-                { color: filterStatus === 'DRAFT' ? theme.warning : theme.textSecondary },
+                { color: filterStatus === 'saved' ? theme.warning : theme.textSecondary },
               ]}
             >
-              Draft
+              Saved
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.filterButton,
-              filterStatus === 'FINALIZED' && { backgroundColor: theme.success + '20' },
+              filterStatus === 'finalized' && { backgroundColor: theme.success + '20' },
             ]}
-            onPress={() => setFilterStatus('FINALIZED')}
+            onPress={() => setFilterStatus('finalized')}
           >
             <Text
               style={[
                 styles.filterText,
-                { color: filterStatus === 'FINALIZED' ? theme.success : theme.textSecondary },
+                { color: filterStatus === 'finalized' ? theme.success : theme.textSecondary },
               ]}
             >
               Finalized
@@ -136,65 +136,41 @@ export default function BossSettlementsScreen() {
               <View style={styles.settlementDetails}>
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                    Cash Expected:
+                    Cash:
                   </Text>
                   <Text style={[styles.detailValue, { color: theme.text }]}>
-                    ₱{(settlement.cash_expected_cents / 100).toFixed(2)}
+                    ₱{(settlement.cash_cents / 100).toFixed(2)}
                   </Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                    Cash Counted:
+                    GCash:
                   </Text>
                   <Text style={[styles.detailValue, { color: theme.text }]}>
-                    ₱{(settlement.cash_counted_cents / 100).toFixed(2)}
+                    ₱{(settlement.gcash_cents / 100).toFixed(2)}
                   </Text>
                 </View>
-                {settlement.cash_difference_cents !== 0 && (
-                  <View style={styles.detailRow}>
-                    <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                      Difference:
-                    </Text>
-                    <Text
-                      style={[
-                        styles.detailValue,
-                        {
-                          color:
-                            settlement.cash_difference_cents > 0 ? theme.success : theme.error,
-                          fontWeight: '700',
-                        },
-                      ]}
-                    >
-                      {settlement.cash_difference_cents > 0 ? '+' : ''}₱
-                      {(settlement.cash_difference_cents / 100).toFixed(2)}
-                    </Text>
-                  </View>
-                )}
-                {settlement.daily_net_sales_cents > 0 && (
-                  <>
-                    <View style={styles.divider} />
-                    <View style={styles.detailRow}>
-                      <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                        Daily Net Sales:
-                      </Text>
-                      <Text style={[styles.detailValue, { color: theme.primary, fontWeight: '600' }]}>
-                        ₱{(settlement.daily_net_sales_cents / 100).toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                        Manager Share (70%):
-                      </Text>
-                      <Text style={[styles.detailValue, { color: theme.success }]}>
-                        ₱{(settlement.manager_share_cents / 100).toFixed(2)}
-                      </Text>
-                    </View>
-                  </>
-                )}
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                    Card:
+                  </Text>
+                  <Text style={[styles.detailValue, { color: theme.text }]}>
+                    ₱{(settlement.card_cents / 100).toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: theme.textSecondary, fontWeight: '600' }]}>
+                    Total:
+                  </Text>
+                  <Text style={[styles.detailValue, { color: theme.primary, fontWeight: '700', fontSize: 16 }]}>
+                    ₱{(settlement.total_cents / 100).toFixed(2)}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.statusContainer}>
-                {settlement.status === 'FINALIZED' ? (
+                {settlement.status === 'finalized' ? (
                   <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
                     <Text style={[styles.statusText, { color: theme.success }]}>Finalized</Text>
                   </View>
