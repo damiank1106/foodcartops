@@ -121,7 +121,6 @@ export default function BossDashboard() {
         last_shift: lastShift,
       };
     },
-    refetchInterval: 10000,
   });
 
   const { data: recentActivity } = useQuery({
@@ -130,7 +129,6 @@ export default function BossDashboard() {
       const logs = await auditRepo.getRecentLogs(50);
       return logs;
     },
-    refetchInterval: 30000,
   });
 
   const handleDeleteActivity = (logId: string) => {
@@ -178,7 +176,6 @@ export default function BossDashboard() {
       return savedItemsRepo.findAll({ created_by_user_id: user.id });
     },
     enabled: !!user?.id,
-    refetchInterval: 10000,
   });
 
   const { data: savedRecords } = useQuery({
@@ -188,7 +185,6 @@ export default function BossDashboard() {
       return savedRecordRepo.listAll();
     },
     enabled: !!user?.id,
-    refetchInterval: 10000,
   });
 
   const { data: allCarts } = useQuery({
@@ -199,7 +195,6 @@ export default function BossDashboard() {
       }
       return cartRepo.findAll();
     },
-    refetchInterval: 10000,
   });
 
   const saveMutation = useMutation({
@@ -523,7 +518,7 @@ export default function BossDashboard() {
     }
   }, [selectedTab, navigation, theme]);
 
-  if (isLoading) {
+  if (isLoading && !stats) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.primary} />
