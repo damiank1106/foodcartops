@@ -249,6 +249,20 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
           if (row.table_name === 'settlements' || row.table_name === 'settlement_items') {
             console.log(`[Sync] ✅ SUCCESS: Pushed ${row.table_name} upsert: ${row.row_id}`);
+            
+            const { data: verifyData, error: verifyError } = await supabase
+              .from(row.table_name)
+              .select('id')
+              .eq('id', row.row_id)
+              .single();
+            
+            if (verifyError || !verifyData) {
+              console.error(`[Sync] ⚠️ RLS WARNING: Pushed ${row.table_name} ${row.row_id} but cannot read it back!`);
+              console.error('[Sync] This indicates Row Level Security (RLS) policies are blocking SELECT.');
+              console.error('[Sync] Fix: Update Supabase RLS policies to allow SELECT for all authenticated users.');
+            } else {
+              console.log(`[Sync] ✅ Verified ${row.table_name} ${row.row_id} is readable after push`);
+            }
           } else {
             console.log(`[Sync] Pushed ${row.table_name} upsert: ${row.row_id}`);
           }
@@ -360,7 +374,22 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           .order('updated_at_iso', { ascending: true });
 
         if (error) {
+          console.error(`[Sync] ❌ ERROR pulling ${tableName}:`, {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
           throw error;
+        }
+
+        if (tableName === 'settlements' || tableName === 'settlement_items') {
+          console.log(`[Sync] 🔍 DEBUG ${tableName} pull result:`, {
+            rowCount: data?.length || 0,
+            hasError: !!error,
+            lastSyncAt,
+            sampleRow: data?.[0] ? { id: data[0].id, status: data[0].status } : null
+          });
         }
 
         if (data && data.length > 0) {
