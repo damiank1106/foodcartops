@@ -21,6 +21,7 @@ import { ExpenseRepository, AuditRepository, CartRepository } from '@/lib/reposi
 import type { PaidFrom } from '@/lib/types';
 import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
+import SyncProgressModal from '@/components/SyncProgressModal';
 
 const EXPENSE_CATEGORIES = [
   'Supplies',
@@ -48,6 +49,7 @@ export default function WorkerExpensesScreen() {
   const [paidFrom, setPaidFrom] = useState<PaidFrom>('CASH_DRAWER');
   const [notes, setNotes] = useState<string>('');
   const [receiptUri, setReceiptUri] = useState<string>('');
+  const [showSyncModal, setShowSyncModal] = useState<boolean>(false);
 
   const expenseRepo = React.useMemo(() => new ExpenseRepository(), []);
   const auditRepo = React.useMemo(() => new AuditRepository(), []);
@@ -133,7 +135,7 @@ export default function WorkerExpensesScreen() {
       queryClient.invalidateQueries({ queryKey: ['shift-expenses'] });
       setShowAddModal(false);
       resetForm();
-      Alert.alert('Success', activeShiftId ? 'Expense submitted for approval' : 'Expense saved as draft');
+      setShowSyncModal(true);
     },
     onError: (error: Error) => {
       console.error('[Expense] Failed to create expense:', error);
@@ -564,6 +566,17 @@ export default function WorkerExpensesScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <SyncProgressModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSuccess={() => {
+          console.log('[Worker Expense] Sync completed after expense submission');
+        }}
+        reason="submit_expense"
+        title="Synchronizing with Database"
+        allowCancel={false}
+      />
     </View>
   );
 }

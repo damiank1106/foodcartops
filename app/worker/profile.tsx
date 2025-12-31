@@ -5,6 +5,7 @@ import { LogOut, Moon, Sun, User as UserIcon, Key, ChevronRight, X, Info, Extern
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository } from '@/lib/repositories';
+import SyncProgressModal from '@/components/SyncProgressModal';
 
 export default function WorkerProfileScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
@@ -19,6 +20,7 @@ export default function WorkerProfileScreen() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -26,12 +28,16 @@ export default function WorkerProfileScreen() {
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/');
+        onPress: () => {
+          setShowSyncModal(true);
         },
       },
     ]);
+  };
+
+  const handleSyncSuccess = async () => {
+    await logout();
+    router.replace('/');
   };
 
   const toggleTheme = () => {
@@ -386,6 +392,16 @@ export default function WorkerProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <SyncProgressModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSuccess={handleSyncSuccess}
+        onCancel={() => setShowSyncModal(false)}
+        reason="logout"
+        title="Synchronizing with Database"
+        allowCancel={true}
+      />
     </ScrollView>
   );
 }

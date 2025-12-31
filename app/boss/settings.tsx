@@ -11,6 +11,7 @@ import { seedDatabase } from '@/lib/utils/seed';
 import * as SyncService from '@/lib/services/sync.service';
 import { SyncStatus } from '@/lib/services/sync.service';
 import { isSyncEnabled } from '@/lib/supabase/client';
+import SyncProgressModal from '@/components/SyncProgressModal';
 
 export default function SettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
@@ -32,6 +33,7 @@ export default function SettingsScreen() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const auditRepo = new AuditRepository();
 
@@ -82,12 +84,16 @@ export default function SettingsScreen() {
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/');
+        onPress: () => {
+          setShowSyncModal(true);
         },
       },
     ]);
+  };
+
+  const handleSyncSuccess = async () => {
+    await logout();
+    router.replace('/');
   };
 
   const toggleTheme = () => {
@@ -738,6 +744,16 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <SyncProgressModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSuccess={handleSyncSuccess}
+        onCancel={() => setShowSyncModal(false)}
+        reason="logout"
+        title="Synchronizing with Database"
+        allowCancel={true}
+      />
     </ScrollView>
   );
 }

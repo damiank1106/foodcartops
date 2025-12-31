@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/contexts/auth.context';
 import { CartRepository, ShiftRepository, SaleRepository, ExpenseRepository, UserRepository } from '@/lib/repositories';
 import { format } from 'date-fns';
 import { onSyncComplete } from '@/lib/services/sync.service';
+import SyncProgressModal from '@/components/SyncProgressModal';
 
 export default function WorkerShiftScreen() {
   const { theme } = useTheme();
@@ -23,6 +24,8 @@ export default function WorkerShiftScreen() {
   const [showStartModal, setShowStartModal] = useState<boolean>(false);
   const [selectedCart, setSelectedCart] = useState<string>('');
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
+  const [showSyncModal, setShowSyncModal] = useState<boolean>(false);
+  const [pendingAction, setPendingAction] = useState<'end_shift' | null>(null);
   const queryClient = useQueryClient();
 
   const cartRepo = new CartRepository();
@@ -136,18 +139,26 @@ export default function WorkerShiftScreen() {
       {
         text: 'End Shift',
         style: 'destructive',
-        onPress: async () => {
-          try {
-            await endShift();
-            queryClient.invalidateQueries({ queryKey: ['active-shift'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-            Alert.alert('Success', 'Shift ended successfully!');
-          } catch {
-            Alert.alert('Error', 'Failed to end shift');
-          }
+        onPress: () => {
+          setPendingAction('end_shift');
+          setShowSyncModal(true);
         },
       },
     ]);
+  };
+
+  const handleSyncSuccess = async () => {
+    if (pendingAction === 'end_shift') {
+      try {
+        await endShift();
+        queryClient.invalidateQueries({ queryKey: ['active-shift'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+        setPendingAction(null);
+      } catch (error) {
+        console.error('[Worker Shift] Failed to end shift:', error);
+        Alert.alert('Error', 'Failed to end shift');
+      }
+    }
   };
 
   if (cartsLoading) {
@@ -338,6 +349,22 @@ export default function WorkerShiftScreen() {
             <Text style={styles.endShiftText}>End Shift</Text>
           </TouchableOpacity>
         </View>
+
+        <SyncProgressModal
+          visible={showSyncModal}
+          onClose={() => {
+            setShowSyncModal(false);
+            setPendingAction(null);
+          }}
+          onSuccess={handleSyncSuccess}
+          onCancel={() => {
+            setShowSyncModal(false);
+            setPendingAction(null);
+          }}
+          reason="end_shift"
+          title="Synchronizing with Database"
+          allowCancel={true}
+        />
       </ScrollView>
     );
   }

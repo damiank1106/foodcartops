@@ -16,12 +16,14 @@ import { useAuth } from '@/lib/contexts/auth.context';
 import { ProductRepository, ProductCategoryRepository, SaleRepository, CartRepository } from '@/lib/repositories';
 import { Product, PaymentMethod } from '@/lib/types';
 import { onSyncComplete } from '@/lib/services/sync.service';
+import SyncProgressModal from '@/components/SyncProgressModal';
 
 export default function WorkerSaleScreen() {
   const { theme } = useTheme();
   const { user, selectedCartId, activeShiftId } = useAuth();
   const [cart, setCart] = useState<Map<string, { product: Product; quantity: number }>>(new Map());
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('CASH');
+  const [showSyncModal, setShowSyncModal] = useState<boolean>(false);
 
   const queryClient = useQueryClient();
   const productRepo = new ProductRepository();
@@ -83,7 +85,7 @@ export default function WorkerSaleScreen() {
       queryClient.invalidateQueries({ queryKey: ['shift-sales'] });
       queryClient.invalidateQueries({ queryKey: ['shift-timeline'] });
       setCart(new Map());
-      Alert.alert('Success', 'Sale completed successfully!');
+      setShowSyncModal(true);
     },
     onError: () => {
       Alert.alert('Error', 'Failed to create sale');
@@ -249,6 +251,17 @@ export default function WorkerSaleScreen() {
           </View>
         )}
       </ScrollView>
+
+      <SyncProgressModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSuccess={() => {
+          console.log('[Worker Sale] Sync completed after sale');
+        }}
+        reason="complete_sale"
+        title="Synchronizing with Database"
+        allowCancel={false}
+      />
 
       {cart.size > 0 && (
         <View style={[styles.cartSummary, { backgroundColor: theme.card }]}>

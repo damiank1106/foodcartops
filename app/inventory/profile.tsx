@@ -11,11 +11,13 @@ import { LogOut, User } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { useRouter } from 'expo-router';
+import SyncProgressModal from '@/components/SyncProgressModal';
 
 export default function InventoryProfileScreen() {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [showSyncModal, setShowSyncModal] = React.useState(false);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -23,12 +25,16 @@ export default function InventoryProfileScreen() {
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: async () => {
-          await logout();
-          router.replace('/');
+        onPress: () => {
+          setShowSyncModal(true);
         },
       },
     ]);
+  };
+
+  const handleSyncSuccess = async () => {
+    await logout();
+    router.replace('/');
   };
 
   if (!user) {
@@ -70,6 +76,16 @@ export default function InventoryProfileScreen() {
           </View>
         </TouchableOpacity>
       </View>
+
+      <SyncProgressModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSuccess={handleSyncSuccess}
+        onCancel={() => setShowSyncModal(false)}
+        reason="logout"
+        title="Synchronizing with Database"
+        allowCancel={true}
+      />
     </ScrollView>
   );
 }
