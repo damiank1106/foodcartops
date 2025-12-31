@@ -83,16 +83,9 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
   useEffect(() => {
     const unsubscribe = subscribeSyncStatus((status) => {
       setSyncStatus(status);
-      
-      if (status.isRunning && isLoadingRef.current) {
-        setShowLoadingOverlay(true);
-      } else if (!status.isRunning && showLoadingOverlay) {
-        setShowLoadingOverlay(false);
-        isLoadingRef.current = false;
-      }
     });
     return unsubscribe;
-  }, [showLoadingOverlay]);
+  }, []);
 
   const { data: analytics, isLoading } = useQuery<CalendarAnalytics>({
     queryKey: ['calendar-analytics', periodType, format(anchorDate, 'yyyy-MM-dd')],
@@ -614,9 +607,14 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
 
   useEffect(() => {
     if (isLoading && !hasLoadedOnceRef.current) {
+      console.log('[Calendar] showing overlay - initial load');
       setShowLoadingOverlay(true);
-    } else if (!isLoading && hasLoadedOnceRef.current) {
+      isLoadingRef.current = true;
+    } else if (!isLoading && isLoadingRef.current) {
+      console.log('[Calendar] hiding overlay - load complete');
       setShowLoadingOverlay(false);
+      hasLoadedOnceRef.current = true;
+      isLoadingRef.current = false;
     }
   }, [isLoading]);
 
