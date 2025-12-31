@@ -453,7 +453,7 @@ export class SettlementRepository extends BaseRepository {
         s.created_at
       FROM settlements s
       LEFT JOIN users u ON s.seller_user_id = u.id
-      WHERE s.cash_difference_cents != 0 AND s.status = 'finalized'
+      WHERE s.cash_difference_cents != 0 AND s.status = 'FINALIZED'
         AND s.deleted_at IS NULL AND s.is_deleted = 0
     `;
 

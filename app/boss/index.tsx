@@ -12,7 +12,7 @@ import CalendarScreen from './calendar';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
 import { BossSavedItemsRepository } from '@/lib/repositories/boss-saved-items.repository';
 import { startOfDay, endOfDay, format } from 'date-fns';
-import { onSyncComplete, subscribeSyncStatus, syncNow, getSyncStatus, SyncStatus } from '@/lib/services/sync.service';
+import { onSyncComplete, subscribeSyncStatus, syncNow, SyncStatus } from '@/lib/services/sync.service';
 import { getTodayOverviewSeries } from '@/lib/services/overview-analytics.service';
 import AnimatedDashboardChart, { OverviewPoint } from '@/components/AnimatedDashboardChart';
 
@@ -101,25 +101,20 @@ export default function BossDashboard() {
 
   const handleSyncNow = async () => {
     try {
-      const currentStatus = await getSyncStatus();
-      const hadPendingBefore = currentStatus.pendingCount > 0;
-
       const result = await syncNow('manual_overview');
       
-      if (result.success) {
-        const newStatus = await getSyncStatus();
-        const hadPendingAfter = newStatus.pendingCount > 0;
-        
-        if (!hadPendingBefore && !hadPendingAfter) {
-          setSyncModalMessage('No new data available. Please check later again or contact with Operation Manager or Developer for any new available Data. Operation Manager needs to provide new Sales first, so they might be displayed.');
-          setSyncModalVisible(true);
-        } else {
-          setSyncModalMessage('Sync completed ✅');
-          setSyncModalVisible(true);
-          await loadChartData();
-        }
-      } else {
+      if (!result.success) {
         Alert.alert('Sync Failed', result.error || 'Unknown error');
+        return;
+      }
+
+      if (!result.didWork) {
+        setSyncModalMessage('No new data available. Please check later again or contact with Operation Manager or Developer for any new available Data. Operation Manager needs to provide new Sales first, so they might be displayed.');
+        setSyncModalVisible(true);
+      } else {
+        setSyncModalMessage('Sync completed ✅');
+        setSyncModalVisible(true);
+        await loadChartData();
       }
     } catch (error: any) {
       Alert.alert('Sync Error', error.message || 'Failed to sync');

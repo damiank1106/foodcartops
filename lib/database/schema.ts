@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 45;
+export const SCHEMA_VERSION = 46;
 
 export const MIGRATIONS = [
   {
@@ -1971,6 +1971,87 @@ export const MIGRATIONS = [
       (lower(hex(randomblob(16))), 'Removed NOT NULL constraint and FK to products from settlement_items.product_id to support deleted products', ${Date.now()});
     `,
     down: `
+    `,
+  },
+  {
+    version: 46,
+    up: `
+      PRAGMA foreign_keys = OFF;
+
+      CREATE TABLE IF NOT EXISTS settlement_items_backup (
+        id TEXT PRIMARY KEY,
+        settlement_id TEXT NOT NULL,
+        product_id TEXT,
+        product_name TEXT NOT NULL,
+        qty INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_at_iso TEXT,
+        updated_at_iso TEXT,
+        FOREIGN KEY (settlement_id) REFERENCES settlements(id)
+      );
+
+      INSERT OR IGNORE INTO settlement_items_backup (
+        id, settlement_id, product_id, product_name, qty, price_cents,
+        business_id, device_id, is_deleted, deleted_at,
+        created_at, updated_at, created_at_iso, updated_at_iso
+      )
+      SELECT 
+        id, settlement_id, product_id, product_name, qty, price_cents,
+        COALESCE(business_id, 'default_business'), device_id, COALESCE(is_deleted, 0), deleted_at,
+        created_at, updated_at, created_at_iso, updated_at_iso
+      FROM settlement_items;
+
+      DROP TABLE IF EXISTS settlement_items;
+
+      CREATE TABLE settlement_items (
+        id TEXT PRIMARY KEY,
+        settlement_id TEXT NOT NULL,
+        product_id TEXT,
+        product_name TEXT NOT NULL,
+        qty INTEGER NOT NULL,
+        price_cents INTEGER NOT NULL,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_at_iso TEXT,
+        updated_at_iso TEXT,
+        FOREIGN KEY (settlement_id) REFERENCES settlements(id)
+      );
+
+      INSERT INTO settlement_items (
+        id, settlement_id, product_id, product_name, qty, price_cents,
+        business_id, device_id, is_deleted, deleted_at,
+        created_at, updated_at, created_at_iso, updated_at_iso
+      )
+      SELECT 
+        id, settlement_id, product_id, product_name, qty, price_cents,
+        business_id, device_id, is_deleted, deleted_at,
+        created_at, updated_at, created_at_iso, updated_at_iso
+      FROM settlement_items_backup;
+
+      DROP TABLE settlement_items_backup;
+
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_settlement_id ON settlement_items(settlement_id);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_product_id ON settlement_items(product_id);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_deleted_at ON settlement_items(deleted_at);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_is_deleted ON settlement_items(is_deleted);
+      CREATE INDEX IF NOT EXISTS idx_settlement_items_updated_at_iso ON settlement_items(updated_at_iso);
+
+      PRAGMA foreign_keys = ON;
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migration v46: Idempotent fix for settlement_items.product_id nullable with no FK to products', ${Date.now()});
+    `,
+    "down": `
     `,
   },
 ];

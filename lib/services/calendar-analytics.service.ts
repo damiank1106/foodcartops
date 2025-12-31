@@ -268,7 +268,7 @@ export class CalendarAnalyticsService {
     const startDate = new Date(year, month, 1);
     const endDate = endOfMonth(startDate);
 
-    const [sales, expenses, otherExpenses] = await Promise.all([
+    const [sales, expenses, otherExpenses, allSettlements] = await Promise.all([
       this.saleRepo.findAll({
         start_date: startOfDay(startDate),
         end_date: endOfDay(endDate),
@@ -278,6 +278,7 @@ export class CalendarAnalyticsService {
         format(startDate, 'yyyy-MM-dd'),
         format(endDate, 'yyyy-MM-dd')
       ),
+      this.settlementRepo.getAllSettlements(1000),
     ]);
 
     const datesSet = new Set<string>();
@@ -299,6 +300,14 @@ export class CalendarAnalyticsService {
 
     for (const oe of otherExpenses) {
       datesSet.add(oe.date);
+    }
+
+    for (const settlement of allSettlements) {
+      const settlementDate = new Date((settlement as any).created_at);
+      if (settlementDate >= startDate && settlementDate <= endDate) {
+        const dateStr = format(settlementDate, 'yyyy-MM-dd');
+        datesSet.add(dateStr);
+      }
     }
 
     return datesSet;
