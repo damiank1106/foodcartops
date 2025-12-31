@@ -2,7 +2,7 @@ import { BaseRepository } from './base';
 import { User, UserRole } from '../types';
 import { SyncOutboxRepository } from './sync-outbox.repository';
 import { getDeviceId } from '../utils/device-id';
-import { isSystemUserId } from '../utils/seed';
+import { isSystemUserId } from '../utils/system-users';
 import { requireUserManagementRole } from '../utils/rbac';
 
 export class UserRepository extends BaseRepository {

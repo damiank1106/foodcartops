@@ -1,28 +1,11 @@
 import { Platform } from 'react-native';
-import { UserRepository } from '../repositories';
+import { UserRepository } from '../repositories/user.repository';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { resetDatabase } from '../database/init';
+import { SYSTEM_USER_IDS, DEFAULT_PINS } from './system-users';
 
 const SEED_KEY = 'foodcartops_seeded';
-
-export const SYSTEM_USER_IDS = {
-  GENERAL_MANAGER: 'system-user-general-manager',
-  DEVELOPER: 'system-user-developer',
-  OPERATION_MANAGER: 'system-user-operation-manager',
-  INVENTORY_CLERK: 'system-user-inventory-clerk',
-} as const;
-
-export const DEFAULT_PINS = {
-  GENERAL_MANAGER: '1234',
-  DEVELOPER: '2345',
-  OPERATION_MANAGER: '1111',
-  INVENTORY_CLERK: '2222',
-} as const;
-
-export function isSystemUserId(userId: string): boolean {
-  return userId.startsWith('system-user-');
-}
 
 export async function ensureSystemUsers(): Promise<void> {
   if (Platform.OS === 'web') {
