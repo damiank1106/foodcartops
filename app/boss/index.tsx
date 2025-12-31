@@ -58,6 +58,8 @@ export default function BossDashboard() {
       queryClient.invalidateQueries({ queryKey: ['boss-monitoring-stats'] });
       queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
       queryClient.invalidateQueries({ queryKey: ['boss-activity-feed'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-all-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['boss-settlements'] });
     });
     return unsubscribe;
   }, [queryClient]);
@@ -612,17 +614,7 @@ export default function BossDashboard() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tab}
-            onPress={() => {
-              setSelectedTab('settlements');
-              if (settlementNotifications && settlementNotifications > 0) {
-                (async () => {
-                  const { NotificationRepository } = await import('@/lib/repositories/notification.repository');
-                  const notifRepo = new NotificationRepository();
-                  await notifRepo.markAllSeenByType('settlement_incoming');
-                  queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
-                })();
-              }
-            }}
+            onPress={() => setSelectedTab('settlements')}
           >
             <Text style={[styles.tabText, { color: selectedTab === 'settlements' ? theme.primary : theme.textSecondary }]}>
               Settlements

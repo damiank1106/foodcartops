@@ -34,6 +34,16 @@ export default function BossSettlementsScreen() {
     return unsubscribe;
   }, [queryClient]);
 
+  useEffect(() => {
+    (async () => {
+      const { NotificationRepository } = await import('@/lib/repositories/notification.repository');
+      const notifRepo = new NotificationRepository();
+      await notifRepo.markAllSeenByType('settlement_incoming');
+      queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
+      console.log('[Settlements] Marked all settlement notifications as seen');
+    })();
+  }, [queryClient]);
+
   const { data: settlements, isLoading } = useQuery({
     queryKey: ['boss-settlements', filterStatus],
     queryFn: async () => {
