@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 41;
+export const SCHEMA_VERSION = 42;
 
 export const MIGRATIONS = [
   {
@@ -1889,6 +1889,23 @@ export const MIGRATIONS = [
 
       INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
       (lower(hex(randomblob(16))), 'Repaired settlement_items NULL timestamps for Supabase sync', ${Date.now()});
+    `,
+    down: `
+    `,
+  },
+  {
+    version: 42,
+    up: `
+      UPDATE settlements
+      SET 
+        created_at = COALESCE(created_at, ${Date.now()}),
+        updated_at = COALESCE(updated_at, ${Date.now()}),
+        created_at_iso = COALESCE(created_at_iso, '${new Date().toISOString()}'),
+        updated_at_iso = COALESCE(updated_at_iso, '${new Date().toISOString()}')
+      WHERE created_at IS NULL OR updated_at IS NULL OR created_at_iso IS NULL OR updated_at_iso IS NULL;
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Repaired settlements NULL timestamps for Supabase sync', ${Date.now()});
     `,
     down: `
     `,

@@ -184,9 +184,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       try {
         const payload = JSON.parse(row.payload_json);
         
-        if (row.table_name === 'settlement_items') {
-          if (!payload.created_at || !payload.updated_at) {
-            console.warn(`[Sync] settlement_items ${row.row_id} missing timestamps, setting now`);
+        if (row.table_name === 'settlements' || row.table_name === 'settlement_items') {
+          if (!payload.created_at || !payload.updated_at || !payload.created_at_iso || !payload.updated_at_iso) {
+            console.warn(`[Sync] ${row.table_name} ${row.row_id} missing timestamps, setting now`);
             const now = Date.now();
             const nowISO = new Date().toISOString();
             payload.created_at = payload.created_at || now;
@@ -196,7 +196,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             
             db = await getDatabase();
             await db.runAsync(
-              'UPDATE settlement_items SET created_at = ?, updated_at = ?, created_at_iso = ?, updated_at_iso = ? WHERE id = ?',
+              `UPDATE ${row.table_name} SET created_at = ?, updated_at = ?, created_at_iso = ?, updated_at_iso = ? WHERE id = ?`,
               [now, now, nowISO, nowISO, row.row_id]
             );
           }

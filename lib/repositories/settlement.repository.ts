@@ -73,6 +73,7 @@ export class SettlementRepository extends BaseRepository {
       gross_sales_cents: grossSalesCents, total_cents: totalCents,
       business_id: businessId, device_id: deviceId,
       is_deleted: 0, deleted_at: null,
+      created_at: now, updated_at: now,
       created_at_iso: nowISO, updated_at_iso: nowISO,
     };
 
@@ -258,6 +259,8 @@ export class SettlementRepository extends BaseRepository {
         device_id: (updated as any).device_id,
         is_deleted: (updated as any).is_deleted || 0,
         deleted_at: (updated as any).deleted_at || null,
+        created_at: (updated as any).created_at || Date.now(),
+        updated_at: (updated as any).updated_at || Date.now(),
         created_at_iso: (updated as any).created_at_iso,
         updated_at_iso: (updated as any).updated_at_iso,
       };
@@ -304,6 +307,8 @@ export class SettlementRepository extends BaseRepository {
         device_id: (updated as any).device_id,
         is_deleted: (updated as any).is_deleted || 0,
         deleted_at: (updated as any).deleted_at || null,
+        created_at: (updated as any).created_at || Date.now(),
+        updated_at: now,
         created_at_iso: (updated as any).created_at_iso,
         updated_at_iso: nowISO,
       };
@@ -427,6 +432,8 @@ export class SettlementRepository extends BaseRepository {
       device_id: deviceId,
       is_deleted: 1,
       deleted_at: nowISO,
+      created_at: (old as any).created_at || Date.now(),
+      updated_at: now,
       created_at_iso: (old as any).created_at_iso,
       updated_at_iso: nowISO,
     };
