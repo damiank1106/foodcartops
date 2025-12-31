@@ -198,6 +198,9 @@ export default function BossDashboard() {
         last_shift: lastShift,
       };
     },
+    staleTime: 30000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 
   const { data: recentActivity } = useQuery({

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { DollarSign, ChevronRight, Filter, Trash2 } from 'lucide-react-native';
+import { DollarSign, Filter, Trash2 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
@@ -176,18 +176,18 @@ export default function BossSettlementsScreen() {
       <ScrollView style={styles.content}>
         {settlements && settlements.length > 0 ? (
           settlements.map((settlement) => (
-            <TouchableOpacity
+            <View
               key={settlement.id}
-              style={[styles.settlementCard, { backgroundColor: theme.card }]}
-              onPress={() => handleSettlementPress(settlement.shift_id)}
+              style={[styles.settlementCard, { backgroundColor: theme.card, borderColor: theme.border }]}
             >
-              <View style={styles.settlementHeader}>
-                <TouchableOpacity
-                  style={styles.settlementTouchable}
-                  onPress={() => handleSettlementPress(settlement.shift_id)}
-                >
-                  <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
-                    <DollarSign size={20} color={theme.primary} />
+              <TouchableOpacity
+                style={styles.settlementMainArea}
+                onPress={() => handleSettlementPress(settlement.shift_id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settlementTopRow}>
+                  <View style={[styles.iconContainer, { backgroundColor: theme.primary + '15' }]}>
+                    <DollarSign size={24} color={theme.primary} />
                   </View>
                   <View style={styles.settlementInfo}>
                     <Text style={[styles.workerName, { color: theme.text }]}>
@@ -196,73 +196,66 @@ export default function BossSettlementsScreen() {
                     <Text style={[styles.cartName, { color: theme.textSecondary }]}>
                       {settlement.cart_name}
                     </Text>
-                    <Text style={[styles.settlementDate, { color: theme.textSecondary }]}>
-                      {format(settlement.created_at, 'MMM d, yyyy • h:mm a')}
+                  </View>
+                  <View style={styles.rightSection}>
+                    {settlement.status === 'FINALIZED' ? (
+                      <View style={[styles.statusBadge, { backgroundColor: theme.success + '15' }]}>
+                        <Text style={[styles.statusText, { color: theme.success }]}>Finalized</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.statusBadge, { backgroundColor: theme.warning + '15' }]}>
+                        <Text style={[styles.statusText, { color: theme.warning }]}>Draft</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+                <View style={styles.paymentRow}>
+                  <View style={styles.paymentItem}>
+                    <Text style={[styles.paymentLabel, { color: theme.textSecondary }]}>Cash</Text>
+                    <Text style={[styles.paymentValue, { color: theme.text }]}>
+                      ₱{(settlement.cash_cents / 100).toFixed(2)}
                     </Text>
                   </View>
-                  <ChevronRight size={20} color={theme.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.deleteButton, { backgroundColor: theme.error + '20' }]}
-                  onPress={() => handleDeleteSettlement(settlement.id, settlement.worker_name)}
-                >
-                  <Trash2 size={18} color={theme.error} />
-                </TouchableOpacity>
-              </View>
+                  <View style={styles.paymentItem}>
+                    <Text style={[styles.paymentLabel, { color: theme.textSecondary }]}>GCash</Text>
+                    <Text style={[styles.paymentValue, { color: theme.text }]}>
+                      ₱{(settlement.gcash_cents / 100).toFixed(2)}
+                    </Text>
+                  </View>
+                  <View style={styles.paymentItem}>
+                    <Text style={[styles.paymentLabel, { color: theme.textSecondary }]}>Card</Text>
+                    <Text style={[styles.paymentValue, { color: theme.text }]}>
+                      ₱{(settlement.card_cents / 100).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
 
-              <View style={styles.settlementDetails}>
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                    Cash:
-                  </Text>
-                  <Text style={[styles.detailValue, { color: theme.text }]}>
-                    ₱{(settlement.cash_cents / 100).toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                    GCash:
-                  </Text>
-                  <Text style={[styles.detailValue, { color: theme.text }]}>
-                    ₱{(settlement.gcash_cents / 100).toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>
-                    Card:
-                  </Text>
-                  <Text style={[styles.detailValue, { color: theme.text }]}>
-                    ₱{(settlement.card_cents / 100).toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: theme.textSecondary, fontWeight: '600' }]}>
-                    Total:
-                  </Text>
-                  <Text style={[styles.detailValue, { color: theme.primary, fontWeight: '700', fontSize: 16 }]}>
+                <View style={[styles.totalRow, { backgroundColor: theme.primary + '08' }]}>
+                  <Text style={[styles.totalLabel, { color: theme.text }]}>Total Amount</Text>
+                  <Text style={[styles.totalValue, { color: theme.primary }]}>
                     ₱{(settlement.total_cents / 100).toFixed(2)}
                   </Text>
                 </View>
-              </View>
 
-              <View style={styles.statusContainer}>
-                {settlement.status === 'FINALIZED' ? (
-                  <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
-                    <Text style={[styles.statusText, { color: theme.success }]}>Finalized</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.statusBadge, { backgroundColor: theme.warning + '20' }]}>
-                    <Text style={[styles.statusText, { color: theme.warning }]}>Draft</Text>
-                  </View>
-                )}
-                {settlement.finalized_by_name && (
-                  <Text style={[styles.finalizedBy, { color: theme.textSecondary }]}>
-                    by {settlement.finalized_by_name}
-                  </Text>
-                )}
+                <Text style={[styles.settlementDate, { color: theme.textSecondary }]}>
+                  {format(settlement.created_at, 'MMM d, yyyy • h:mm a')}
+                  {settlement.finalized_by_name && ` • by ${settlement.finalized_by_name}`}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={[styles.actionRow, { borderTopColor: theme.border }]}>
+                <TouchableOpacity
+                  style={[styles.deleteButton, { backgroundColor: theme.error + '10' }]}
+                  onPress={() => handleDeleteSettlement(settlement.id, settlement.worker_name)}
+                >
+                  <Trash2 size={20} color={theme.error} />
+                  <Text style={[styles.deleteButtonText, { color: theme.error }]}>Delete</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
           ))
         ) : (
           <View style={styles.emptyState}>
@@ -313,37 +306,31 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   settlementCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    overflow: 'hidden',
   },
-  settlementHeader: {
+  settlementMainArea: {
+    padding: 16,
+  },
+  settlementTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
-  settlementTouchable: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  deleteButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
+  rightSection: {
+    alignItems: 'flex-end',
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -352,53 +339,89 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   workerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   cartName: {
     fontSize: 14,
-    marginBottom: 2,
+    fontWeight: '500',
+  },
+  paymentRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  paymentItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  paymentLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  paymentValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  totalValue: {
+    fontSize: 20,
+    fontWeight: '700',
   },
   settlementDate: {
     fontSize: 12,
-  },
-  settlementDetails: {
-    marginBottom: 12,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  detailLabel: {
-    fontSize: 13,
-  },
-  detailValue: {
-    fontSize: 13,
-    fontWeight: '600',
+    textAlign: 'center',
   },
   divider: {
     height: 1,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 8,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    marginBottom: 16,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  finalizedBy: {
     fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  deleteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 8,
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
