@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 42;
+export const SCHEMA_VERSION = 43;
 
 export const MIGRATIONS = [
   {
@@ -1906,6 +1906,100 @@ export const MIGRATIONS = [
 
       INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
       (lower(hex(randomblob(16))), 'Repaired settlements NULL timestamps for Supabase sync', ${Date.now()});
+    `,
+    down: `
+    `,
+  },
+  {
+    version: 43,
+    up: `
+      PRAGMA foreign_keys = OFF;
+
+      DROP TABLE IF EXISTS settlements_fix;
+
+      CREATE TABLE settlements_fix (
+        id TEXT PRIMARY KEY,
+        shift_id TEXT NOT NULL,
+        cart_id TEXT NOT NULL,
+        seller_user_id TEXT NOT NULL,
+        date_iso TEXT,
+        status TEXT NOT NULL DEFAULT 'SAVED' CHECK(status IN ('SAVED', 'FINALIZED')),
+        notes TEXT,
+        cash_cents INTEGER NOT NULL DEFAULT 0,
+        gcash_cents INTEGER NOT NULL DEFAULT 0,
+        card_cents INTEGER NOT NULL DEFAULT 0,
+        gross_sales_cents INTEGER NOT NULL DEFAULT 0,
+        total_cents INTEGER NOT NULL DEFAULT 0,
+        business_id TEXT NOT NULL DEFAULT 'default_business',
+        device_id TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        deleted_at TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_at_iso TEXT,
+        updated_at_iso TEXT,
+        FOREIGN KEY (shift_id) REFERENCES worker_shifts(id),
+        FOREIGN KEY (cart_id) REFERENCES carts(id),
+        FOREIGN KEY (seller_user_id) REFERENCES users(id)
+      );
+
+      INSERT INTO settlements_fix (
+        id, shift_id, cart_id, seller_user_id, date_iso, status, notes,
+        cash_cents, gcash_cents, card_cents, gross_sales_cents, total_cents,
+        business_id, device_id, is_deleted, deleted_at,
+        created_at, updated_at, created_at_iso, updated_at_iso
+      )
+      SELECT 
+        id,
+        shift_id,
+        cart_id,
+        COALESCE(
+          seller_user_id,
+          worker_user_id,
+          created_by_user_id,
+          'unknown'
+        ) as seller_user_id,
+        COALESCE(
+          date_iso,
+          settlement_day,
+          date('now')
+        ) as date_iso,
+        CASE 
+          WHEN UPPER(status) = 'SAVED' OR UPPER(status) = 'DRAFT' THEN 'SAVED'
+          WHEN UPPER(status) = 'FINALIZED' THEN 'FINALIZED'
+          ELSE 'SAVED'
+        END as status,
+        notes,
+        COALESCE(cash_cents, 0),
+        COALESCE(gcash_cents, 0),
+        COALESCE(card_cents, 0),
+        COALESCE(gross_sales_cents, 0),
+        COALESCE(total_cents, 0),
+        COALESCE(business_id, 'default_business'),
+        device_id,
+        COALESCE(is_deleted, 0),
+        deleted_at,
+        COALESCE(created_at, ${Date.now()}),
+        COALESCE(updated_at, ${Date.now()}),
+        COALESCE(created_at_iso, '${new Date().toISOString()}'),
+        COALESCE(updated_at_iso, '${new Date().toISOString()}')
+      FROM settlements;
+
+      DROP TABLE settlements;
+      ALTER TABLE settlements_fix RENAME TO settlements;
+
+      CREATE INDEX IF NOT EXISTS idx_settlements_shift_id ON settlements(shift_id);
+      CREATE INDEX IF NOT EXISTS idx_settlements_cart_id ON settlements(cart_id);
+      CREATE INDEX IF NOT EXISTS idx_settlements_seller_user_id ON settlements(seller_user_id);
+      CREATE INDEX IF NOT EXISTS idx_settlements_status ON settlements(status);
+      CREATE INDEX IF NOT EXISTS idx_settlements_deleted_at ON settlements(deleted_at);
+      CREATE INDEX IF NOT EXISTS idx_settlements_is_deleted ON settlements(is_deleted);
+      CREATE INDEX IF NOT EXISTS idx_settlements_updated_at_iso ON settlements(updated_at_iso);
+
+      PRAGMA foreign_keys = ON;
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Fixed settlements table: ensured seller_user_id exists (idempotent migration)', ${Date.now()});
     `,
     down: `
     `,
