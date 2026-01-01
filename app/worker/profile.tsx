@@ -6,11 +6,13 @@ import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { UserRepository } from '@/lib/repositories';
 import SyncProgressModal from '@/components/SyncProgressModal';
+import { usePendingChangesBadge } from '@/lib/utils/usePendingChangesBadge';
 
 export default function WorkerProfileScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
   const { user, logout, changePin, updateUser } = useAuth();
   const router = useRouter();
+  const pendingCount = usePendingChangesBadge();
   const [showPinModal, setShowPinModal] = useState(false);
   const [oldPin, setOldPin] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -145,6 +147,22 @@ export default function WorkerProfileScreen() {
               <Text style={[styles.label, { color: theme.text }]}>Change PIN</Text>
             </View>
             <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Sync</Text>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => router.push('/pending-changes')}
+          >
+            <View style={styles.listItemLeft}>
+              <Database size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Pending Changes</Text>
+            </View>
+            <Text style={[styles.value, { color: theme.textSecondary }]}>
+              {pendingCount}
+            </Text>
           </TouchableOpacity>
         </View>
 

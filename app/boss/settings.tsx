@@ -12,6 +12,7 @@ import * as SyncService from '@/lib/services/sync.service';
 import { SyncStatus } from '@/lib/services/sync.service';
 import { isSyncEnabled } from '@/lib/supabase/client';
 import SyncProgressModal from '@/components/SyncProgressModal';
+import { usePendingChangesBadge } from '@/lib/utils/usePendingChangesBadge';
 
 export default function SettingsScreen() {
   const { theme, isDark, setThemeMode } = useTheme();
@@ -34,6 +35,7 @@ export default function SettingsScreen() {
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const pendingCount = usePendingChangesBadge();
 
   const auditRepo = new AuditRepository();
 
@@ -364,6 +366,20 @@ export default function SettingsScreen() {
               <Text style={[styles.label, { color: theme.text }]}>Change PIN</Text>
             </View>
             <ChevronRight size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Sync</Text>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => router.push('/pending-changes')}
+          >
+            <View style={styles.listItemLeft}>
+              <Database size={20} color={theme.text} />
+              <Text style={[styles.label, { color: theme.text }]}>Pending Changes</Text>
+            </View>
+            <Text style={[styles.value, { color: theme.textSecondary }]}>{pendingCount}</Text>
           </TouchableOpacity>
         </View>
 

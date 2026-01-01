@@ -5,6 +5,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { useExpensesBadge } from '@/lib/utils/useExpensesBadge';
+import PendingChangesBadge from '@/components/PendingChangesBadge';
 
 export default function BossLayout() {
   const { theme } = useTheme();
@@ -84,6 +85,7 @@ export default function BossLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
+          headerRight: () => <PendingChangesBadge />,
         }}
       />
       <Tabs.Screen

@@ -2054,4 +2054,37 @@ export const MIGRATIONS = [
     "down": `
     `,
   },
+  {
+    version: 47,
+    up: `
+      ALTER TABLE sync_outbox ADD COLUMN change_id TEXT;
+      ALTER TABLE sync_outbox ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending' CHECK(sync_status IN ('pending', 'syncing', 'failed', 'synced'));
+      ALTER TABLE sync_outbox ADD COLUMN user_id TEXT;
+      ALTER TABLE sync_outbox ADD COLUMN cart_id TEXT;
+      ALTER TABLE sync_outbox ADD COLUMN role TEXT;
+      ALTER TABLE sync_outbox ADD COLUMN synced_at INTEGER;
+
+      UPDATE sync_outbox SET change_id = id WHERE change_id IS NULL;
+      UPDATE sync_outbox
+      SET sync_status = CASE
+        WHEN sync_status IS NULL AND last_error IS NOT NULL THEN 'failed'
+        WHEN sync_status IS NULL THEN 'pending'
+        ELSE sync_status
+      END;
+
+      CREATE INDEX IF NOT EXISTS idx_sync_outbox_sync_status ON sync_outbox(sync_status);
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migration v47: Added sync status metadata to sync_outbox', ${Date.now()});
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_sync_outbox_sync_status;
+      ALTER TABLE sync_outbox DROP COLUMN synced_at;
+      ALTER TABLE sync_outbox DROP COLUMN role;
+      ALTER TABLE sync_outbox DROP COLUMN cart_id;
+      ALTER TABLE sync_outbox DROP COLUMN user_id;
+      ALTER TABLE sync_outbox DROP COLUMN sync_status;
+      ALTER TABLE sync_outbox DROP COLUMN change_id;
+    `,
+  },
 ];

@@ -6,6 +6,7 @@ import { SYSTEM_USERS, SYSTEM_USER_ID_SET } from '../utils/system-users';
 
 interface SyncOutboxRow {
   id: string;
+  change_id: string | null;
   table_name: string;
   row_id: string;
   op: 'upsert' | 'delete';
@@ -13,6 +14,11 @@ interface SyncOutboxRow {
   created_at: number;
   attempts: number;
   last_error: string | null;
+  sync_status: 'pending' | 'syncing' | 'failed' | 'synced';
+  user_id: string | null;
+  cart_id: string | null;
+  role: string | null;
+  synced_at: number | null;
 }
 
 interface SyncStateRow {
@@ -90,6 +96,73 @@ let currentStatus: SyncStatus = {
   pendingCount: 0,
 };
 
+const RECEIPT_BUCKET = 'expense-receipts';
+
+function isLocalFileUri(uri?: string | null): boolean {
+  if (!uri) return false;
+  return !uri.startsWith('http://') && !uri.startsWith('https://');
+}
+
+async function getPendingCount(db: Awaited<ReturnType<typeof getDatabase>>): Promise<number> {
+  const pendingRows = await db.getAllAsync<SyncOutboxRow>(
+    `SELECT * FROM sync_outbox WHERE sync_status IN ('pending', 'syncing', 'failed')`
+  );
+
+  let extraReceiptCount = 0;
+  for (const row of pendingRows) {
+    if (row.table_name !== 'expenses') continue;
+    try {
+      const payload = JSON.parse(row.payload_json);
+      if (typeof payload.receipt_image_uri === 'string' && isLocalFileUri(payload.receipt_image_uri)) {
+        extraReceiptCount += 1;
+      }
+    } catch (error) {
+      console.warn('[Sync] Failed to parse pending payload for receipt count', error);
+    }
+  }
+
+  return pendingRows.length + extraReceiptCount;
+}
+
+async function uploadReceiptIfNeeded(
+  supabase: Awaited<ReturnType<typeof initSupabaseClient>>,
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  expenseId: string,
+  payload: Record<string, any>
+): Promise<Record<string, any>> {
+  const receiptUri = payload.receipt_image_uri;
+  if (!isLocalFileUri(receiptUri)) {
+    return payload;
+  }
+
+  const fileName = receiptUri.split('/').pop() || `${expenseId}.jpg`;
+  const storagePath = `expenses/${expenseId}/${fileName}`;
+
+  const fileResponse = await fetch(receiptUri);
+  const fileBlob = await fileResponse.blob();
+  const contentType = fileResponse.headers.get('content-type') || 'image/jpeg';
+
+  const { error: uploadError } = await supabase.storage
+    .from(RECEIPT_BUCKET)
+    .upload(storagePath, fileBlob, { upsert: true, contentType });
+
+  if (uploadError) {
+    throw new Error(`Receipt upload failed: ${uploadError.message}`);
+  }
+
+  const { data } = supabase.storage.from(RECEIPT_BUCKET).getPublicUrl(storagePath);
+  const publicUrl = data.publicUrl;
+
+  const now = Date.now();
+  const nowISO = new Date().toISOString();
+  await db.runAsync(
+    `UPDATE expenses SET receipt_image_uri = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
+    [publicUrl, now, nowISO, expenseId]
+  );
+
+  return { ...payload, receipt_image_uri: publicUrl };
+}
+
 export function subscribeSyncStatus(listener: (status: SyncStatus) => void): () => void {
   syncListeners.push(listener);
   listener(currentStatus);
@@ -124,10 +197,7 @@ function updateStatus(updates: Partial<SyncStatus>) {
 export async function getSyncStatus(): Promise<SyncStatus> {
   try {
     const db = await getDatabase();
-    const pendingResult = await db.getAllAsync<{ count: number }>(
-      'SELECT COUNT(*) as count FROM sync_outbox'
-    );
-    const pendingCount = pendingResult[0]?.count || 0;
+    const pendingCount = await getPendingCount(db);
 
     const stateResult = await db.getAllAsync<SyncStateRow>(
       "SELECT last_sync_at FROM sync_state ORDER BY last_sync_at DESC LIMIT 1"
@@ -160,7 +230,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected || !networkState.isInternetReachable) {
       console.log('[Sync] Offline, skipping');
-      updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Offline' });
+      const db = await getDatabase();
+      const pendingCount = await getPendingCount(db);
+      updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Offline', pendingCount });
       syncInProgress = false;
       return { success: false, didWork: false, error: 'No internet connection' };
     }
@@ -168,14 +240,18 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     const supabase = await initSupabaseClient();
     if (!supabase) {
       console.log('[Sync] Supabase not configured');
-      updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Supabase not configured' });
+      const db = await getDatabase();
+      const pendingCount = await getPendingCount(db);
+      updateStatus({ isRunning: false, currentStep: 'idle', lastError: 'Supabase not configured', pendingCount });
       syncInProgress = false;
       return { success: false, didWork: false, error: 'Supabase not configured' };
     }
 
     let db = await getDatabase();
     const outboxRows = await db.getAllAsync<SyncOutboxRow>(
-      'SELECT * FROM sync_outbox ORDER BY created_at ASC'
+      `SELECT * FROM sync_outbox
+       WHERE sync_status IN ('pending', 'failed')
+       ORDER BY created_at ASC`
     );
     console.log(`[Sync] Pending outbox: ${outboxRows.length}`);
 
@@ -200,13 +276,17 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
     for (let i = 0; i < sortedOutbox.length; i++) {
       const row = sortedOutbox[i];
       didWork = true;
+      await db.runAsync(
+        `UPDATE sync_outbox SET sync_status = 'syncing', last_error = NULL WHERE id = ?`,
+        [row.id]
+      );
       updateStatus({ 
         currentStep: `Pushing ${row.table_name} (${i + 1}/${sortedOutbox.length})`,
         progress: { total: sortedOutbox.length, current: i, table: row.table_name }
       });
 
       try {
-        const payload = JSON.parse(row.payload_json);
+        let payload = JSON.parse(row.payload_json);
         
         if (row.table_name === 'settlements' || row.table_name === 'settlement_items') {
           if (!payload.created_at || !payload.updated_at || !payload.created_at_iso || !payload.updated_at_iso) {
@@ -226,6 +306,10 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           }
         }
         
+        if (row.table_name === 'expenses') {
+          payload = await uploadReceiptIfNeeded(supabase, db, row.row_id, payload);
+        }
+
         const syncPayload = stripLocalOnlyColumns(row.table_name, payload);
 
         if (row.table_name === 'settlements') {
@@ -376,7 +460,12 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         }
 
         db = await getDatabase();
-        await db.runAsync('DELETE FROM sync_outbox WHERE id = ?', [row.id]);
+        await db.runAsync(
+          `UPDATE sync_outbox
+           SET sync_status = 'synced', synced_at = ?, last_error = NULL
+           WHERE id = ?`,
+          [Date.now(), row.id]
+        );
       } catch (error: any) {
         if (row.table_name === 'settlements' || row.table_name === 'settlement_items') {
           console.error(`[Sync] ❌ FAILED to push ${row.table_name}:`, error);
@@ -395,7 +484,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           console.error('[Sync] Invalid API key detected - stopping sync');
           db = await getDatabase();
           await db.runAsync(
-            'UPDATE sync_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?',
+            `UPDATE sync_outbox
+             SET attempts = attempts + 1, last_error = ?, sync_status = 'failed'
+             WHERE id = ?`,
             [errorMsg, row.id]
           );
           await db.runAsync(
@@ -413,7 +504,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         
         db = await getDatabase();
         await db.runAsync(
-          'UPDATE sync_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?',
+          `UPDATE sync_outbox
+           SET attempts = attempts + 1, last_error = ?, sync_status = 'failed'
+           WHERE id = ?`,
           [errorMsg, row.id]
         );
       }
