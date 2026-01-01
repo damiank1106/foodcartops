@@ -667,10 +667,10 @@ export default function BossDashboard() {
             <Text style={[styles.tabText, { color: selectedTab === 'settlements' ? theme.primary : theme.textSecondary }]}>
               Settlements
             </Text>
-            {(stats && (stats.unsettled_shifts_count > 0 || stats.pending_expenses_count > 0 || stats.cash_differences.length > 0 || (settlementNotifications && settlementNotifications > 0))) && (
+            {settlementNotifications && settlementNotifications > 0 && (
               <View style={[styles.badge, { backgroundColor: theme.error }]}>
                 <Text style={styles.badgeText}>
-                  {stats.unsettled_shifts_count + stats.pending_expenses_count + stats.cash_differences.length + (settlementNotifications || 0)}
+                  {settlementNotifications}
                 </Text>
               </View>
             )}
@@ -877,7 +877,6 @@ export default function BossDashboard() {
 
           {selectedTab === 'settlements' && (
             <>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>Settlements & Exceptions</Text>
 
               {allSettlements && allSettlements.length > 0 && (
                 <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
@@ -1714,12 +1713,17 @@ export default function BossDashboard() {
         </View>
       </Modal>
 
-      {(user?.role === 'general_manager' || user?.role === 'developer') && selectedTab === 'overview' && (
+      {(user?.role === 'general_manager' || user?.role === 'developer') && (
         <DashboardLoadingOverlay
           visible={
-            showLoadingOverlay ||
-            (isLoading && !hasLoadedOnceRef.current) ||
-            (isLoadingChart && !hasLoadedOnceRef.current)
+            (selectedTab === 'overview' && (
+              showLoadingOverlay ||
+              (isLoading && !hasLoadedOnceRef.current) ||
+              (isLoadingChart && !hasLoadedOnceRef.current)
+            )) ||
+            (selectedTab === 'calendar' && isLoading && !hasLoadedOnceRef.current) ||
+            (selectedTab === 'carts' && isLoading && !hasLoadedOnceRef.current) ||
+            (selectedTab === 'settlements' && isLoading && !hasLoadedOnceRef.current)
           }
           currentStep={syncStatus?.currentStep || (isLoading || isLoadingChart ? 'Loading data...' : 'idle')}
           progress={syncStatus?.progress}

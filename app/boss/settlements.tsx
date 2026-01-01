@@ -204,7 +204,7 @@ export default function BossSettlementsScreen() {
                       </View>
                     ) : (
                       <View style={[styles.statusBadge, { backgroundColor: theme.warning + '15' }]}>
-                        <Text style={[styles.statusText, { color: theme.warning }]}>Draft</Text>
+                        <Text style={[styles.statusText, { color: theme.warning }]}>Saved</Text>
                       </View>
                     )}
                   </View>
