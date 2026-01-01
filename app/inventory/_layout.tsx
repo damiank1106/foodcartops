@@ -4,6 +4,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Archive, UserCircle, Settings } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import PendingChangesBadge from '@/components/PendingChangesBadge';
 
 export default function InventoryLayout() {
   const { theme } = useTheme();
@@ -54,6 +55,7 @@ export default function InventoryLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <UserCircle size={24} color={color} />,
+          headerRight: () => <PendingChangesBadge />,
         }}
       />
       <Tabs.Screen

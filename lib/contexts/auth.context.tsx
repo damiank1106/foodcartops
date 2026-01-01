@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import createContextHook from '@nkzw/create-context-hook';
 import { User } from '../types';
 import { UserRepository, ShiftRepository } from '../repositories';
+import { syncNow } from '../services/sync.service';
 
 const AUTH_KEY = 'foodcartops_auth';
 const CART_KEY = 'foodcartops_selected_cart';
@@ -116,6 +117,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       }));
 
       console.log('[Auth] Login successful:', user.name);
+      syncNow('login').catch((err: any) => {
+        console.log('[Auth] Login sync failed:', err);
+      });
       return true;
     } catch (error) {
       console.error('[Auth] Login failed:', error);

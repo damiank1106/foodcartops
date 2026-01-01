@@ -7,17 +7,19 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { LogOut, User } from 'lucide-react-native';
+import { LogOut, User, Database } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { useRouter } from 'expo-router';
 import SyncProgressModal from '@/components/SyncProgressModal';
+import { usePendingChangesBadge } from '@/lib/utils/usePendingChangesBadge';
 
 export default function InventoryProfileScreen() {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
   const router = useRouter();
   const [showSyncModal, setShowSyncModal] = React.useState(false);
+  const pendingCount = usePendingChangesBadge();
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -74,6 +76,26 @@ export default function InventoryProfileScreen() {
               Logout
             </Text>
           </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.card, { backgroundColor: theme.card }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>
+          Sync
+        </Text>
+        <TouchableOpacity
+          style={[styles.menuItem, { borderBottomColor: theme.border }]}
+          onPress={() => router.push('/pending-changes')}
+        >
+          <View style={styles.menuItemLeft}>
+            <Database size={20} color={theme.text} />
+            <Text style={[styles.menuItemText, { color: theme.text }]}>
+              Pending Changes
+            </Text>
+          </View>
+          <Text style={[styles.menuItemText, { color: theme.textSecondary }]}>
+            {pendingCount}
+          </Text>
         </TouchableOpacity>
       </View>
 

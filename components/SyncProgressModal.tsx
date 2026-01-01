@@ -10,6 +10,7 @@ import {
 import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { subscribeSyncStatus, syncNow, SyncStatus } from '@/lib/services/sync.service';
+import { useToast } from '@/lib/contexts/toast.context';
 
 interface SyncProgressModalProps {
   visible: boolean;
@@ -36,6 +37,7 @@ export default function SyncProgressModal({
   const [isComplete, setIsComplete] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const hasStartedSync = useRef<boolean>(false);
+  const { showToast } = useToast();
 
   const startSync = useCallback(async () => {
     if (isSyncing || hasStartedSync.current) return;
@@ -54,11 +56,25 @@ export default function SyncProgressModal({
         onClose();
       }, 1500);
     } else {
-      setError(result.error || 'Sync failed');
+      const errorMessage = result.error || 'Sync failed';
+      if (
+        errorMessage.toLowerCase().includes('internet') ||
+        errorMessage.toLowerCase().includes('offline') ||
+        errorMessage.toLowerCase().includes('supabase not configured')
+      ) {
+        showToast('Saved locally. Will sync when internet is available.', 'info');
+        onSuccess();
+        setIsSyncing(false);
+        hasStartedSync.current = false;
+        onClose();
+        return;
+      }
+
+      setError(errorMessage);
       setIsSyncing(false);
       hasStartedSync.current = false;
     }
-  }, [reason, onSuccess, onClose, isSyncing]);
+  }, [reason, onSuccess, onClose, isSyncing, showToast]);
 
   useEffect(() => {
     if (!visible) {
@@ -192,6 +208,14 @@ export default function SyncProgressModal({
                   )}
                 </>
               )}
+              <TouchableOpacity
+                style={[styles.backgroundButton, { borderColor: theme.primary }]}
+                onPress={onClose}
+              >
+                <Text style={[styles.backgroundButtonText, { color: theme.primary }]}>
+                  Continue in background
+                </Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -272,6 +296,17 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 4,
+  },
+  backgroundButton: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  backgroundButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   buttonRow: {
     flexDirection: 'row',

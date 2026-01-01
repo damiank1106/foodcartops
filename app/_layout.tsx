@@ -8,6 +8,7 @@ import * as Network from 'expo-network';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider } from '@/lib/contexts/auth.context';
 import { ThemeProvider } from '@/lib/contexts/theme.context';
+import { ToastProvider } from '@/lib/contexts/toast.context';
 import { seedDatabase } from '@/lib/utils/seed';
 import { syncNow, onSyncComplete } from '@/lib/services/sync.service';
 
@@ -22,6 +23,7 @@ function RootLayoutNav() {
       <Stack.Screen name="worker" options={{ headerShown: false }} />
       <Stack.Screen name="boss" options={{ headerShown: false }} />
       <Stack.Screen name="inventory" options={{ headerShown: false }} />
+      <Stack.Screen name="pending-changes" options={{ title: 'Pending Changes' }} />
     </Stack>
   );
 }
@@ -57,6 +59,24 @@ export default function RootLayout() {
           console.log('[App] Resume sync failed:', err);
         });
       }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    const wasOffline = { current: false };
+    const subscription = Network.addNetworkStateListener((state) => {
+      const isOnline = !!state.isConnected && !!state.isInternetReachable;
+      if (isOnline && wasOffline.current) {
+        console.log('[App] Network recovered, triggering sync');
+        syncNow('network_recovered').catch((err: any) => {
+          console.log('[App] Network recovered sync failed:', err);
+        });
+      }
+      wasOffline.current = !isOnline;
     });
 
     return () => {
@@ -128,11 +148,13 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <AuthProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <RootLayoutNav />
-          </GestureHandlerRootView>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <RootLayoutNav />
+            </GestureHandlerRootView>
+          </AuthProvider>
+        </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

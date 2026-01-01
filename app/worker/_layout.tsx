@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import PendingChangesBadge from '@/components/PendingChangesBadge';
 
 export default function WorkerLayout() {
   const { theme } = useTheme();
@@ -73,6 +74,7 @@ export default function WorkerLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <User size={24} color={color} />,
+          headerRight: () => <PendingChangesBadge />,
         }}
       />
     </Tabs>
