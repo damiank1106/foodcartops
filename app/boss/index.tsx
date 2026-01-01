@@ -897,7 +897,7 @@ export default function BossDashboard() {
                 <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
                   <View style={styles.exceptionMainContent}>
                     <View style={styles.exceptionHeaderRow}>
-                      <View style={[styles.exceptionHeader, { marginBottom: 0 }]}>
+                      <View style={[styles.exceptionHeader, styles.exceptionHeaderContent, { marginBottom: 0 }]}>
                         <View style={[styles.exceptionIcon, { backgroundColor: theme.success + '20' }]}>
                           <CheckCircle size={20} color={theme.success} />
                         </View>
@@ -1959,9 +1959,14 @@ const styles = StyleSheet.create({
   exceptionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    justifyContent: 'flex-start',
+    gap: 8,
     marginBottom: 12,
+    paddingHorizontal: 12,
+  },
+  exceptionHeaderContent: {
+    flex: 1,
+    flexShrink: 1,
   },
   exceptionIcon: {
     width: 40,
@@ -2017,6 +2022,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     alignSelf: 'flex-start',
+    marginLeft: 12,
+    flexShrink: 0,
   },
   viewAllText: {
     fontSize: 14,
