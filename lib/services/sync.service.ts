@@ -2,6 +2,7 @@ import * as Network from 'expo-network';
 import { initSupabaseClient } from '../supabase/client';
 import { getDatabase } from '../database/init';
 import { ensureSystemUsers } from '../utils/seed';
+import { SYSTEM_USERS, SYSTEM_USER_ID_SET } from '../utils/system-users';
 
 interface SyncOutboxRow {
   id: string;
@@ -39,7 +40,7 @@ export interface SyncStatus {
 function stripLocalOnlyColumns(tableName: string, payload: any): any {
   const localOnlyColumns: Record<string, string[]> = {
     inventory_items: ['storage_group'],
-    users: ['email', 'password_hash', 'profile_image_uri', 'pin_hash', 'pin_hash_alg'],
+    users: ['email', 'password_hash', 'profile_image_uri', 'pin_hash_alg'],
     carts: ['created_by_user_id'],
   };
 
@@ -54,6 +55,10 @@ function stripLocalOnlyColumns(tableName: string, payload: any): any {
   });
 
   return cleaned;
+}
+
+function isPlainFourDigitPin(pin: unknown): pin is string {
+  return typeof pin === 'string' && /^\d{4}$/.test(pin);
 }
 
 function normalizeUserRole(role: string): string | null {
@@ -262,6 +267,17 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         }
 
         if (row.table_name === 'users') {
+          if (SYSTEM_USER_ID_SET.has(syncPayload.id)) {
+            const systemUser = SYSTEM_USERS.find(user => user.id === syncPayload.id);
+            const fallbackPin = systemUser?.pin;
+            const pin = isPlainFourDigitPin(syncPayload.pin_hash)
+              ? syncPayload.pin_hash
+              : (isPlainFourDigitPin(syncPayload.pin) ? syncPayload.pin : fallbackPin);
+            if (pin) {
+              syncPayload.pin_hash = pin;
+              syncPayload.pin = pin;
+            }
+          }
           console.log('[Sync] users payload keys:', Object.keys(syncPayload));
         }
 
@@ -556,29 +572,29 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
                 remoteRow.role = normalizedRole;
 
-                const validSystemIds = new Set([
-                  'system-user-general-manager',
-                  'system-user-developer',
-                  'system-user-operation-manager',
-                  'system-user-inventory-clerk',
-                ]);
-
-                const isValidSystemUser = validSystemIds.has(remoteRow.id);
+                const isValidSystemUser = SYSTEM_USER_ID_SET.has(remoteRow.id);
                 remoteRow.is_system = isValidSystemUser ? 1 : 0;
 
-                if (!isValidSystemUser && remoteRow.is_system) {
-                  remoteRow.is_system = 0;
-                }
-
                 const localUser = await db.getFirstAsync<any>(
-                  'SELECT id, role, pin, is_system FROM users WHERE id = ?',
+                  'SELECT id, role, pin, pin_hash, is_system FROM users WHERE id = ?',
                   [remoteRow.id]
                 );
 
-                if (localUser && localUser.is_system && isValidSystemUser) {
-                  if (!remoteRow.pin && localUser.pin) {
-                    remoteRow.pin = localUser.pin;
+                const incomingPin = isPlainFourDigitPin(remoteRow.pin_hash)
+                  ? remoteRow.pin_hash
+                  : (isPlainFourDigitPin(remoteRow.pin) ? remoteRow.pin : null);
+
+                if (isValidSystemUser) {
+                  const localPin = localUser?.pin_hash || localUser?.pin;
+                  if (!incomingPin && localPin) {
+                    remoteRow.pin_hash = localPin;
+                    remoteRow.pin = localPin;
+                  } else if (incomingPin) {
+                    remoteRow.pin_hash = incomingPin;
+                    remoteRow.pin = incomingPin;
                   }
+                } else if (remoteRow.pin_hash && !remoteRow.pin) {
+                  remoteRow.pin = remoteRow.pin_hash;
                 }
               }
 
@@ -694,23 +710,29 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
                   }
                   remoteRow.role = normalizedRole;
 
-                  const validSystemIds = new Set([
-                    'system-user-general-manager',
-                    'system-user-developer',
-                    'system-user-operation-manager',
-                    'system-user-inventory-clerk',
-                  ]);
-                  const isValidSystemUser = validSystemIds.has(remoteRow.id);
+                  const isValidSystemUser = SYSTEM_USER_ID_SET.has(remoteRow.id);
                   remoteRow.is_system = isValidSystemUser ? 1 : 0;
 
                   const localUser = await db.getFirstAsync<any>(
-                    'SELECT id, role, pin, is_system FROM users WHERE id = ?',
+                    'SELECT id, role, pin, pin_hash, is_system FROM users WHERE id = ?',
                     [remoteRow.id]
                   );
-                  if (localUser && localUser.is_system && isValidSystemUser) {
-                    if (!remoteRow.pin && localUser.pin) {
-                      remoteRow.pin = localUser.pin;
+
+                  const incomingPin = isPlainFourDigitPin(remoteRow.pin_hash)
+                    ? remoteRow.pin_hash
+                    : (isPlainFourDigitPin(remoteRow.pin) ? remoteRow.pin : null);
+
+                  if (isValidSystemUser) {
+                    const localPin = localUser?.pin_hash || localUser?.pin;
+                    if (!incomingPin && localPin) {
+                      remoteRow.pin_hash = localPin;
+                      remoteRow.pin = localPin;
+                    } else if (incomingPin) {
+                      remoteRow.pin_hash = incomingPin;
+                      remoteRow.pin = incomingPin;
                     }
+                  } else if (remoteRow.pin_hash && !remoteRow.pin) {
+                    remoteRow.pin = remoteRow.pin_hash;
                   }
                 }
 
