@@ -324,13 +324,13 @@ export default function BossDashboard() {
     refetchOnReconnect: false,
   });
 
-  const badgeCount =
+  const settlementBadgeCount =
     (stats?.unsettled_shifts_count ?? 0) +
     (stats?.pending_expenses_count ?? 0) +
     (stats?.cash_differences?.length ?? 0) +
     settlementNotifications;
 
-  const showBadge = badgeCount > 0;
+  const showBadge = settlementBadgeCount > 0;
 
   const { data: recentActivity } = useQuery({
     queryKey: ['boss-activity-feed'],
@@ -683,7 +683,7 @@ export default function BossDashboard() {
 
             {showBadge && (
               <View style={[styles.badge, { backgroundColor: theme.error }]}>
-                <Text style={styles.badgeText}>{badgeCount}</Text>
+                <Text style={styles.badgeText}>{settlementBadgeCount}</Text>
               </View>
             )}
 
