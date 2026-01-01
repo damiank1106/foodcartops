@@ -87,7 +87,7 @@ export default function DebugScreen() {
         return [];
       }
 
-      const testPins = ['0000', '1111', '2222', '3333'];
+      const testPins = ['1111', '2222', '1234', '2345'];
       const results = [];
 
       for (const pin of testPins) {
