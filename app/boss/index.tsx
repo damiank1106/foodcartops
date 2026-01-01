@@ -330,7 +330,7 @@ export default function BossDashboard() {
     (stats?.cash_differences?.length ?? 0) +
     settlementNotifications;
 
-  const showBadge = settlementBadgeCount > 0;
+  const showSettlementBadge = settlementBadgeCount > 0;
 
   const { data: recentActivity } = useQuery({
     queryKey: ['boss-activity-feed'],
@@ -681,7 +681,7 @@ export default function BossDashboard() {
               Settlements
             </Text>
 
-            {showBadge && (
+            {showSettlementBadge && (
               <View style={[styles.badge, { backgroundColor: theme.error }]}>
                 <Text style={styles.badgeText}>{settlementBadgeCount}</Text>
               </View>
