@@ -177,7 +177,7 @@ export default function BossDashboard() {
     }
   };
 
-  const { data: settlementNotifications } = useQuery({
+  const { data: settlementNotifications = 0 } = useQuery({
     queryKey: ['settlement-notifications'],
     queryFn: async () => {
       const { NotificationRepository } = await import('@/lib/repositories/notification.repository');
@@ -323,6 +323,14 @@ export default function BossDashboard() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  const badgeCount =
+    (stats?.unsettled_shifts_count ?? 0) +
+    (stats?.pending_expenses_count ?? 0) +
+    (stats?.cash_differences?.length ?? 0) +
+    settlementNotifications;
+
+  const showBadge = badgeCount > 0;
 
   const { data: recentActivity } = useQuery({
     queryKey: ['boss-activity-feed'],
@@ -664,17 +672,24 @@ export default function BossDashboard() {
             style={styles.tab}
             onPress={() => setSelectedTab('settlements')}
           >
-            <Text style={[styles.tabText, { color: selectedTab === 'settlements' ? theme.primary : theme.textSecondary }]}>
+            <Text
+              style={[
+                styles.tabText,
+                { color: selectedTab === 'settlements' ? theme.primary : theme.textSecondary },
+              ]}
+            >
               Settlements
             </Text>
-            {settlementNotifications && settlementNotifications > 0 && (
+
+            {showBadge && (
               <View style={[styles.badge, { backgroundColor: theme.error }]}>
-                <Text style={styles.badgeText}>
-                  {settlementNotifications}
-                </Text>
+                <Text style={styles.badgeText}>{badgeCount}</Text>
               </View>
             )}
-            {selectedTab === 'settlements' && <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />}
+
+            {selectedTab === 'settlements' && (
+              <View style={[styles.tabUnderline, { backgroundColor: theme.primary }]} />
+            )}
           </TouchableOpacity>
 
           {user?.role === 'developer' && (

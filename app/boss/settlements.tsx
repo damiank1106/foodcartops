@@ -5,17 +5,17 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { DollarSign, Filter, Trash2 } from 'lucide-react-native';
+import { DollarSign, Filter, Trash2, Coins } from 'lucide-react-native';
+import DashboardLoadingOverlay from '@/components/DashboardLoadingOverlay';
 import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
-import { onSyncComplete } from '@/lib/services/sync.service';
+import { onSyncComplete, subscribeSyncStatus, SyncStatus } from '@/lib/services/sync.service';
 
 export default function BossSettlementsScreen() {
   const { theme } = useTheme();
@@ -25,6 +25,8 @@ export default function BossSettlementsScreen() {
   const settlementRepo = new SettlementRepository();
 
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'SAVED' | 'FINALIZED'>('ALL');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const hasLoadedOnceRef = React.useRef(false);
 
   useEffect(() => {
     const unsubscribe = onSyncComplete(() => {
@@ -36,11 +38,21 @@ export default function BossSettlementsScreen() {
   }, [queryClient]);
 
   useEffect(() => {
+    const unsubscribe = subscribeSyncStatus((status) => {
+      setSyncStatus(status);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     (async () => {
       const { NotificationRepository } = await import('@/lib/repositories/notification.repository');
       const notifRepo = new NotificationRepository();
       await notifRepo.markAllSeenByType('settlement_incoming');
       queryClient.invalidateQueries({ queryKey: ['settlement-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['settlement-badge-count'] });
+      queryClient.invalidateQueries({ queryKey: ['unsettled-shifts-count'] });
+      queryClient.invalidateQueries({ queryKey: ['cash-differences-count'] });
       console.log('[Settlements] Marked all settlement notifications as seen');
     })();
   }, [queryClient]);
@@ -71,7 +83,17 @@ export default function BossSettlementsScreen() {
       return filtered;
     },
     enabled: !!(user && (isBoss || isDeveloper)),
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
+
+  useEffect(() => {
+    if (settlements && !hasLoadedOnceRef.current) {
+      hasLoadedOnceRef.current = true;
+    }
+  }, [settlements]);
 
   const deleteSettlementMutation = useMutation({
     mutationFn: async (settlementId: string) => {
@@ -108,18 +130,11 @@ export default function BossSettlementsScreen() {
     router.push(`/settlement/${shiftId}` as any);
   };
 
-  if (isLoading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
-  }
+
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>All Settlements</Text>
         <View style={styles.filterContainer}>
           <Filter size={16} color={theme.textSecondary} />
           <TouchableOpacity
@@ -173,9 +188,9 @@ export default function BossSettlementsScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {settlements && settlements.length > 0 ? (
-          settlements.map((settlement) => (
+          settlements.map((settlement: any) => (
             <View
               key={settlement.id}
               style={[styles.settlementCard, { backgroundColor: theme.card, borderColor: theme.border }]}
@@ -187,7 +202,7 @@ export default function BossSettlementsScreen() {
               >
                 <View style={styles.settlementTopRow}>
                   <View style={[styles.iconContainer, { backgroundColor: theme.primary + '15' }]}>
-                    <DollarSign size={24} color={theme.primary} />
+                    <Coins size={24} color={theme.primary} />
                   </View>
                   <View style={styles.settlementInfo}>
                     <Text style={[styles.workerName, { color: theme.text }]}>
@@ -269,6 +284,15 @@ export default function BossSettlementsScreen() {
           </View>
         )}
       </ScrollView>
+
+      <DashboardLoadingOverlay
+        visible={isLoading && !hasLoadedOnceRef.current}
+        currentStep={syncStatus?.currentStep || (isLoading ? 'Loading settlements...' : 'idle')}
+        progress={syncStatus?.progress}
+        pendingCount={syncStatus?.pendingCount}
+        lastSyncAt={syncStatus?.lastSyncAt}
+        lastError={syncStatus?.lastError}
+      />
     </View>
   );
 }
