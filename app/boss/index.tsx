@@ -896,18 +896,28 @@ export default function BossDashboard() {
               {allSettlements && allSettlements.length > 0 && (
                 <View style={[styles.exceptionCard, { backgroundColor: theme.card }]}>
                   <View style={styles.exceptionMainContent}>
-                    <View style={styles.exceptionHeader}>
-                      <View style={[styles.exceptionIcon, { backgroundColor: theme.success + '20' }]}>
-                        <CheckCircle size={20} color={theme.success} />
+                    <View style={styles.exceptionHeaderRow}>
+                      <View style={[styles.exceptionHeader, { marginBottom: 0 }]}>
+                        <View style={[styles.exceptionIcon, { backgroundColor: theme.success + '20' }]}>
+                          <CheckCircle size={20} color={theme.success} />
+                        </View>
+                        <View style={styles.exceptionInfo}>
+                          <Text style={[styles.exceptionTitle, { color: theme.text }]}>
+                            All Settlements
+                          </Text>
+                          <Text style={[styles.exceptionCount, { color: theme.success }]}>
+                            {allSettlements.length} settlement{allSettlements.length !== 1 ? 's' : ''} in database
+                          </Text>
+                        </View>
                       </View>
-                      <View style={styles.exceptionInfo}>
-                        <Text style={[styles.exceptionTitle, { color: theme.text }]}>
-                          All Settlements
+                      <TouchableOpacity
+                        style={[styles.viewAllButtonHeader, { backgroundColor: theme.primary + '10' }]}
+                        onPress={() => router.push('/boss/settlements' as any)}
+                      >
+                        <Text style={[styles.viewAllText, { color: theme.primary }]}>
+                          View All ({allSettlements.length})
                         </Text>
-                        <Text style={[styles.exceptionCount, { color: theme.success }]}>
-                          {allSettlements.length} settlement{allSettlements.length !== 1 ? 's' : ''} in database
-                        </Text>
-                      </View>
+                      </TouchableOpacity>
                     </View>
                     {allSettlements.slice(0, 5).map((settlement) => (
                       <TouchableOpacity
@@ -936,14 +946,6 @@ export default function BossDashboard() {
                         </View>
                       </TouchableOpacity>
                     ))}
-                    {allSettlements.length > 5 && (
-                      <TouchableOpacity
-                        style={[styles.viewAllButton, { backgroundColor: theme.primary + '10', marginTop: 8 }]}
-                        onPress={() => router.push('/boss/settlements' as any)}
-                      >
-                        <Text style={[styles.viewAllText, { color: theme.primary }]}>View All ({allSettlements.length})</Text>
-                      </TouchableOpacity>
-                    )}
                   </View>
                 </View>
               )}
@@ -1954,6 +1956,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  exceptionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
   exceptionIcon: {
     width: 40,
     height: 40,
@@ -2001,6 +2010,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 8,
     marginLeft: 52,
+    alignSelf: 'flex-start',
+  },
+  viewAllButtonHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
     alignSelf: 'flex-start',
   },
   viewAllText: {
