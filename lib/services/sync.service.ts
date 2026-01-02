@@ -81,6 +81,58 @@ function stripLocalOnlyColumns(tableName: string, payload: any): any {
   return cleaned;
 }
 
+const EXPENSE_SERVER_COLUMNS = [
+  'id',
+  'shift_id',
+  'cart_id',
+  'submitted_by_user_id',
+  'approved_by_user_id',
+  'status',
+  'category',
+  'amount_cents',
+  'paid_from',
+  'notes',
+  'receipt_image_uri',
+  'receipt_storage_path',
+  'created_at',
+  'updated_at',
+  'reviewed_at',
+  'is_deleted',
+  'business_id',
+  'device_id',
+  'deleted_at',
+  'created_at_iso',
+  'updated_at_iso',
+];
+
+const EXPENSE_GM_ONLY_COLUMNS = ['is_saved'];
+
+function buildExpenseSyncPayload(payload: any, isManagerRole: boolean, expenseId?: string): any {
+  const allowedColumns = new Set(
+    isManagerRole ? [...EXPENSE_SERVER_COLUMNS, ...EXPENSE_GM_ONLY_COLUMNS] : EXPENSE_SERVER_COLUMNS
+  );
+  const cleaned: Record<string, any> = {};
+  const stripped: string[] = [];
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (key.startsWith('__')) {
+      stripped.push(key);
+      return;
+    }
+    if (!allowedColumns.has(key)) {
+      stripped.push(key);
+      return;
+    }
+    cleaned[key] = value;
+  });
+
+  if (stripped.length > 0) {
+    console.warn(`[Sync] Stripped expenses payload keys for ${expenseId ?? 'unknown'}:`, stripped);
+  }
+
+  return cleaned;
+}
+
 function isPlainFourDigitPin(pin: unknown): pin is string {
   return typeof pin === 'string' && /^\d{4}$/.test(pin);
 }
@@ -620,7 +672,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           }
         }
 
-        let syncPayload = stripLocalOnlyColumns(row.table_name, payload);
+        let syncPayload = row.table_name === 'expenses'
+          ? buildExpenseSyncPayload(payload, isManagerRole, row.row_id)
+          : stripLocalOnlyColumns(row.table_name, payload);
         if (row.table_name === 'expenses' && row.op === 'upsert' && hasLocalReceipt) {
           syncPayload = {
             ...syncPayload,
