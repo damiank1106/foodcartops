@@ -3,6 +3,8 @@ import { SaleRepository } from '../repositories/sale.repository';
 import { ExpenseRepository } from '../repositories/expense.repository';
 import { OtherExpenseRepository } from '../repositories/other-expense.repository';
 import { SettlementRepository } from '../repositories/settlement.repository';
+import { DailySummaryRepository, DailyProductsSoldItem } from '../repositories/daily-summary.repository';
+import { DailyOverrideRepository } from '../repositories/daily-override.repository';
 
 export type PeriodType = 'day' | 'week' | 'month' | 'year';
 
@@ -26,6 +28,8 @@ export interface CalendarAnalytics {
     method: 'CASH' | 'GCASH' | 'CARD';
     amount_cents: number;
   }[];
+  products_sold: DailyProductsSoldItem[];
+  day_reset: boolean;
   breakdown: {
     label: string;
     date: Date;
@@ -56,18 +60,23 @@ export class CalendarAnalyticsService {
   private expenseRepo: ExpenseRepository;
   private otherExpenseRepo: OtherExpenseRepository;
   private settlementRepo: SettlementRepository;
+  private dailySummaryRepo: DailySummaryRepository;
+  private dailyOverrideRepo: DailyOverrideRepository;
 
   constructor() {
     this.saleRepo = new SaleRepository();
     this.expenseRepo = new ExpenseRepository();
     this.otherExpenseRepo = new OtherExpenseRepository();
     this.settlementRepo = new SettlementRepository();
+    this.dailySummaryRepo = new DailySummaryRepository();
+    this.dailyOverrideRepo = new DailyOverrideRepository();
   }
 
   async getAnalytics(periodType: PeriodType, anchorDate: Date): Promise<CalendarAnalytics> {
     const dateRange = this.getDateRange(periodType, anchorDate);
+    const dateKey = format(dateRange.start, 'yyyy-MM-dd');
 
-    const [sales, expenses, otherExpenses, allSettlements] = await Promise.all([
+    const [sales, expenses, otherExpenses, allSettlements, dailyProductsSold, dailyOverride] = await Promise.all([
       this.saleRepo.findAll({
         start_date: dateRange.start,
         end_date: dateRange.end,
@@ -78,6 +87,8 @@ export class CalendarAnalyticsService {
         format(dateRange.end, 'yyyy-MM-dd')
       ),
       this.settlementRepo.getAllSettlements(500),
+      periodType === 'day' ? this.dailySummaryRepo.getDailyProductsSold(dateKey) : Promise.resolve([]),
+      periodType === 'day' ? this.dailyOverrideRepo.getOverride(dateKey) : Promise.resolve(null),
     ]);
 
     const settlements = allSettlements.filter((s: any) => {
@@ -93,6 +104,10 @@ export class CalendarAnalyticsService {
         e.created_at <= dateRange.end.getTime() &&
         e.status === 'APPROVED'
     );
+
+    if (periodType === 'day') {
+      await this.dailySummaryRepo.upsertProductsSoldSnapshot(dateKey, dailyProductsSold);
+    }
 
     const sales_cents = sales.reduce((sum, s) => sum + s.total_cents, 0);
     const expenses_cents = filteredExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
@@ -117,6 +132,50 @@ export class CalendarAnalyticsService {
     }
 
     const breakdown = this.generateBreakdown(periodType, dateRange, sales, filteredExpenses, otherExpenses);
+    const isDayReset = periodType === 'day' && dailyOverride?.is_reset === 1;
+
+    const productsSold = periodType === 'day' ? dailyProductsSold : [];
+
+    if (isDayReset) {
+      const zeroedRevenue = revenue_by_payment.map((entry) => ({
+        ...entry,
+        amount_cents: 0,
+      }));
+      const zeroedBreakdown = breakdown.map((entry) => ({
+        ...entry,
+        sales_cents: 0,
+        expenses_cents: 0,
+        other_expenses_cents: 0,
+      }));
+
+      return {
+        period_type: periodType,
+        anchor_date: anchorDate,
+        date_range: dateRange,
+        totals: {
+          sales_cents: 0,
+          expenses_cents: 0,
+          other_expenses_cents: 0,
+          net_sales_cents: 0,
+          manager_share_cents: 0,
+          owner_share_cents: 0,
+        },
+        revenue_by_payment: zeroedRevenue,
+        products_sold: [],
+        day_reset: true,
+        breakdown: zeroedBreakdown,
+        other_expenses: [],
+        settlements: settlements.map((s: any) => ({
+          id: s.id,
+          shift_id: s.shift_id,
+          worker_name: s.worker_name || 'Unknown',
+          cart_name: s.cart_name || 'Unknown',
+          status: s.status,
+          total_cents: s.total_cents || 0,
+          created_at: s.created_at,
+        })),
+      };
+    }
 
     return {
       period_type: periodType,
@@ -131,6 +190,8 @@ export class CalendarAnalyticsService {
         owner_share_cents,
       },
       revenue_by_payment,
+      products_sold: productsSold,
+      day_reset: false,
       breakdown,
       other_expenses: otherExpenses.map((oe) => ({
         id: oe.id,
