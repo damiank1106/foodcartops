@@ -1,5 +1,5 @@
 import * as Network from 'expo-network';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { initSupabaseClient } from '../supabase/client';
@@ -894,15 +894,23 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         }
 
         if (row.table_name === 'expenses' && row.op === 'upsert' && hasLocalReceipt) {
-          const receiptResult = await uploadReceiptIfNeeded(supabase, db, row.row_id, payload, expenseBusinessId);
-          if (receiptResult.pending) {
+          try {
+            const receiptResult = await uploadReceiptIfNeeded(supabase, db, row.row_id, payload, expenseBusinessId);
+            if (receiptResult.pending) {
+              receiptPending = true;
+              receiptMessage = receiptResult.message ?? RECEIPT_PENDING_MESSAGE;
+              payload = { ...payload, __expense_synced: true };
+            } else {
+              payload = { ...receiptResult.payload, __expense_synced: true };
+            }
+            updatedPayloadJson = JSON.stringify(payload);
+          } catch (error) {
+            console.warn('[Sync] Receipt upload failed, will retry:', error);
             receiptPending = true;
-            receiptMessage = receiptResult.message ?? RECEIPT_PENDING_MESSAGE;
+            receiptMessage = RECEIPT_PENDING_MESSAGE;
             payload = { ...payload, __expense_synced: true };
-          } else {
-            payload = { ...receiptResult.payload, __expense_synced: true };
+            updatedPayloadJson = JSON.stringify(payload);
           }
-          updatedPayloadJson = JSON.stringify(payload);
         }
 
         if (row.table_name === 'expenses' && receiptPending) {
