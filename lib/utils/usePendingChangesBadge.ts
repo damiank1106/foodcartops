@@ -14,7 +14,11 @@ export function usePendingChangesBadge() {
         if (row.table_name !== 'expenses') return;
         try {
           const payload = JSON.parse(row.payload_json);
-          if (typeof payload?.receipt_image_uri === 'string' && !payload.receipt_image_uri.startsWith('http')) {
+          if (
+            payload?.__expense_synced !== true &&
+            typeof payload?.receipt_image_uri === 'string' &&
+            !payload.receipt_image_uri.startsWith('http')
+          ) {
             receiptCount += 1;
           }
         } catch (error) {
