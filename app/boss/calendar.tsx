@@ -18,6 +18,7 @@ import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { CalendarAnalyticsService, PeriodType, CalendarAnalytics } from '@/lib/services/calendar-analytics.service';
 import { OtherExpenseRepository } from '@/lib/repositories/other-expense.repository';
+import { DailyOverrideRepository } from '@/lib/repositories/daily-override.repository';
 import { Calendar as CalendarIcon, Plus, X, Trash2, ChevronLeft, ChevronRight, Download, FileText, BarChart3 } from 'lucide-react-native';
 import DashboardLoadingOverlay from '@/components/DashboardLoadingOverlay';
 import { format, addDays, addWeeks, addMonths, addYears, subDays, subWeeks, subMonths, subYears } from 'date-fns';
@@ -64,6 +65,10 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
 
   const analyticsService = new CalendarAnalyticsService();
   const otherExpenseRepo = new OtherExpenseRepository();
+  const dailyOverrideRepo = new DailyOverrideRepository();
+  const canManageDay = user?.role === 'general_manager' || user?.role === 'developer';
+  const isDayView = periodType === 'day';
+  const dateKey = format(anchorDate, 'yyyy-MM-dd');
 
   useEffect(() => {
     const loadSyncInterval = async () => {
@@ -166,6 +171,29 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     },
   });
 
+  const resetDayMutation = useMutation({
+    mutationFn: async () => {
+      await dailyOverrideRepo.setReset(dateKey, true);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar-analytics'] });
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to reset day: ${error}`);
+    },
+  });
+
+  const undoResetMutation = useMutation({
+    mutationFn: async () => {
+      await dailyOverrideRepo.setReset(dateKey, false);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar-analytics'] });
+    },
+    onError: (error) => {
+      Alert.alert('Error', `Failed to undo reset: ${error}`);
+    },
+  });
 
 
   const resetOtherExpenseForm = () => {
@@ -229,6 +257,21 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
         onPress: () => deleteOtherExpenseMutation.mutate(id),
       },
     ]);
+  };
+
+  const handleResetDay = () => {
+    Alert.alert('Reset this day?', 'This will set all Calendar totals for this day to 0 on this phone only. It will not delete records from the database.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: () => resetDayMutation.mutate(),
+      },
+    ]);
+  };
+
+  const handleUndoReset = () => {
+    undoResetMutation.mutate();
   };
 
 
@@ -704,6 +747,9 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
     );
   };
 
+  const isDayReset = analytics?.day_reset ?? false;
+  const productsSold = isDayReset ? [] : analytics?.products_sold ?? [];
+
   return (
     <>
       <DashboardLoadingOverlay
@@ -871,6 +917,35 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                   </Text>
                 </View>
               ))}
+              {canManageDay && isDayView && (
+                <View style={styles.productsSoldSection}>
+                  <Text style={[styles.cardSubtitle, { color: theme.text }]}>Products Sold</Text>
+                  {productsSold.length > 0 ? (
+                    productsSold.map((item, index) => (
+                      <View key={`${item.product_id ?? 'unknown'}-${index}`} style={styles.productSoldRow}>
+                        <Text style={[styles.productSoldIndex, { color: theme.textSecondary }]}>
+                          {index + 1}.
+                        </Text>
+                        <View style={styles.productSoldInfo}>
+                          <Text style={[styles.productSoldName, { color: theme.text }]}>
+                            {item.product_name}
+                          </Text>
+                          <Text style={[styles.productSoldMeta, { color: theme.textSecondary }]}>
+                            Qty: {item.qty}
+                          </Text>
+                        </View>
+                        <Text style={[styles.productSoldAmount, { color: theme.text }]}>
+                          ₱{(item.total_cents / 100).toFixed(2)}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                      No products sold this day.
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
 
             <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -914,6 +989,30 @@ export default function CalendarScreen({ selectedDate }: CalendarScreenProps) {
                 ))
               ) : (
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No other expenses</Text>
+              )}
+              {canManageDay && isDayView && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.resetDayButton, { backgroundColor: theme.error }]}
+                    onPress={handleResetDay}
+                  >
+                    <Trash2 size={16} color="#fff" />
+                    <Text style={styles.resetDayButtonText}>Delete (Reset Day to 0)</Text>
+                  </TouchableOpacity>
+                  {isDayReset && (
+                    <View style={[styles.resetNote, { borderColor: theme.border }]}>
+                      <Text style={[styles.resetNoteText, { color: theme.textSecondary }]}>
+                        This day is locally reset to 0.
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.undoResetButton, { backgroundColor: theme.primary + '15' }]}
+                        onPress={handleUndoReset}
+                      >
+                        <Text style={[styles.undoResetButtonText, { color: theme.primary }]}>Undo Reset</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
               )}
             </View>
           </>
@@ -1331,6 +1430,80 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  cardSubtitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  productsSoldSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  productSoldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  productSoldIndex: {
+    width: 24,
+    fontSize: 14,
+  },
+  productSoldInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  productSoldName: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+  },
+  productSoldMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  productSoldAmount: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  resetDayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 12,
+  },
+  resetDayButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700' as const,
+  },
+  resetNote: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  resetNoteText: {
+    flex: 1,
+    fontSize: 12,
+  },
+  undoResetButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  undoResetButtonText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
   },
   deleteDataButton: {
     flexDirection: 'row',

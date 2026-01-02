@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 46;
+export const SCHEMA_VERSION = 49;
 
 export const MIGRATIONS = [
   {
@@ -2097,6 +2097,34 @@ export const MIGRATIONS = [
     `,
     down: `
       ALTER TABLE sync_outbox DROP COLUMN change_type;
+    `,
+  },
+  {
+    version: 49,
+    up: `
+      CREATE TABLE IF NOT EXISTS daily_summaries (
+        date_key TEXT PRIMARY KEY,
+        products_sold_json TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS daily_overrides (
+        date_key TEXT PRIMARY KEY,
+        is_reset INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_daily_overrides_is_reset ON daily_overrides(is_reset);
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migration v49: Added daily summaries and local override flags', ${Date.now()});
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_daily_overrides_is_reset;
+      DROP TABLE IF EXISTS daily_overrides;
+      DROP TABLE IF EXISTS daily_summaries;
     `,
   },
 ];
