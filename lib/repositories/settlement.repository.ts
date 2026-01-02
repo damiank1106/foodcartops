@@ -20,6 +20,24 @@ interface SettlementItem {
   updated_at_iso?: string;
 }
 
+export interface SettlementSummary {
+  total_sales_count: number;
+  total_revenue_cents: number;
+  payment_totals: {
+    CASH: number;
+    GCASH: number;
+    CARD: number;
+    OTHER: number;
+  };
+  products_sold: {
+    product_id: string | null;
+    product_name: string;
+    qty: number;
+    total_cents: number;
+  }[];
+  total_items_sold: number;
+}
+
 export class SettlementRepository extends BaseRepository {
   private syncOutbox = new SyncOutboxRepository();
 
@@ -190,6 +208,158 @@ export class SettlementRepository extends BaseRepository {
       'SELECT * FROM settlement_items WHERE settlement_id = ? AND deleted_at IS NULL AND is_deleted = 0',
       [settlementId]
     );
+  }
+
+  async computeSettlementSummary(shiftId: string): Promise<SettlementSummary> {
+    const db = await this.getDb();
+
+    const salesTotals = await db.getFirstAsync<{
+      total_sales_count: number;
+      total_revenue_cents: number;
+    }>(
+      `SELECT 
+        COUNT(*) as total_sales_count,
+        COALESCE(SUM(total_cents), 0) as total_revenue_cents
+       FROM sales
+       WHERE shift_id = ? AND voided_at IS NULL`,
+      [shiftId]
+    );
+
+    const paymentRows = await db.getAllAsync<{
+      method: 'CASH' | 'GCASH' | 'CARD' | 'OTHER';
+      total_cents: number;
+    }>(
+      `SELECT 
+        p.method as method,
+        COALESCE(SUM(p.amount_cents), 0) as total_cents
+       FROM payments p
+       JOIN sales s ON s.id = p.sale_id
+       WHERE s.shift_id = ? AND s.voided_at IS NULL
+       GROUP BY p.method`,
+      [shiftId]
+    );
+
+    const paymentTotals = {
+      CASH: 0,
+      GCASH: 0,
+      CARD: 0,
+      OTHER: 0,
+    };
+
+    for (const row of paymentRows) {
+      if (row.method in paymentTotals) {
+        paymentTotals[row.method] = row.total_cents;
+      }
+    }
+
+    const productsSold = await db.getAllAsync<{
+      product_id: string | null;
+      product_name: string | null;
+      qty: number;
+      total_cents: number;
+    }>(
+      `SELECT 
+        si.product_id as product_id,
+        p.name as product_name,
+        COALESCE(SUM(si.quantity), 0) as qty,
+        COALESCE(SUM(si.line_total_cents), 0) as total_cents
+       FROM sale_items si
+       JOIN sales s ON s.id = si.sale_id
+       LEFT JOIN products p ON p.id = si.product_id
+       WHERE s.shift_id = ? AND s.voided_at IS NULL
+       GROUP BY si.product_id, p.name
+       ORDER BY qty DESC`,
+      [shiftId]
+    );
+
+    const totalItems = await db.getFirstAsync<{ total_items_sold: number }>(
+      `SELECT COALESCE(SUM(si.quantity), 0) as total_items_sold
+       FROM sale_items si
+       JOIN sales s ON s.id = si.sale_id
+       WHERE s.shift_id = ? AND s.voided_at IS NULL`,
+      [shiftId]
+    );
+
+    const summary: SettlementSummary = {
+      total_sales_count: salesTotals?.total_sales_count || 0,
+      total_revenue_cents: salesTotals?.total_revenue_cents || 0,
+      payment_totals: paymentTotals,
+      products_sold: productsSold.map((item) => ({
+        product_id: item.product_id,
+        product_name: item.product_name || 'Unknown Product',
+        qty: item.qty || 0,
+        total_cents: item.total_cents || 0,
+      })),
+      total_items_sold: totalItems?.total_items_sold || 0,
+    };
+
+    console.log('[SettlementRepo] computeSettlementSummary', {
+      shift_id: shiftId,
+      total_sales_count: summary.total_sales_count,
+      total_items_sold: summary.total_items_sold,
+      total_revenue_cents: summary.total_revenue_cents,
+      payment_totals: summary.payment_totals,
+      products_count: summary.products_sold.length,
+    });
+
+    return summary;
+  }
+
+  async replaceSettlementItems(
+    settlementId: string,
+    products: SettlementSummary['products_sold'],
+    userId: string
+  ): Promise<void> {
+    const db = await this.getDb();
+    const existingItems = await this.getSettlementItems(settlementId);
+    const now = Date.now();
+    const nowISO = new Date().toISOString();
+    const deviceId = await getDeviceId();
+
+    for (const item of existingItems) {
+      await db.runAsync(
+        'UPDATE settlement_items SET is_deleted = 1, deleted_at = ?, updated_at = ?, updated_at_iso = ?, device_id = ? WHERE id = ?',
+        [nowISO, now, nowISO, deviceId, item.id]
+      );
+
+      const payload = {
+        id: item.id,
+        settlement_id: item.settlement_id,
+        product_id: item.product_id ?? null,
+        product_name: item.product_name,
+        qty: item.qty,
+        price_cents: item.price_cents,
+        business_id: item.business_id || 'default_business',
+        device_id: deviceId,
+        is_deleted: 1,
+        deleted_at: nowISO,
+        created_at: item.created_at || Date.now(),
+        updated_at: now,
+        created_at_iso: item.created_at_iso,
+        updated_at_iso: nowISO,
+      };
+
+      await this.queueSync('settlement_items', item.id, payload, {
+        changeId: settlementId,
+      });
+    }
+
+    for (const product of products) {
+      await this.createSettlementItem(
+        settlementId,
+        product.product_id,
+        product.product_name,
+        product.qty,
+        product.total_cents,
+        userId
+      );
+    }
+
+    console.log('[SettlementRepo] Replaced settlement items:', {
+      settlement_id: settlementId,
+      removed: existingItems.length,
+      added: products.length,
+    });
   }
 
   async updateSettlement(

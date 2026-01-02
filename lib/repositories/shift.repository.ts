@@ -240,11 +240,7 @@ export class ShiftRepository extends BaseRepository {
   ): Promise<void> {
     try {
       const { SettlementRepository } = require('./settlement.repository');
-      const { SaleRepository } = require('./sale.repository');
-      const { PaymentRepository } = require('./payment.repository');
       const settlementRepo = new SettlementRepository();
-      const saleRepo = new SaleRepository();
-      const paymentRepo = new PaymentRepository();
 
       const existingSettlement = await settlementRepo.findByShiftId(shiftId);
       if (existingSettlement) {
@@ -252,23 +248,7 @@ export class ShiftRepository extends BaseRepository {
         return;
       }
 
-      const sales = (await saleRepo.findAll()).filter(sale => sale.shift_id === shiftId);
-      
-      const payments = await Promise.all(
-        sales.map(sale => paymentRepo.findBySaleId(sale.id))
-      );
-      const flatPayments = payments.flat();
-
-      const cashCents = flatPayments
-        .filter(p => p.method === 'CASH')
-        .reduce((sum, p) => sum + p.amount_cents, 0);
-      const gcashCents = flatPayments
-        .filter(p => p.method === 'GCASH')
-        .reduce((sum, p) => sum + p.amount_cents, 0);
-      const cardCents = flatPayments
-        .filter(p => p.method === 'CARD')
-        .reduce((sum, p) => sum + p.amount_cents, 0);
-      const totalSalesCents = sales.reduce((sum, sale) => sum + sale.total_cents, 0);
+      const summary = await settlementRepo.computeSettlementSummary(shiftId);
 
       const dateIso = new Date(clockOut).toISOString().split('T')[0];
 
@@ -279,45 +259,20 @@ export class ShiftRepository extends BaseRepository {
         dateIso,
         'SAVED',
         undefined,
-        cashCents,
-        gcashCents,
-        cardCents,
-        totalSalesCents,
-        totalSalesCents,
+        summary.payment_totals.CASH,
+        summary.payment_totals.GCASH,
+        summary.payment_totals.CARD,
+        summary.total_revenue_cents,
+        summary.total_revenue_cents,
         workerId
       );
 
-      const db = await this.getDb();
-      const saleItems = await db.getAllAsync<any>(
-        `SELECT si.*, p.name as product_name 
-         FROM sale_items si 
-         LEFT JOIN products p ON si.product_id = p.id 
-         WHERE si.sale_id IN (${sales.map(() => '?').join(',')})`,
-        sales.map(s => s.id)
-      );
-
-      const productsSold = saleItems.reduce((acc: any[], item: any) => {
-        const existing = acc.find(p => p.product_id === item.product_id);
-        if (existing) {
-          existing.quantity += item.quantity;
-          existing.total_cents += item.line_total_cents;
-        } else {
-          acc.push({
-            product_id: item.product_id,
-            product_name: item.product_name || 'Unknown Product',
-            quantity: item.quantity,
-            total_cents: item.line_total_cents,
-          });
-        }
-        return acc;
-      }, []);
-
-      for (const product of productsSold) {
+      for (const product of summary.products_sold) {
         await settlementRepo.createSettlementItem(
           settlement.id,
           product.product_id,
           product.product_name,
-          product.quantity,
+          product.qty,
           product.total_cents,
           workerId
         );

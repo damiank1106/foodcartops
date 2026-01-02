@@ -313,6 +313,67 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         const syncPayload = stripLocalOnlyColumns(row.table_name, payload);
 
         if (row.table_name === 'settlements') {
+          const hasAllZeroTotals = [
+            syncPayload.total_cents,
+            syncPayload.gross_sales_cents,
+            syncPayload.cash_cents,
+            syncPayload.gcash_cents,
+            syncPayload.card_cents,
+          ].every((value) => !value || value === 0);
+
+          if (hasAllZeroTotals && syncPayload.shift_id) {
+            const salesCount = await db.getFirstAsync<{ count: number }>(
+              'SELECT COUNT(*) as count FROM sales WHERE shift_id = ? AND voided_at IS NULL',
+              [syncPayload.shift_id]
+            );
+
+            if ((salesCount?.count || 0) > 0) {
+              const { SettlementRepository } = await import('../repositories/settlement.repository');
+              const settlementRepo = new SettlementRepository();
+              const summary = await settlementRepo.computeSettlementSummary(syncPayload.shift_id);
+
+              if (summary.total_sales_count > 0) {
+                console.warn('[Sync] Settlement totals were zero despite sales. Recomputing from local DB.', {
+                  settlement_id: syncPayload.id,
+                  shift_id: syncPayload.shift_id,
+                  sales_count: summary.total_sales_count,
+                });
+
+                const now = Date.now();
+                const nowISO = new Date().toISOString();
+
+                syncPayload.cash_cents = summary.payment_totals.CASH;
+                syncPayload.gcash_cents = summary.payment_totals.GCASH;
+                syncPayload.card_cents = summary.payment_totals.CARD;
+                syncPayload.gross_sales_cents = summary.total_revenue_cents;
+                syncPayload.total_cents = summary.total_revenue_cents;
+                syncPayload.updated_at = now;
+                syncPayload.updated_at_iso = nowISO;
+
+                await db.runAsync(
+                  `UPDATE settlements
+                   SET cash_cents = ?, gcash_cents = ?, card_cents = ?, gross_sales_cents = ?, total_cents = ?, updated_at = ?, updated_at_iso = ?
+                   WHERE id = ?`,
+                  [
+                    syncPayload.cash_cents,
+                    syncPayload.gcash_cents,
+                    syncPayload.card_cents,
+                    syncPayload.gross_sales_cents,
+                    syncPayload.total_cents,
+                    now,
+                    nowISO,
+                    row.row_id,
+                  ]
+                );
+
+                await db.runAsync(
+                  'UPDATE sync_outbox SET payload_json = ? WHERE id = ?',
+                  [JSON.stringify({ ...payload, ...syncPayload }), row.id]
+                );
+              }
+            }
+          }
+
           console.log('[Sync] ✅ Pushing settlements:', row.row_id);
           console.log('[Sync] settlements payload:', {
             id: syncPayload.id,

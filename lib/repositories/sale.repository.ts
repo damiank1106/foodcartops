@@ -49,6 +49,14 @@ export class SaleRepository extends BaseRepository {
       created_at: now,
     };
 
+    if (!data.shift_id) {
+      console.warn('[SaleRepo] Missing shift_id for sale:', {
+        sale_id: saleId,
+        cart_id: data.cart_id,
+        worker_id: data.worker_id,
+      });
+    }
+
     await db.runAsync(
       `INSERT INTO sales (id, cart_id, worker_id, shift_id, total_amount, subtotal_cents, discount_cents, total_cents, notes, receipt_photo, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
