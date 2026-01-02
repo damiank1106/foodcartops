@@ -97,12 +97,13 @@ export default function PendingChangesScreen() {
       return acc;
     }, {});
 
-    return sectionOrder
+    const sections = sectionOrder
       .filter((title) => grouped[title]?.length)
       .map((title) => ({
         title,
         data: grouped[title].sort((a, b) => a.createdAt - b.createdAt),
       }));
+
     return { sections, receiptPendingCount: receiptsPending };
   }, [rows]);
 
