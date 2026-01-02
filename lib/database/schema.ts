@@ -2127,4 +2127,16 @@ export const MIGRATIONS = [
       DROP TABLE IF EXISTS daily_summaries;
     `,
   },
+  {
+    version: 50,
+    up: `
+      ALTER TABLE sync_outbox ADD COLUMN last_attempt_at INTEGER;
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migration v50: Added last_attempt_at to sync_outbox for retry backoff', ${Date.now()});
+    `,
+    down: `
+      ALTER TABLE sync_outbox DROP COLUMN last_attempt_at;
+    `,
+  },
 ];

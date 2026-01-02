@@ -43,8 +43,9 @@ export default function PendingChangesScreen() {
     refetchInterval: 10000,
   });
 
-  const sections = useMemo(() => {
+  const { sections, receiptPendingCount } = useMemo(() => {
     const items: PendingListItem[] = [];
+    let receiptsPending = 0;
 
     rows.forEach((row) => {
       let payload: any = null;
@@ -75,6 +76,7 @@ export default function PendingChangesScreen() {
       });
 
       if (row.table_name === 'expenses' && typeof payload?.receipt_image_uri === 'string' && !payload.receipt_image_uri.startsWith('http')) {
+        receiptsPending += 1;
         items.push({
           id: `${row.id}-receipt`,
           tableName: row.table_name,
@@ -101,12 +103,27 @@ export default function PendingChangesScreen() {
         title,
         data: grouped[title].sort((a, b) => a.createdAt - b.createdAt),
       }));
+    return { sections, receiptPendingCount: receiptsPending };
   }, [rows]);
 
   const handleRetry = async (item: PendingListItem) => {
     await syncOutbox.resetToPending(item.id.replace('-receipt', ''));
     await syncNow('manual_retry');
     refetch();
+  };
+
+  const getStatusLabel = (item: PendingListItem) => {
+    if (item.status === 'pending' && item.error) {
+      return item.error;
+    }
+    return item.status;
+  };
+
+  const getStatusColor = (item: PendingListItem) => {
+    if (item.status === 'failed') return theme.error;
+    if (item.status === 'syncing') return theme.warning;
+    if (item.status === 'pending' && item.error) return theme.warning;
+    return theme.text;
   };
 
   if (isLoading) {
@@ -119,6 +136,13 @@ export default function PendingChangesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {receiptPendingCount > 0 && (
+        <View style={[styles.receiptBanner, { backgroundColor: theme.warning + '15', borderColor: theme.warning }]}>
+          <Text style={[styles.receiptBannerText, { color: theme.warning }]}>
+            Receipts pending: {receiptPendingCount}
+          </Text>
+        </View>
+      )}
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
@@ -145,17 +169,10 @@ export default function PendingChangesScreen() {
               <Text
                 style={[
                   styles.statusValue,
-                  {
-                    color:
-                      item.status === 'failed'
-                        ? theme.error
-                        : item.status === 'syncing'
-                          ? theme.warning
-                          : theme.text,
-                  },
+                  { color: getStatusColor(item) },
                 ]}
               >
-                {item.status}
+                {getStatusLabel(item)}
               </Text>
             </View>
             {item.status === 'failed' && (
@@ -228,6 +245,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
     textTransform: 'capitalize' as const,
+  },
+  receiptBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  receiptBannerText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
   },
   errorRow: {
     marginTop: 10,
