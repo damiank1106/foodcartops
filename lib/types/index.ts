@@ -231,6 +231,7 @@ export interface Expense {
   updated_at: number;
   reviewed_at?: number;
   is_deleted?: number;
+  is_saved?: number;
   business_id?: string;
   device_id?: string;
   deleted_at?: string;

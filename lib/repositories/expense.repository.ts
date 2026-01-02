@@ -73,6 +73,7 @@ export class ExpenseRepository extends BaseRepository {
     cart_id?: string;
     submitted_by_user_id?: string;
     status?: ExpenseStatus;
+    is_saved?: number;
   }): Promise<Expense[]> {
     const db = await getDatabase();
     let query = 'SELECT * FROM expenses WHERE is_deleted = 0 AND deleted_at IS NULL';
@@ -98,6 +99,11 @@ export class ExpenseRepository extends BaseRepository {
       params.push(filters.status);
     }
 
+    if (filters?.is_saved !== undefined) {
+      query += ' AND is_saved = ?';
+      params.push(filters.is_saved);
+    }
+
     query += ' ORDER BY created_at DESC';
 
     const rows = await db.getAllAsync<Expense>(query, params);
@@ -109,6 +115,7 @@ export class ExpenseRepository extends BaseRepository {
     cart_id?: string;
     submitted_by_user_id?: string;
     status?: ExpenseStatus;
+    is_saved?: number;
   }): Promise<ExpenseWithDetails[]> {
     const db = await getDatabase();
     let query = `
@@ -145,6 +152,11 @@ export class ExpenseRepository extends BaseRepository {
       params.push(filters.status);
     }
 
+    if (filters?.is_saved !== undefined) {
+      query += ' AND e.is_saved = ?';
+      params.push(filters.is_saved);
+    }
+
     query += ' ORDER BY e.created_at DESC';
 
     const rows = await db.getAllAsync<ExpenseWithDetails>(query, params);
@@ -165,6 +177,25 @@ export class ExpenseRepository extends BaseRepository {
        SET status = ?, approved_by_user_id = ?, reviewed_at = ?, updated_at = ?, updated_at_iso = ?
        WHERE id = ?`,
       [status, approved_by_user_id, now, now, nowISO, id]
+    );
+
+    const expense = await this.findById(id);
+    if (expense) {
+      await this.syncOutbox.add('expenses', id, 'upsert', expense);
+    }
+  }
+
+  async updateSaved(id: string, isSaved: boolean): Promise<void> {
+    const db = await getDatabase();
+    const now = Date.now();
+    const nowISO = new Date().toISOString();
+    const deviceId = await getDeviceId();
+
+    await db.runAsync(
+      `UPDATE expenses 
+       SET is_saved = ?, updated_at = ?, updated_at_iso = ?, device_id = ?
+       WHERE id = ?`,
+      [isSaved ? 1 : 0, now, nowISO, deviceId, id]
     );
 
     const expense = await this.findById(id);
