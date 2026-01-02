@@ -121,6 +121,42 @@ function isLocalFileUri(uri?: string | null): boolean {
   return !uri.startsWith('http://') && !uri.startsWith('https://');
 }
 
+function coerceMsTimestamp(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value < 1e12) {
+      return value * 1000;
+    }
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function ensureIsoTimestamp(value?: string | null, fallbackMs?: number | null): string | null {
+  if (value && typeof value === 'string') {
+    return value;
+  }
+  if (fallbackMs !== null && fallbackMs !== undefined) {
+    return new Date(fallbackMs).toISOString();
+  }
+  return null;
+}
+
+function getReceiptStoragePath(expenseRow: Record<string, any>): string | null {
+  if (expenseRow.receipt_storage_path) return expenseRow.receipt_storage_path;
+  const receiptUri = expenseRow.receipt_image_uri;
+  if (typeof receiptUri === 'string' && !receiptUri.startsWith('http://') && !receiptUri.startsWith('https://')) {
+    return receiptUri;
+  }
+  return null;
+}
+
 function getErrorStatus(error: any): number | null {
   const status = error?.status ?? error?.statusCode ?? error?.code;
   if (typeof status === 'number') {
@@ -248,11 +284,26 @@ async function uploadReceiptIfNeeded(
   const now = Date.now();
   const nowISO = new Date().toISOString();
   await db.runAsync(
-    `UPDATE expenses SET receipt_image_uri = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
-    [publicUrl, now, nowISO, expenseId]
+    `UPDATE expenses SET receipt_image_uri = ?, receipt_storage_path = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
+    [publicUrl, storagePath, now, nowISO, expenseId]
   );
 
-  return { ...payload, receipt_image_uri: publicUrl };
+  return { ...payload, receipt_image_uri: publicUrl, receipt_storage_path: storagePath };
+}
+
+async function resolveReceiptUrl(
+  supabase: Awaited<ReturnType<typeof initSupabaseClient>>,
+  storagePath: string | null
+): Promise<string | null> {
+  if (!storagePath) return null;
+
+  const signed = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(storagePath, 60 * 60);
+  if (!signed.error && signed.data?.signedUrl) {
+    return signed.data.signedUrl;
+  }
+
+  const { data } = supabase.storage.from(RECEIPT_BUCKET).getPublicUrl(storagePath);
+  return data.publicUrl || null;
 }
 
 export function subscribeSyncStatus(listener: (status: SyncStatus) => void): () => void {
@@ -738,11 +789,14 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
         console.log(`[Sync] 📥 Pulling ${tableName} since ${lastSyncAt}`);
 
-        const { data, error } = await supabase
-          .from(tableName)
-          .select('*')
-          .gte('updated_at_iso', lastSyncAt)
-          .order('updated_at_iso', { ascending: true });
+        const baseQuery = supabase.from(tableName).select('*');
+        const { data, error } = await (tableName === 'expenses'
+          ? baseQuery
+              .or(`updated_at_iso.gte.${lastSyncAt},updated_at.gte.${lastSyncAt}`)
+              .order('updated_at', { ascending: true })
+          : baseQuery
+              .gte('updated_at_iso', lastSyncAt)
+              .order('updated_at_iso', { ascending: true }));
 
         if (error) {
           console.error(`[Sync] ❌ ERROR pulling ${tableName}:`, {
@@ -776,6 +830,33 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             if (pendingChanges.length > 0) {
               skippedCount++;
               continue;
+            }
+
+            if (tableName === 'expenses') {
+              const createdAtMs = coerceMsTimestamp(remoteRow.created_at);
+              const updatedAtMs = coerceMsTimestamp(remoteRow.updated_at);
+              const reviewedAtMs = coerceMsTimestamp(remoteRow.reviewed_at);
+
+              if (createdAtMs !== null) {
+                remoteRow.created_at = createdAtMs;
+              }
+              if (updatedAtMs !== null) {
+                remoteRow.updated_at = updatedAtMs;
+              }
+              if (reviewedAtMs !== null) {
+                remoteRow.reviewed_at = reviewedAtMs;
+              }
+
+              remoteRow.created_at_iso = ensureIsoTimestamp(remoteRow.created_at_iso, createdAtMs);
+              remoteRow.updated_at_iso = ensureIsoTimestamp(remoteRow.updated_at_iso, updatedAtMs);
+
+              const storagePath = getReceiptStoragePath(remoteRow);
+              if (storagePath) {
+                remoteRow.receipt_storage_path = storagePath;
+                if (!remoteRow.receipt_image_uri || isLocalFileUri(remoteRow.receipt_image_uri)) {
+                  remoteRow.receipt_image_uri = await resolveReceiptUrl(supabase, storagePath);
+                }
+              }
             }
 
             if (remoteRow.deleted_at) {

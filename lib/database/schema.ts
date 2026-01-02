@@ -2139,4 +2139,16 @@ export const MIGRATIONS = [
       ALTER TABLE sync_outbox DROP COLUMN last_attempt_at;
     `,
   },
+  {
+    version: 51,
+    up: `
+      ALTER TABLE expenses ADD COLUMN receipt_storage_path TEXT;
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migration v51: Added receipt_storage_path to expenses', ${Date.now()});
+    `,
+    down: `
+      ALTER TABLE expenses DROP COLUMN receipt_storage_path;
+    `,
+  },
 ];

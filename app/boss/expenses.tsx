@@ -19,6 +19,7 @@ import { ExpenseRepository, AuditRepository } from '@/lib/repositories';
 import { UserPreferencesRepository } from '@/lib/repositories/user-preferences.repository';
 import type { ExpenseWithDetails } from '@/lib/types';
 import { format } from 'date-fns';
+import { syncNow } from '@/lib/services/sync.service';
 
 export default function BossExpensesScreen() {
   const { theme } = useTheme();
@@ -44,6 +45,19 @@ export default function BossExpensesScreen() {
         };
         clearBadge();
       }
+      let isActive = true;
+      syncNow('expenses_focus')
+        .then(() => {
+          if (isActive) {
+            queryClient.invalidateQueries({ queryKey: ['boss-expenses'] });
+          }
+        })
+        .catch((error: any) => {
+          console.warn('[Boss Expenses] Sync failed:', error);
+        });
+      return () => {
+        isActive = false;
+      };
     }, [user, queryClient])
   );
 

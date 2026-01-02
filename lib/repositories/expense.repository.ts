@@ -15,6 +15,7 @@ export class ExpenseRepository extends BaseRepository {
     paid_from: PaidFrom;
     notes?: string;
     receipt_image_uri?: string;
+    receipt_storage_path?: string;
     status?: ExpenseStatus;
   }): Promise<Expense> {
     const db = await getDatabase();
@@ -26,7 +27,7 @@ export class ExpenseRepository extends BaseRepository {
     await db.runAsync(
       `INSERT INTO expenses (
         id, shift_id, cart_id, submitted_by_user_id, category, 
-        amount_cents, paid_from, notes, receipt_image_uri, 
+        amount_cents, paid_from, notes, receipt_image_uri, receipt_storage_path,
         status, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -39,6 +40,7 @@ export class ExpenseRepository extends BaseRepository {
         data.paid_from,
         data.notes || null,
         data.receipt_image_uri || null,
+        data.receipt_storage_path || null,
         data.status || 'SUBMITTED',
         now,
         now,

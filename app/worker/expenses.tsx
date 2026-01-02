@@ -23,6 +23,8 @@ import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import SyncProgressModal from '@/components/SyncProgressModal';
+import { useFocusEffect } from 'expo-router';
+import { syncNow } from '@/lib/services/sync.service';
 
 const EXPENSE_CATEGORIES = [
   'Supplies',
@@ -83,6 +85,24 @@ export default function WorkerExpensesScreen() {
     };
     loadCarts();
   }, [cartRepo, selectCart, selectedCartId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      syncNow('expenses_focus')
+        .then(() => {
+          if (isActive) {
+            queryClient.invalidateQueries({ queryKey: ['worker-expenses'] });
+          }
+        })
+        .catch((error: any) => {
+          console.warn('[Worker Expenses] Sync failed:', error);
+        });
+      return () => {
+        isActive = false;
+      };
+    }, [queryClient])
+  );
 
   const { data: expenses, isLoading } = useQuery({
     queryKey: ['worker-expenses', user?.id],

@@ -226,6 +226,7 @@ export interface Expense {
   paid_from: PaidFrom;
   notes?: string;
   receipt_image_uri?: string;
+  receipt_storage_path?: string;
   created_at: number;
   updated_at: number;
   reviewed_at?: number;
