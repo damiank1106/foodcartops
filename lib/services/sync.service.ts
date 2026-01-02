@@ -148,6 +148,18 @@ function ensureIsoTimestamp(value?: string | null, fallbackMs?: number | null): 
   return null;
 }
 
+function parseLastSyncAt(value?: string | null): number {
+  if (!value) return 0;
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)) {
+    return numeric;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function getReceiptStoragePath(expenseRow: Record<string, any>): string | null {
   if (expenseRow.receipt_storage_path) return expenseRow.receipt_storage_path;
   const receiptUri = expenseRow.receipt_image_uri;
@@ -785,18 +797,16 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           'SELECT last_sync_at FROM sync_state WHERE table_name = ?',
           [tableName]
         );
-        const lastSyncAt = stateRows[0]?.last_sync_at || '1970-01-01T00:00:00Z';
+        const lastSyncAtRaw = stateRows[0]?.last_sync_at ?? null;
+        const lastSyncMs = parseLastSyncAt(lastSyncAtRaw);
+        const lastSyncIso = new Date(lastSyncMs).toISOString();
 
-        console.log(`[Sync] 📥 Pulling ${tableName} since ${lastSyncAt}`);
+        console.log(`[Sync] 📥 Pulling ${tableName} since ${lastSyncMs} (${lastSyncIso})`);
 
         const baseQuery = supabase.from(tableName).select('*');
-        const { data, error } = await (tableName === 'expenses'
-          ? baseQuery
-              .or(`updated_at_iso.gte.${lastSyncAt},updated_at.gte.${lastSyncAt}`)
-              .order('updated_at', { ascending: true })
-          : baseQuery
-              .gte('updated_at_iso', lastSyncAt)
-              .order('updated_at_iso', { ascending: true }));
+        const { data, error } = await baseQuery
+          .gte('updated_at', lastSyncMs)
+          .order('updated_at', { ascending: true });
 
         if (error) {
           console.error(`[Sync] ❌ ERROR pulling ${tableName}:`, {
@@ -815,7 +825,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           updateStatus({ currentStep: `Applying ${tableName} updates...` });
           console.log(`[Sync] ⚙️ Applying ${data.length} ${tableName} rows...`);
 
-          let maxUpdatedAt = lastSyncAt;
+          let maxUpdatedAtMs = lastSyncMs;
           let appliedCount = 0;
           let skippedCount = 0;
           let deferredCount = 0;
@@ -987,18 +997,20 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
               }
             }
 
-            if (remoteRow.updated_at_iso && remoteRow.updated_at_iso > maxUpdatedAt) {
-              maxUpdatedAt = remoteRow.updated_at_iso;
+            const updatedAtMs = coerceMsTimestamp(remoteRow.updated_at);
+            if (updatedAtMs !== null && updatedAtMs > maxUpdatedAtMs) {
+              maxUpdatedAtMs = updatedAtMs;
             }
           }
 
           console.log(`[Sync] ✅ Applied ${appliedCount} ${tableName} rows (skipped ${skippedCount}, deferred ${deferredCount})`);
+          console.log(`[Sync] 🕒 Max ${tableName} updated_at: ${maxUpdatedAtMs} (${new Date(maxUpdatedAtMs).toISOString()})`);
 
           if (deferredCount === 0) {
             db = await getDatabase();
             await db.runAsync(
               'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
-              [maxUpdatedAt, tableName]
+              [String(maxUpdatedAtMs), tableName]
             );
           } else {
             console.log(`[Sync] ⚠️ NOT updating last_sync_at for ${tableName} - ${deferredCount} rows deferred due to FK failures`);
@@ -1121,17 +1133,21 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
               
               retrySuccess++;
               
-              if (remoteRow.updated_at_iso) {
+              if (remoteRow.updated_at !== undefined && remoteRow.updated_at !== null) {
+                const updatedAtMs = coerceMsTimestamp(remoteRow.updated_at);
+                if (updatedAtMs === null) {
+                  continue;
+                }
                 const stateRows = await db.getAllAsync<SyncStateRow>(
                   'SELECT last_sync_at FROM sync_state WHERE table_name = ?',
                   [tableName]
                 );
-                const lastSyncAt = stateRows[0]?.last_sync_at || '1970-01-01T00:00:00Z';
+                const lastSyncMs = parseLastSyncAt(stateRows[0]?.last_sync_at ?? null);
                 
-                if (remoteRow.updated_at_iso > lastSyncAt) {
+                if (updatedAtMs > lastSyncMs) {
                   await db.runAsync(
                     'UPDATE sync_state SET last_sync_at = ? WHERE table_name = ?',
-                    [remoteRow.updated_at_iso, tableName]
+                    [String(updatedAtMs), tableName]
                   );
                 }
               }
