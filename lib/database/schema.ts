@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 49;
+export const SCHEMA_VERSION = 52;
 
 export const MIGRATIONS = [
   {
@@ -2149,6 +2149,20 @@ export const MIGRATIONS = [
     `,
     down: `
       ALTER TABLE expenses DROP COLUMN receipt_storage_path;
+    `,
+  },
+  {
+    version: 52,
+    up: `
+      ALTER TABLE expenses ADD COLUMN is_saved INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX IF NOT EXISTS idx_expenses_is_saved ON expenses(is_saved);
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migration v52: Added is_saved flag to expenses', ${Date.now()});
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_expenses_is_saved;
+      ALTER TABLE expenses DROP COLUMN is_saved;
     `,
   },
 ];

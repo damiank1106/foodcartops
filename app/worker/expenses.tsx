@@ -13,6 +13,7 @@ import {
   Image,
   KeyboardAvoidingView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Camera, X, Receipt, FileText, AlertCircle, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
@@ -594,7 +595,7 @@ export default function WorkerExpensesScreen() {
               )}
             </ScrollView>
 
-            <View style={styles.modalFooter}>
+            <SafeAreaView edges={['bottom']} style={styles.modalFooter}>
               <TouchableOpacity
                 style={[styles.footerButton, { backgroundColor: theme.background }]}
                 onPress={() => setShowAddModal(false)}
@@ -612,7 +613,7 @@ export default function WorkerExpensesScreen() {
                   <Text style={[styles.footerButtonText, { color: '#FFF' }]}>Submit</Text>
                 )}
               </TouchableOpacity>
-            </View>
+            </SafeAreaView>
           </View>
         </KeyboardAvoidingView>
       </Modal>

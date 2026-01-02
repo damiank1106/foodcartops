@@ -10,6 +10,7 @@ import {
   Modal,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useFocusEffect } from 'expo-router';
 import { CheckCircle, XCircle, Coins, Eye, X, Clock, Trash2 } from 'lucide-react-native';
@@ -27,7 +28,7 @@ export default function BossExpensesScreen() {
   const queryClient = useQueryClient();
   const [selectedExpense, setSelectedExpense] = useState<ExpenseWithDetails | null>(null);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
-  const [filter, setFilter] = useState<'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'ALL'>('SUBMITTED');
+  const [filter, setFilter] = useState<'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'ALL' | 'SAVED'>('SUBMITTED');
 
   const expenseRepo = new ExpenseRepository();
   const auditRepo = new AuditRepository();
@@ -66,6 +67,9 @@ export default function BossExpensesScreen() {
     queryFn: () => {
       if (filter === 'ALL') {
         return expenseRepo.findWithDetails();
+      }
+      if (filter === 'SAVED') {
+        return expenseRepo.findWithDetails({ is_saved: 1 });
       }
       return expenseRepo.findWithDetails({ status: filter });
     },
@@ -113,6 +117,21 @@ export default function BossExpensesScreen() {
     },
   });
 
+  const saveExpenseMutation = useMutation({
+    mutationFn: async (data: { expenseId: string; isSaved: boolean }) => {
+      await expenseRepo.updateSaved(data.expenseId, data.isSaved);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['boss-expenses'] });
+      setSelectedExpense((prev) =>
+        prev ? { ...prev, is_saved: variables.isSaved ? 1 : 0 } : prev
+      );
+    },
+    onError: () => {
+      Alert.alert('Error', 'Failed to update saved status');
+    },
+  });
+
   const handleApprove = (expenseId: string) => {
     Alert.alert('Approve Expense', 'Are you sure you want to approve this expense?', [
       { text: 'Cancel', style: 'cancel' },
@@ -151,6 +170,10 @@ export default function BossExpensesScreen() {
     ]);
   };
 
+  const handleToggleSaved = (expenseId: string, nextSaved: boolean) => {
+    saveExpenseMutation.mutate({ expenseId, isSaved: nextSaved });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'APPROVED':
@@ -177,7 +200,7 @@ export default function BossExpensesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContainer}>
-        {(['SUBMITTED', 'APPROVED', 'REJECTED', 'ALL'] as const).map((f) => (
+        {(['SUBMITTED', 'APPROVED', 'REJECTED', 'ALL', 'SAVED'] as const).map((f) => (
           <TouchableOpacity
             key={f}
             style={[
@@ -193,7 +216,7 @@ export default function BossExpensesScreen() {
                 filter === f && { fontWeight: '700' as const },
               ]}
             >
-              {f === 'ALL' ? 'All' : getStatusLabel(f)}
+              {f === 'ALL' ? 'All' : f === 'SAVED' ? 'Saved and Synchronized' : getStatusLabel(f)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -269,11 +292,17 @@ export default function BossExpensesScreen() {
 
                   <TouchableOpacity
                     style={[styles.actionButton, { backgroundColor: theme.error + '20' }]}
-                    onPress={() => handleDeleteExpense(expense.id)}
-                    disabled={deleteExpenseMutation.isPending}
+                    onPress={() =>
+                      filter === 'SAVED'
+                        ? handleToggleSaved(expense.id, false)
+                        : handleDeleteExpense(expense.id)
+                    }
+                    disabled={deleteExpenseMutation.isPending || saveExpenseMutation.isPending}
                   >
                     <Trash2 size={18} color={theme.error} />
-                    <Text style={[styles.actionButtonText, { color: theme.error }]}>Delete</Text>
+                    <Text style={[styles.actionButtonText, { color: theme.error }]}>
+                      {filter === 'SAVED' ? 'Remove' : 'Delete'}
+                    </Text>
                   </TouchableOpacity>
 
                   {expense.status === 'SUBMITTED' && (
@@ -440,7 +469,7 @@ export default function BossExpensesScreen() {
             )}
 
             {selectedExpense?.status === 'SUBMITTED' && (
-              <View style={styles.modalFooter}>
+              <SafeAreaView edges={['bottom']} style={styles.modalFooter}>
                 <TouchableOpacity
                   style={[styles.modalButton, { backgroundColor: theme.error }]}
                   onPress={() => handleReject(selectedExpense.id)}
@@ -469,7 +498,37 @@ export default function BossExpensesScreen() {
                     </>
                   )}
                 </TouchableOpacity>
-              </View>
+              </SafeAreaView>
+            )}
+
+            {selectedExpense?.status === 'APPROVED' && (
+              <SafeAreaView edges={['bottom']} style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    selectedExpense.is_saved
+                      ? { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border }
+                      : { backgroundColor: theme.primary },
+                  ]}
+                  onPress={() =>
+                    handleToggleSaved(selectedExpense.id, !selectedExpense.is_saved)
+                  }
+                  disabled={saveExpenseMutation.isPending}
+                >
+                  {saveExpenseMutation.isPending ? (
+                    <ActivityIndicator size="small" color={selectedExpense.is_saved ? theme.text : '#FFF'} />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.modalButtonText,
+                        { color: selectedExpense.is_saved ? theme.text : '#FFF' },
+                      ]}
+                    >
+                      {selectedExpense.is_saved ? 'Unsave' : 'Save'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </SafeAreaView>
             )}
           </View>
         </View>
