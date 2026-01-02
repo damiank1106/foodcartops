@@ -326,11 +326,9 @@ function isPermanentErrorMessage(message?: string | null): boolean {
   );
 }
 
-type ReceiptUploadResult = {
-  payload: Record<string, any>;
-  pending: boolean;
-  message?: string;
-};
+type ReceiptUploadResult =
+  | { ok: true; receipt_storage_path: string; receipt_url: string }
+  | { ok: false; retryable: boolean; reason: string };
 
 function normalizeFileUri(uri: string): string {
   if (uri.startsWith('file://') || uri.startsWith('content://')) {
@@ -342,25 +340,8 @@ function normalizeFileUri(uri: string): string {
   return uri;
 }
 
-function getFileExtension(uri: string): string | null {
-  const sanitized = uri.split('?')[0];
-  const fileName = sanitized.split('/').pop();
-  if (!fileName || !fileName.includes('.')) return null;
-  const ext = fileName.split('.').pop();
-  return ext ? ext.toLowerCase() : null;
-}
-
-function base64ToUint8Array(base64: string): Uint8Array {
-  if (!globalThis.atob) {
-    throw new Error('Base64 decoder unavailable');
-  }
-  const binaryString = globalThis.atob(base64);
-  const length = binaryString.length;
-  const bytes = new Uint8Array(length);
-  for (let i = 0; i < length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
+function isRetryableReceiptError(message: string): boolean {
+  return RETRYABLE_ERROR_PATTERNS.some((pattern) => pattern.test(message));
 }
 
 async function getPendingCount(db: Awaited<ReturnType<typeof getDatabase>>): Promise<number> {
@@ -373,7 +354,11 @@ async function getPendingCount(db: Awaited<ReturnType<typeof getDatabase>>): Pro
     if (row.table_name !== 'expenses') continue;
     try {
       const payload = JSON.parse(row.payload_json);
-      if (typeof payload.receipt_image_uri === 'string' && isLocalFileUri(payload.receipt_image_uri)) {
+      if (
+        payload?.__expense_synced !== true &&
+        typeof payload.receipt_image_uri === 'string' &&
+        isLocalFileUri(payload.receipt_image_uri)
+      ) {
         extraReceiptCount += 1;
       }
     } catch (error) {
@@ -385,101 +370,142 @@ async function getPendingCount(db: Awaited<ReturnType<typeof getDatabase>>): Pro
 }
 
 async function uploadReceiptIfNeeded(
-  supabase: Awaited<ReturnType<typeof initSupabaseClient>>,
-  db: Awaited<ReturnType<typeof getDatabase>>,
-  expenseId: string,
-  payload: Record<string, any>,
-  businessId: string
+  args: {
+    supabase: Awaited<ReturnType<typeof initSupabaseClient>>;
+    expenseId: string;
+    businessId: string;
+    receiptUri: string | null | undefined;
+    bucket?: string;
+  }
 ): Promise<ReceiptUploadResult> {
-  const receiptUri = payload.receipt_image_uri;
-  if (!isLocalFileUri(receiptUri)) {
-    return { payload, pending: false };
-  }
-
-  const networkState = await Network.getNetworkStateAsync();
-  if (!networkState.isConnected || !networkState.isInternetReachable) {
-    return {
-      payload,
-      pending: true,
-      message: RECEIPT_PENDING_MESSAGE,
-    };
-  }
-
-  const normalizedUri = normalizeFileUri(receiptUri);
-  const fileInfo = await FileSystem.getInfoAsync(normalizedUri);
-  if (!fileInfo.exists) {
-    return {
-      payload,
-      pending: true,
-      message: 'Receipt file missing. Please reattach.',
-    };
-  }
+  const { supabase, expenseId, businessId, receiptUri } = args;
+  const bucket = args.bucket ?? RECEIPT_BUCKET;
 
   try {
-    const base64 = await FileSystem.readAsStringAsync(normalizedUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const bytes = base64ToUint8Array(base64);
-    const extension = getFileExtension(normalizedUri) || 'jpg';
-    const contentType = extension === 'png' ? 'image/png' : extension === 'heic' ? 'image/heic' : 'image/jpeg';
-    const fileBlob = new Blob([bytes], { type: contentType });
-
-    const storagePath = `receipts/${businessId}/${expenseId}.${extension}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from(RECEIPT_BUCKET)
-      .upload(storagePath, fileBlob, { upsert: true, contentType });
-
-    if (uploadError) {
-      const message = uploadError.message.includes('Network request failed')
-        ? RECEIPT_PENDING_MESSAGE
-        : 'Receipt upload failed. Retrying...';
-      return {
-        payload,
-        pending: true,
-        message,
-      };
+    if (!receiptUri) {
+      return { ok: false, retryable: false, reason: 'No receipt attached' };
     }
 
-    const { data } = supabase.storage.from(RECEIPT_BUCKET).getPublicUrl(storagePath);
-    const publicUrl = data.publicUrl;
+    if (!isLocalFileUri(receiptUri)) {
+      return { ok: false, retryable: false, reason: 'Receipt already uploaded' };
+    }
 
-    const now = Date.now();
-    const nowISO = new Date().toISOString();
-    await db.runAsync(
-      `UPDATE expenses SET receipt_image_uri = ?, receipt_storage_path = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
-      [publicUrl, storagePath, now, nowISO, expenseId]
-    );
+    try {
+      const networkState = await Network.getNetworkStateAsync();
+      if (!networkState.isConnected || networkState.isInternetReachable === false) {
+        return { ok: false, retryable: true, reason: 'Offline - waiting for internet' };
+      }
+    } catch (error) {
+      console.warn('[Sync] Failed to read network state for receipt upload', error);
+    }
 
-    const { error: updateError } = await supabase
+    const normalizedUri = normalizeFileUri(receiptUri);
+    const info = await FileSystem.getInfoAsync(normalizedUri);
+    if (!info.exists) {
+      return { ok: false, retryable: true, reason: `Receipt file not found: ${normalizedUri}` };
+    }
+
+    const storagePath = `receipts/${businessId}/${expenseId}.jpg`;
+
+    let blob: Blob;
+    try {
+      const resp = await fetch(normalizedUri);
+      blob = await resp.blob();
+    } catch (error) {
+      try {
+        const b64 = await FileSystem.readAsStringAsync(normalizedUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        if (!globalThis.atob) {
+          return { ok: false, retryable: false, reason: 'Base64 decoder unavailable' };
+        }
+        const bytes = Uint8Array.from(globalThis.atob(b64), (c) => c.charCodeAt(0));
+        blob = new Blob([bytes], { type: 'image/jpeg' });
+      } catch (fallbackError) {
+        const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        return { ok: false, retryable: isRetryableReceiptError(message), reason: message };
+      }
+    }
+
+    const { error: uploadErr } = await supabase.storage.from(bucket).upload(storagePath, blob, {
+      upsert: true,
+      contentType: blob.type || 'image/jpeg',
+    });
+
+    if (uploadErr) {
+      const msg = uploadErr.message || String(uploadErr);
+      return { ok: false, retryable: isRetryableReceiptError(msg), reason: `Receipt upload failed: ${msg}` };
+    }
+
+    const { data: pub } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+    const receiptUrl = pub?.publicUrl ?? '';
+
+    const { error: updErr } = await supabase
       .from('expenses')
-      .update({ receipt_image_uri: publicUrl, receipt_storage_path: storagePath, updated_at: now, updated_at_iso: nowISO })
+      .update({
+        receipt_image_uri: receiptUrl,
+        receipt_storage_path: storagePath,
+      })
       .eq('id', expenseId);
 
-    if (updateError) {
-      const updateMessage = updateError.message.includes('Network request failed')
-        ? RECEIPT_PENDING_MESSAGE
-        : 'Receipt upload saved locally. Retrying server update...';
-      return {
-        payload,
-        pending: true,
-        message: updateMessage,
-      };
+    if (updErr) {
+      const msg = updErr.message || String(updErr);
+      return { ok: false, retryable: isRetryableReceiptError(msg), reason: `Expense receipt link update failed: ${msg}` };
     }
 
-    return {
-      payload: { ...payload, receipt_image_uri: publicUrl, receipt_storage_path: storagePath },
-      pending: false,
-    };
-  } catch (error: any) {
-    const message = error?.message || String(error);
-    const isNetworkIssue = message.toLowerCase().includes('network request failed');
-    return {
-      payload,
-      pending: true,
-      message: isNetworkIssue ? RECEIPT_PENDING_MESSAGE : 'Receipt upload failed. Retrying...',
-    };
+    return { ok: true, receipt_storage_path: storagePath, receipt_url: receiptUrl };
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    return { ok: false, retryable: isRetryableReceiptError(msg), reason: msg };
   }
+}
+
+async function queueReceiptRetry(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  row: SyncOutboxRow,
+  payload: Record<string, any>,
+  message: string | null
+): Promise<void> {
+  const existingRows = await db.getAllAsync<SyncOutboxRow>(
+    `SELECT * FROM sync_outbox
+     WHERE table_name = ? AND row_id = ? AND sync_status IN ('pending', 'syncing', 'failed')`,
+    [row.table_name, row.row_id]
+  );
+
+  for (const existingRow of existingRows) {
+    try {
+      const existingPayload = JSON.parse(existingRow.payload_json);
+      if (existingPayload?.__expense_synced === true) {
+        return;
+      }
+    } catch (error) {
+      console.warn('[Sync] Failed to parse existing receipt retry payload', error);
+    }
+  }
+
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const now = Date.now();
+
+  await db.runAsync(
+    `INSERT INTO sync_outbox (
+      id, change_id, change_type, table_name, row_id, op, payload_json, created_at,
+      attempts, last_error, sync_status, user_id, cart_id, role, synced_at, last_attempt_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'pending', ?, ?, ?, NULL, NULL)`,
+    [
+      id,
+      row.change_id ?? id,
+      'receipt_upload',
+      row.table_name,
+      row.row_id,
+      'upsert',
+      JSON.stringify(payload),
+      now,
+      message,
+      row.user_id ?? null,
+      row.cart_id ?? null,
+      row.role ?? null,
+    ]
+  );
 }
 
 async function resolveReceiptUrl(
@@ -638,6 +664,7 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         let updatedPayloadJson: string | null = null;
         let receiptPending = false;
         let receiptMessage: string | null = null;
+        let receiptPayload: Record<string, any> | null = null;
         let shouldPush = true;
         let hasLocalReceipt = false;
         let expenseAlreadySynced = false;
@@ -894,26 +921,46 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
         }
 
         if (row.table_name === 'expenses' && row.op === 'upsert' && hasLocalReceipt) {
-          try {
-            const receiptResult = await uploadReceiptIfNeeded(supabase, db, row.row_id, payload, expenseBusinessId);
-            if (receiptResult.pending) {
-              receiptPending = true;
-              receiptMessage = receiptResult.message ?? RECEIPT_PENDING_MESSAGE;
-              payload = { ...payload, __expense_synced: true };
-            } else {
-              payload = { ...receiptResult.payload, __expense_synced: true };
+          const receiptResult = await uploadReceiptIfNeeded({
+            supabase,
+            expenseId: row.row_id,
+            businessId: expenseBusinessId,
+            receiptUri: payload.receipt_image_uri,
+            bucket: RECEIPT_BUCKET,
+          });
+
+          if (receiptResult.ok) {
+            payload = {
+              ...payload,
+              receipt_image_uri: receiptResult.receipt_url,
+              receipt_storage_path: receiptResult.receipt_storage_path,
+              __expense_synced: true,
+            };
+
+            try {
+              const now = Date.now();
+              const nowISO = new Date().toISOString();
+              db = await getDatabase();
+              await db.runAsync(
+                `UPDATE expenses SET receipt_image_uri = ?, receipt_storage_path = ?, updated_at = ?, updated_at_iso = ? WHERE id = ?`,
+                [receiptResult.receipt_url, receiptResult.receipt_storage_path, now, nowISO, row.row_id]
+              );
+            } catch (error) {
+              console.warn('[Sync] Failed to update local receipt info after upload', error);
             }
-            updatedPayloadJson = JSON.stringify(payload);
-          } catch (error) {
-            console.warn('[Sync] Receipt upload failed, will retry:', error);
+          } else if (receiptResult.retryable) {
             receiptPending = true;
-            receiptMessage = RECEIPT_PENDING_MESSAGE;
+            receiptMessage = receiptResult.reason || RECEIPT_PENDING_MESSAGE;
             payload = { ...payload, __expense_synced: true };
-            updatedPayloadJson = JSON.stringify(payload);
+            receiptPayload = payload;
+          } else {
+            payload = { ...payload, __expense_synced: true };
           }
+
+          updatedPayloadJson = JSON.stringify(payload);
         }
 
-        if (row.table_name === 'expenses' && receiptPending) {
+        if (row.table_name === 'expenses' && receiptPending && expenseAlreadySynced) {
           const nextAttempts = row.attempts + 1;
           const status = nextAttempts >= MAX_RECEIPT_RETRY_ATTEMPTS ? 'failed' : 'pending';
           const errorMessage = receiptMessage ?? RECEIPT_PENDING_MESSAGE;
@@ -925,6 +972,12 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
             [errorMessage, status, Date.now(), updatedPayloadJson ?? row.payload_json, row.id]
           );
           continue;
+        }
+
+        if (row.table_name === 'expenses' && receiptPending && !expenseAlreadySynced && receiptPayload) {
+          db = await getDatabase();
+          await queueReceiptRetry(db, row, receiptPayload, receiptMessage ?? RECEIPT_PENDING_MESSAGE);
+          receiptPending = false;
         }
 
         db = await getDatabase();

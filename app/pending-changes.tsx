@@ -55,6 +55,7 @@ export default function PendingChangesScreen() {
         payload = null;
       }
 
+      const expenseSynced = payload?.__expense_synced === true;
       const createdAt = payload?.created_at ? Number(payload.created_at) : row.created_at;
       const labelBase = row.table_name === 'worker_shifts'
         ? payload?.clock_out ? 'Shift End' : 'Shift Start'
@@ -64,18 +65,24 @@ export default function PendingChangesScreen() {
             ? 'Expense'
             : row.table_name.replace(/_/g, ' ');
 
-      items.push({
-        id: row.id,
-        tableName: row.table_name,
-        createdAt,
-        status: row.sync_status,
-        error: row.last_error,
-        label: labelBase,
-        isReceipt: false,
-        sourceId: row.row_id,
-      });
+      if (!(row.table_name === 'expenses' && expenseSynced)) {
+        items.push({
+          id: row.id,
+          tableName: row.table_name,
+          createdAt,
+          status: row.sync_status,
+          error: row.last_error,
+          label: labelBase,
+          isReceipt: false,
+          sourceId: row.row_id,
+        });
+      }
 
-      if (row.table_name === 'expenses' && typeof payload?.receipt_image_uri === 'string' && !payload.receipt_image_uri.startsWith('http')) {
+      if (
+        row.table_name === 'expenses' &&
+        typeof payload?.receipt_image_uri === 'string' &&
+        !payload.receipt_image_uri.startsWith('http')
+      ) {
         receiptsPending += 1;
         items.push({
           id: `${row.id}-receipt`,
