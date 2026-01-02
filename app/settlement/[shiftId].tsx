@@ -18,7 +18,7 @@ import { format } from 'date-fns';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { SettlementRepository } from '@/lib/repositories/settlement.repository';
-import { ShiftRepository, SaleRepository, PaymentRepository, SavedRecordRepository, CartRepository } from '@/lib/repositories';
+import { ShiftRepository, SavedRecordRepository, CartRepository } from '@/lib/repositories';
 import { ExpenseRepository } from '@/lib/repositories/expense.repository';
 import { PayrollRepository } from '@/lib/repositories/payroll.repository';
 import { LedgerRepository } from '@/lib/repositories/ledger.repository';
@@ -35,8 +35,6 @@ export default function SettlementEditorScreen() {
 
   const settlementRepo = new SettlementRepository();
   const shiftRepo = new ShiftRepository();
-  const saleRepo = new SaleRepository();
-  const paymentRepo = new PaymentRepository();
   const expenseRepo = new ExpenseRepository();
   const payrollRepo = new PayrollRepository();
   const ledgerRepo = new LedgerRepository();
@@ -60,50 +58,13 @@ export default function SettlementEditorScreen() {
 
       const existingSettlement = await settlementRepo.findByShiftId(shiftId);
 
-      const sales = (await saleRepo.findAll()).filter((sale) => sale.shift_id === shiftId);
-      const saleItems = await Promise.all(
-        sales.map(async (sale) => {
-          const items = await (async () => {
-            const db = await (await import('@/lib/database/init')).getDatabase();
-            return await db.getAllAsync<any>(
-              `SELECT si.*, p.name as product_name 
-               FROM sale_items si 
-               LEFT JOIN products p ON si.product_id = p.id 
-               WHERE si.sale_id = ?`,
-              [sale.id]
-            );
-          })();
-          return items;
-        })
-      );
-      const flatSaleItems = saleItems.flat();
-
-      const productsSold = flatSaleItems.reduce((acc: any[], item: any) => {
-        const existing = acc.find((p) => p.product_id === item.product_id);
-        if (existing) {
-          existing.quantity += item.quantity;
-          existing.total_cents += item.line_total_cents;
-        } else {
-          acc.push({
-            product_id: item.product_id,
-            product_name: item.product_name || 'Unknown Product',
-            quantity: item.quantity,
-            total_cents: item.line_total_cents,
-          });
-        }
-        return acc;
-      }, []);
-
-      const payments = await Promise.all(sales.map((sale) => paymentRepo.findBySaleId(sale.id)));
-      const flatPayments = payments.flat();
+      const settlementSummary = await settlementRepo.computeSettlementSummary(shiftId);
       const expenses = await expenseRepo.getApprovedExpensesForShift(shiftId);
       const payrollRule = await payrollRepo.findActiveByWorkerId(shift.worker_id);
       const ledgerData = await ledgerRepo.getAdvancesAndDeductionsForShift(shiftId);
 
-      const totalSalesCents = sales.reduce((sum, sale) => sum + sale.total_cents, 0);
-      const cashSalesCents = flatPayments
-        .filter((p) => p.method === 'CASH')
-        .reduce((sum, p) => sum + p.amount_cents, 0);
+      const totalSalesCents = settlementSummary.total_revenue_cents;
+      const cashSalesCents = settlementSummary.payment_totals.CASH;
       const nonCashSalesCents = totalSalesCents - cashSalesCents;
       const approvedExpensesCashDrawerCents = expenses
         .filter((e) => e.paid_from === 'CASH_DRAWER')
@@ -130,16 +91,11 @@ export default function SettlementEditorScreen() {
         dailyNetSalesCents
       );
 
-      const paymentsByMethod = {
-        CASH: flatPayments.filter((p) => p.method === 'CASH').reduce((sum, p) => sum + p.amount_cents, 0),
-        GCASH: flatPayments.filter((p) => p.method === 'GCASH').reduce((sum, p) => sum + p.amount_cents, 0),
-        CARD: flatPayments.filter((p) => p.method === 'CARD').reduce((sum, p) => sum + p.amount_cents, 0),
-        OTHER: flatPayments.filter((p) => p.method === 'OTHER').reduce((sum, p) => sum + p.amount_cents, 0),
-      };
+      const paymentsByMethod = settlementSummary.payment_totals;
 
       return {
         shift,
-        sales,
+        sales: [],
         expenses,
         computation,
         existingSettlement,
@@ -148,7 +104,7 @@ export default function SettlementEditorScreen() {
         managerShareCents,
         ownerShareCents,
         paymentsByMethod,
-        productsSold,
+        productsSold: settlementSummary.products_sold,
         workerName,
         cartName,
       };
@@ -166,7 +122,7 @@ export default function SettlementEditorScreen() {
         date: format(shiftData.shift.clock_out || shiftData.shift.clock_in, 'MM-dd-yyyy'),
         products_sold: shiftData.productsSold.map((p: any) => ({
           name: p.product_name,
-          qty: p.quantity,
+          qty: p.qty,
           price: (p.total_cents / 100).toFixed(2),
         })),
         sales_summary: {
@@ -205,6 +161,24 @@ export default function SettlementEditorScreen() {
           throw new Error('Settlement already finalized');
         }
         settlementId = shiftData.existingSettlement.id;
+        const totalSalesCents = shiftData.computation.total_sales_cents || 0;
+
+        await settlementRepo.updateSettlement(
+          settlementId,
+          {
+            cash_cents: shiftData.paymentsByMethod.CASH,
+            gcash_cents: shiftData.paymentsByMethod.GCASH,
+            card_cents: shiftData.paymentsByMethod.CARD,
+            gross_sales_cents: totalSalesCents,
+            total_cents: totalSalesCents,
+          },
+          user.id
+        );
+        await settlementRepo.replaceSettlementItems(
+          settlementId,
+          shiftData.productsSold,
+          user.id
+        );
       } else {
         const dateIso = format(shiftData.shift.clock_out || shiftData.shift.clock_in, 'yyyy-MM-dd');
         const totalSalesCents = shiftData.computation.total_sales_cents || 0;
@@ -230,7 +204,7 @@ export default function SettlementEditorScreen() {
             settlementId,
             product.product_id,
             product.product_name,
-            product.quantity,
+            product.qty,
             product.total_cents,
             user.id
           );
@@ -453,7 +427,7 @@ export default function SettlementEditorScreen() {
               <View key={index} style={styles.productRow}>
                 <View style={styles.productLeft}>
                   <Text style={[styles.productName, { color: theme.text }]}>{product.product_name}</Text>
-                  <Text style={[styles.productQty, { color: theme.textSecondary }]}>Qty: {product.quantity}</Text>
+                  <Text style={[styles.productQty, { color: theme.textSecondary }]}>Qty: {product.qty}</Text>
                 </View>
                 <Text style={[styles.productTotal, { color: theme.text }]}>
                   ₱{(product.total_cents / 100).toFixed(2)}
