@@ -13,10 +13,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, MapPin, LogOut, Coins, CreditCard, Wallet, TrendingUp, Activity } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
+import { useToast } from '@/lib/contexts/toast.context';
 import { CartRepository, ShiftRepository, SaleRepository, ExpenseRepository, UserRepository } from '@/lib/repositories';
 import { format } from 'date-fns';
-import { onSyncComplete } from '@/lib/services/sync.service';
-import SyncProgressModal from '@/components/SyncProgressModal';
+import * as Network from 'expo-network';
+import { onSyncComplete, syncNow } from '@/lib/services/sync.service';
 
 export default function WorkerShiftScreen() {
   const { theme } = useTheme();
@@ -24,9 +25,8 @@ export default function WorkerShiftScreen() {
   const [showStartModal, setShowStartModal] = useState<boolean>(false);
   const [selectedCart, setSelectedCart] = useState<string>('');
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
-  const [showSyncModal, setShowSyncModal] = useState<boolean>(false);
-  const [pendingAction, setPendingAction] = useState<'end_shift' | null>(null);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const cartRepo = new CartRepository();
   const shiftRepo = new ShiftRepository();
@@ -140,24 +140,47 @@ export default function WorkerShiftScreen() {
         text: 'End Shift',
         style: 'destructive',
         onPress: () => {
-          setPendingAction('end_shift');
-          setShowSyncModal(true);
+          void handleEndShiftConfirmed();
         },
       },
     ]);
   };
 
-  const handleSyncSuccess = async () => {
-    if (pendingAction === 'end_shift') {
-      try {
-        await endShift();
-        queryClient.invalidateQueries({ queryKey: ['active-shift'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-        setPendingAction(null);
-      } catch (error) {
-        console.error('[Worker Shift] Failed to end shift:', error);
-        Alert.alert('Error', 'Failed to end shift');
+  const isOfflineLikeError = (message: string) => {
+    const lower = message.toLowerCase();
+    return (
+      lower.includes('offline') ||
+      lower.includes('internet') ||
+      lower.includes('network') ||
+      lower.includes('timeout') ||
+      lower.includes('fetch') ||
+      lower.includes('supabase') ||
+      lower.includes('loadbundlefromserver')
+    );
+  };
+
+  const handleEndShiftConfirmed = async () => {
+    try {
+      await endShift();
+      queryClient.invalidateQueries({ queryKey: ['active-shift'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+
+      const networkState = await Network.getNetworkStateAsync();
+      const isOnline = !!networkState.isConnected && !!networkState.isInternetReachable;
+
+      if (!isOnline) {
+        showToast('End Shift saved locally. Will sync when internet is available.', 'info');
+        return;
       }
+
+      void syncNow('end_shift').then((result) => {
+        if (!result.success && result.error && isOfflineLikeError(result.error)) {
+          showToast('End Shift saved locally. Will sync when internet is available.', 'info');
+        }
+      });
+    } catch (error) {
+      console.error('[Worker Shift] Failed to end shift:', error);
+      Alert.alert('Error', 'Failed to end shift');
     }
   };
 
@@ -350,21 +373,6 @@ export default function WorkerShiftScreen() {
           </TouchableOpacity>
         </View>
 
-        <SyncProgressModal
-          visible={showSyncModal}
-          onClose={() => {
-            setShowSyncModal(false);
-            setPendingAction(null);
-          }}
-          onSuccess={handleSyncSuccess}
-          onCancel={() => {
-            setShowSyncModal(false);
-            setPendingAction(null);
-          }}
-          reason="end_shift"
-          title="Synchronizing with Database"
-          allowCancel={true}
-        />
       </ScrollView>
     );
   }

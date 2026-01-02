@@ -1,6 +1,7 @@
 import { Settlement, SettlementWithDetails } from '../types';
 import { BaseRepository } from './base';
 import { getDeviceId } from '../utils/device-id';
+import { SyncOutboxRepository } from './sync-outbox.repository';
 
 interface SettlementItem {
   id: string;
@@ -20,14 +21,18 @@ interface SettlementItem {
 }
 
 export class SettlementRepository extends BaseRepository {
-  private async queueSync(tableName: string, rowId: string, payload: any): Promise<void> {
-    const db = await this.getDb();
-    const outboxId = this.generateId();
-    await db.runAsync(
-      `INSERT INTO sync_outbox (id, table_name, row_id, op, payload_json, created_at)
-       VALUES (?, ?, ?, 'upsert', ?, ?)`,
-      [outboxId, tableName, rowId, JSON.stringify(payload), Date.now()]
-    );
+  private syncOutbox = new SyncOutboxRepository();
+
+  private async queueSync(
+    tableName: string,
+    rowId: string,
+    payload: any,
+    options?: {
+      changeId?: string;
+      changeType?: string;
+    }
+  ): Promise<void> {
+    await this.syncOutbox.add(tableName, rowId, 'upsert', payload, options);
     console.log(`[SettlementRepo] Queued sync for ${tableName}:${rowId}`);
   }
 
@@ -77,7 +82,10 @@ export class SettlementRepository extends BaseRepository {
       created_at_iso: nowISO, updated_at_iso: nowISO,
     };
 
-    await this.queueSync('settlements', id, payload);
+    await this.queueSync('settlements', id, payload, {
+      changeId: id,
+      changeType: 'SETTLEMENT_CREATE',
+    });
 
     await this.auditLog(userId, 'settlements', id, 'create', null, {
       shift_id: shiftId,
@@ -125,7 +133,9 @@ export class SettlementRepository extends BaseRepository {
       created_at_iso: nowISO, updated_at_iso: nowISO,
     };
 
-    await this.queueSync('settlement_items', id, payload);
+    await this.queueSync('settlement_items', id, payload, {
+      changeId: settlementId,
+    });
 
     await this.auditLog(userId, 'settlement_items', id, 'create', null, {
       settlement_id: settlementId,

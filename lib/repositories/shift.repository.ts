@@ -221,7 +221,10 @@ export class ShiftRepository extends BaseRepository {
 
     const updatedShift = await this.getShiftById(shift_id);
     if (updatedShift) {
-      await this.syncOutbox.add('worker_shifts', shift_id, 'upsert', updatedShift);
+      await this.syncOutbox.add('worker_shifts', shift_id, 'upsert', updatedShift, {
+        changeId: shift_id,
+        changeType: 'SHIFT_END',
+      });
     }
 
     await this.createSettlementForShift(shift_id, shift.worker_id, shift.cart_id, now);
@@ -236,9 +239,9 @@ export class ShiftRepository extends BaseRepository {
     clockOut: number
   ): Promise<void> {
     try {
-      const { SettlementRepository } = await import('./settlement.repository');
-      const { SaleRepository } = await import('./sale.repository');
-      const { PaymentRepository } = await import('./payment.repository');
+      const { SettlementRepository } = require('./settlement.repository');
+      const { SaleRepository } = require('./sale.repository');
+      const { PaymentRepository } = require('./payment.repository');
       const settlementRepo = new SettlementRepository();
       const saleRepo = new SaleRepository();
       const paymentRepo = new PaymentRepository();
