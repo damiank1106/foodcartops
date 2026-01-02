@@ -29,7 +29,7 @@ export class ExpenseRepository extends BaseRepository {
         id, shift_id, cart_id, submitted_by_user_id, category, 
         amount_cents, paid_from, notes, receipt_image_uri, receipt_storage_path,
         status, created_at, updated_at, business_id, device_id, created_at_iso, updated_at_iso
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.shift_id,
