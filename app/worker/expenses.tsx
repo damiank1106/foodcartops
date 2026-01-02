@@ -21,6 +21,7 @@ import { ExpenseRepository, AuditRepository, CartRepository } from '@/lib/reposi
 import type { PaidFrom } from '@/lib/types';
 import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import SyncProgressModal from '@/components/SyncProgressModal';
 
 const EXPENSE_CATEGORIES = [
@@ -54,6 +55,23 @@ export default function WorkerExpensesScreen() {
   const expenseRepo = React.useMemo(() => new ExpenseRepository(), []);
   const auditRepo = React.useMemo(() => new AuditRepository(), []);
   const cartRepo = React.useMemo(() => new CartRepository(), []);
+
+  const persistReceiptToDocuments = React.useCallback(async (uri: string) => {
+    if (!FileSystem.documentDirectory) {
+      return uri;
+    }
+
+    const receiptsDir = `${FileSystem.documentDirectory}receipts`;
+    await FileSystem.makeDirectoryAsync(receiptsDir, { intermediates: true });
+
+    const extensionMatch = uri.match(/\.(\w+)(?:\?|#|$)/);
+    const extension = extensionMatch?.[1] || 'jpg';
+    const fileName = `receipt-${Date.now()}.${extension}`;
+    const destination = `${receiptsDir}/${fileName}`;
+
+    await FileSystem.copyAsync({ from: uri, to: destination });
+    return destination;
+  }, []);
 
   React.useEffect(() => {
     const loadCarts = async () => {
@@ -216,7 +234,13 @@ export default function WorkerExpensesScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setReceiptUri(result.assets[0].uri);
+      try {
+        const persistedUri = await persistReceiptToDocuments(result.assets[0].uri);
+        setReceiptUri(persistedUri);
+      } catch (error) {
+        console.warn('[Expense] Failed to persist receipt photo, using original URI', error);
+        setReceiptUri(result.assets[0].uri);
+      }
     }
   };
 
@@ -234,7 +258,13 @@ export default function WorkerExpensesScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setReceiptUri(result.assets[0].uri);
+      try {
+        const persistedUri = await persistReceiptToDocuments(result.assets[0].uri);
+        setReceiptUri(persistedUri);
+      } catch (error) {
+        console.warn('[Expense] Failed to persist receipt file, using original URI', error);
+        setReceiptUri(result.assets[0].uri);
+      }
     }
   };
 

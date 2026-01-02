@@ -14,6 +14,7 @@ export interface SyncOutboxItem {
   attempts: number;
   last_error: string | null;
   sync_status: 'pending' | 'syncing' | 'failed' | 'synced';
+  last_attempt_at: number | null;
   user_id: string | null;
   cart_id: string | null;
   role: string | null;
@@ -170,8 +171,8 @@ export class SyncOutboxRepository extends BaseRepository {
   async markSyncing(id: string): Promise<void> {
     const db = await this.getDb();
     await db.runAsync(
-      `UPDATE sync_outbox SET sync_status = 'syncing', last_error = NULL WHERE id = ?`,
-      [id]
+      `UPDATE sync_outbox SET sync_status = 'syncing', last_error = NULL, last_attempt_at = ? WHERE id = ?`,
+      [this.now(), id]
     );
   }
 

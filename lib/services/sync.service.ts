@@ -15,6 +15,7 @@ interface SyncOutboxRow {
   attempts: number;
   last_error: string | null;
   sync_status: 'pending' | 'syncing' | 'failed' | 'synced';
+  last_attempt_at: number | null;
   user_id: string | null;
   cart_id: string | null;
   role: string | null;
@@ -97,10 +98,96 @@ let currentStatus: SyncStatus = {
 };
 
 const RECEIPT_BUCKET = 'expense-receipts';
+const RETRYABLE_ERROR_PATTERNS = [
+  /network request failed/i,
+  /failed to fetch/i,
+  /fetch failed/i,
+  /timeout/i,
+  /timed out/i,
+  /dns/i,
+  /connection/i,
+  /socket/i,
+  /ecconnreset/i,
+  /econnreset/i,
+  /econnrefused/i,
+  /enotfound/i,
+  /temporary/i,
+];
+const MAX_RETRY_BACKOFF_MS = 5 * 60 * 1000;
+const BASE_RETRY_BACKOFF_MS = 2000;
 
 function isLocalFileUri(uri?: string | null): boolean {
   if (!uri) return false;
   return !uri.startsWith('http://') && !uri.startsWith('https://');
+}
+
+function getErrorStatus(error: any): number | null {
+  const status = error?.status ?? error?.statusCode ?? error?.code;
+  if (typeof status === 'number') {
+    return status;
+  }
+  if (typeof status === 'string') {
+    const parsed = Number(status);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function isRetryableError(error: any): boolean {
+  if (error?.isRetryable === true) {
+    return true;
+  }
+  const status = getErrorStatus(error);
+  if (status !== null) {
+    if (status >= 500) return true;
+    if (status === 408 || status === 429) return true;
+    if (status >= 400 && status < 500) return false;
+  }
+  const message = (error?.message || String(error || '')).toLowerCase();
+  return RETRYABLE_ERROR_PATTERNS.some(pattern => pattern.test(message));
+}
+
+function isPermanentError(error: any): boolean {
+  const status = getErrorStatus(error);
+  if (status !== null) {
+    return status >= 400 && status < 500 && status !== 408 && status !== 429;
+  }
+  const message = (error?.message || String(error || '')).toLowerCase();
+  return message.includes('unauthorized') || message.includes('forbidden') || message.includes('permission');
+}
+
+function getRetryBackoffMs(attempts: number): number {
+  if (attempts <= 0) return 0;
+  const exponent = Math.max(0, attempts - 1);
+  return Math.min(MAX_RETRY_BACKOFF_MS, BASE_RETRY_BACKOFF_MS * Math.pow(2, exponent));
+}
+
+function formatRetryDelay(ms: number): string {
+  const seconds = Math.max(1, Math.ceil(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes}m`;
+}
+
+function isPermanentErrorMessage(message?: string | null): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('authentication required') ||
+    normalized.includes('permission denied') ||
+    normalized.includes('invalid api key') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden')
+  );
+}
+
+class RetryableSyncError extends Error {
+  isRetryable = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'RetryableSyncError';
+  }
 }
 
 async function getPendingCount(db: Awaited<ReturnType<typeof getDatabase>>): Promise<number> {
@@ -133,6 +220,11 @@ async function uploadReceiptIfNeeded(
   const receiptUri = payload.receipt_image_uri;
   if (!isLocalFileUri(receiptUri)) {
     return payload;
+  }
+
+  const networkState = await Network.getNetworkStateAsync();
+  if (!networkState.isConnected || !networkState.isInternetReachable) {
+    throw new RetryableSyncError('Waiting for internet');
   }
 
   const fileName = receiptUri.split('/').pop() || `${expenseId}.jpg`;
@@ -275,10 +367,21 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
     for (let i = 0; i < sortedOutbox.length; i++) {
       const row = sortedOutbox[i];
+      if (row.sync_status === 'failed' && isPermanentErrorMessage(row.last_error)) {
+        continue;
+      }
+      const backoffMs = getRetryBackoffMs(row.attempts);
+      if (row.last_attempt_at && backoffMs > 0) {
+        const nextAttemptAt = row.last_attempt_at + backoffMs;
+        if (Date.now() < nextAttemptAt) {
+          continue;
+        }
+      }
       didWork = true;
+      const attemptStartedAt = Date.now();
       await db.runAsync(
-        `UPDATE sync_outbox SET sync_status = 'syncing', last_error = NULL WHERE id = ?`,
-        [row.id]
+        `UPDATE sync_outbox SET sync_status = 'syncing', last_error = NULL, last_attempt_at = ? WHERE id = ?`,
+        [attemptStartedAt, row.id]
       );
       updateStatus({ 
         currentStep: `Pushing ${row.table_name} (${i + 1}/${sortedOutbox.length})`,
@@ -546,9 +649,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           db = await getDatabase();
           await db.runAsync(
             `UPDATE sync_outbox
-             SET attempts = attempts + 1, last_error = ?, sync_status = 'failed'
+             SET attempts = attempts + 1, last_error = ?, sync_status = 'failed', last_attempt_at = ?
              WHERE id = ?`,
-            [errorMsg, row.id]
+            [errorMsg, Date.now(), row.id]
           );
           await db.runAsync(
             'UPDATE sync_state SET last_error = ? WHERE table_name = ?',
@@ -562,13 +665,46 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
           syncInProgress = false;
           return { success: false, didWork: false, error: 'Invalid API key. Please check your credentials.' };
         }
-        
+
+        if (isPermanentError(error)) {
+          const permanentMessage = errorMsg.toLowerCase().includes('auth') || errorMsg.toLowerCase().includes('unauthorized')
+            ? 'Authentication required. Please sign in again to retry.'
+            : errorMsg.toLowerCase().includes('permission') || errorMsg.toLowerCase().includes('forbidden')
+              ? 'Permission denied. Please re-authenticate to retry.'
+              : errorMsg;
+
+          db = await getDatabase();
+          await db.runAsync(
+            `UPDATE sync_outbox
+             SET attempts = attempts + 1, last_error = ?, sync_status = 'failed', last_attempt_at = ?
+             WHERE id = ?`,
+            [permanentMessage, Date.now(), row.id]
+          );
+          continue;
+        }
+
+        if (isRetryableError(error)) {
+          const nextAttempts = row.attempts + 1;
+          const retryDelay = getRetryBackoffMs(nextAttempts);
+          const retryMessage = errorMsg.toLowerCase().includes('waiting for internet') || errorMsg.toLowerCase().includes('offline')
+            ? 'Waiting for internet'
+            : `Retrying in ${formatRetryDelay(retryDelay)}`;
+          db = await getDatabase();
+          await db.runAsync(
+            `UPDATE sync_outbox
+             SET attempts = attempts + 1, last_error = ?, sync_status = 'pending', last_attempt_at = ?
+             WHERE id = ?`,
+            [retryMessage, Date.now(), row.id]
+          );
+          continue;
+        }
+
         db = await getDatabase();
         await db.runAsync(
           `UPDATE sync_outbox
-           SET attempts = attempts + 1, last_error = ?, sync_status = 'failed'
+           SET attempts = attempts + 1, last_error = ?, sync_status = 'failed', last_attempt_at = ?
            WHERE id = ?`,
-          [errorMsg, row.id]
+          [errorMsg, Date.now(), row.id]
         );
       }
     }
