@@ -5,6 +5,7 @@ export type SyncOp = 'upsert' | 'delete';
 export interface SyncOutboxItem {
   id: string;
   change_id: string;
+  change_type: string | null;
   table_name: string;
   row_id: string;
   op: SyncOp;
@@ -91,7 +92,11 @@ export class SyncOutboxRepository extends BaseRepository {
     tableName: string,
     rowId: string,
     op: SyncOp,
-    payload: Record<string, any>
+    payload: Record<string, any>,
+    options?: {
+      changeId?: string;
+      changeType?: string;
+    }
   ): Promise<void> {
     const db = await this.getDb();
     const id = this.generateId();
@@ -99,14 +104,16 @@ export class SyncOutboxRepository extends BaseRepository {
     const userId = await this.resolveUserId(tableName, payload);
     const cartId = await this.resolveCartId(tableName, payload);
     const role = await this.resolveRole(userId);
+    const changeId = options?.changeId ?? id;
+    const changeType = options?.changeType ?? null;
 
     await db.runAsync(
       `INSERT INTO sync_outbox (
-        id, change_id, table_name, row_id, op, payload_json, created_at,
+        id, change_id, change_type, table_name, row_id, op, payload_json, created_at,
         attempts, last_error, sync_status, user_id, cart_id, role
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, 'pending', ?, ?, ?)`,
-      [id, id, tableName, rowId, op, JSON.stringify(payload), now, userId, cartId, role]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 'pending', ?, ?, ?)`,
+      [id, changeId, changeType, tableName, rowId, op, JSON.stringify(payload), now, userId, cartId, role]
     );
 
     console.log(`[SyncOutbox] Added ${op} for ${tableName}:${rowId}`);

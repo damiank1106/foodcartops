@@ -2087,4 +2087,16 @@ export const MIGRATIONS = [
       ALTER TABLE sync_outbox DROP COLUMN change_id;
     `,
   },
+  {
+    version: 48,
+    up: `
+      ALTER TABLE sync_outbox ADD COLUMN change_type TEXT;
+
+      INSERT OR IGNORE INTO db_change_log (id, message, created_at) VALUES
+      (lower(hex(randomblob(16))), 'Migration v48: Added change_type to sync_outbox', ${Date.now()});
+    `,
+    down: `
+      ALTER TABLE sync_outbox DROP COLUMN change_type;
+    `,
+  },
 ];
