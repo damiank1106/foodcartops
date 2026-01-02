@@ -1,8 +1,11 @@
 import * as Network from 'expo-network';
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { initSupabaseClient } from '../supabase/client';
 import { getDatabase } from '../database/init';
 import { ensureSystemUsers } from '../utils/seed';
 import { SYSTEM_USERS, SYSTEM_USER_ID_SET } from '../utils/system-users';
+import { UserRepository } from '../repositories';
 
 interface SyncOutboxRow {
   id: string;
@@ -30,6 +33,14 @@ interface SyncStateRow {
 let syncInProgress = false;
 let syncListeners: ((status: SyncStatus) => void)[] = [];
 let syncCompletionCallbacks: (() => void)[] = [];
+
+const AUTH_STORAGE_KEY = 'foodcartops_auth';
+
+interface SyncUserContext {
+  userId: string;
+  role: string;
+  businessId: string;
+}
 
 export interface SyncStatus {
   isRunning: boolean;
@@ -96,6 +107,32 @@ let currentStatus: SyncStatus = {
   lastSyncAt: null,
   pendingCount: 0,
 };
+
+async function getCurrentUserContext(): Promise<SyncUserContext | null> {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
+  try {
+    const authData = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+    if (!authData) return null;
+    const parsed = JSON.parse(authData);
+    if (!parsed?.userId) return null;
+
+    const userRepo = new UserRepository();
+    const user = await userRepo.findById(parsed.userId);
+    if (!user) return null;
+
+    return {
+      userId: user.id,
+      role: user.role,
+      businessId: user.business_id ?? 'default_business',
+    };
+  } catch (error) {
+    console.warn('[Sync] Failed to load current user context:', error);
+    return null;
+  }
+}
 
 const RECEIPT_BUCKET = 'expense-receipts';
 const RETRYABLE_ERROR_PATTERNS = [
@@ -401,6 +438,9 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
       syncInProgress = false;
       return { success: false, didWork: false, error: 'Supabase not configured' };
     }
+
+    const currentUserContext = await getCurrentUserContext();
+    const isManagerRole = currentUserContext?.role === 'general_manager' || currentUserContext?.role === 'developer';
 
     let db = await getDatabase();
     const outboxRows = await db.getAllAsync<SyncOutboxRow>(
@@ -803,7 +843,11 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
 
         console.log(`[Sync] 📥 Pulling ${tableName} since ${lastSyncMs} (${lastSyncIso})`);
 
-        const baseQuery = supabase.from(tableName).select('*');
+        let baseQuery = supabase.from(tableName).select('*');
+        if (tableName === 'expenses' && isManagerRole) {
+          const businessId = currentUserContext?.businessId ?? 'default_business';
+          baseQuery = baseQuery.eq('business_id', businessId);
+        }
         const { data, error } = await baseQuery
           .gte('updated_at', lastSyncMs)
           .order('updated_at', { ascending: true });
@@ -846,6 +890,22 @@ export async function syncNow(reason: string = 'manual'): Promise<{ success: boo
               const createdAtMs = coerceMsTimestamp(remoteRow.created_at);
               const updatedAtMs = coerceMsTimestamp(remoteRow.updated_at);
               const reviewedAtMs = coerceMsTimestamp(remoteRow.reviewed_at);
+
+              if (remoteRow.is_deleted === null || remoteRow.is_deleted === undefined) {
+                remoteRow.is_deleted = 0;
+              } else if (typeof remoteRow.is_deleted === 'boolean') {
+                remoteRow.is_deleted = remoteRow.is_deleted ? 1 : 0;
+              }
+
+              if (remoteRow.is_saved === null || remoteRow.is_saved === undefined) {
+                remoteRow.is_saved = 0;
+              } else if (typeof remoteRow.is_saved === 'boolean') {
+                remoteRow.is_saved = remoteRow.is_saved ? 1 : 0;
+              }
+
+              if (!remoteRow.business_id) {
+                remoteRow.business_id = currentUserContext?.businessId ?? 'default_business';
+              }
 
               if (createdAtMs !== null) {
                 remoteRow.created_at = createdAtMs;

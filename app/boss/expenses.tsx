@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,26 +12,51 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useFocusEffect } from 'expo-router';
-import { CheckCircle, XCircle, Coins, Eye, X, Clock, Trash2 } from 'lucide-react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { CheckCircle, XCircle, Coins, Eye, X, Clock, Trash2, RefreshCw, ListChecks } from 'lucide-react-native';
 import { useTheme } from '@/lib/contexts/theme.context';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { ExpenseRepository, AuditRepository } from '@/lib/repositories';
 import { UserPreferencesRepository } from '@/lib/repositories/user-preferences.repository';
 import type { ExpenseWithDetails } from '@/lib/types';
 import { format } from 'date-fns';
-import { syncNow } from '@/lib/services/sync.service';
+import { subscribeSyncStatus, syncNow } from '@/lib/services/sync.service';
+import SyncProgressModal from '@/components/SyncProgressModal';
+import { usePendingChangesBadge } from '@/lib/utils/usePendingChangesBadge';
+import { useToast } from '@/lib/contexts/toast.context';
 
 export default function BossExpensesScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const router = useRouter();
+  const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [selectedExpense, setSelectedExpense] = useState<ExpenseWithDetails | null>(null);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
   const [filter, setFilter] = useState<'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'ALL' | 'SAVED'>('SUBMITTED');
+  const [showSyncModal, setShowSyncModal] = useState<boolean>(false);
 
   const expenseRepo = new ExpenseRepository();
   const auditRepo = new AuditRepository();
+  const pendingChangesCount = usePendingChangesBadge();
+  const isManagerRole = user?.role === 'general_manager' || user?.role === 'developer';
+  const lastSyncErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!showSyncModal) {
+      lastSyncErrorRef.current = null;
+      return;
+    }
+
+    const unsubscribe = subscribeSyncStatus((status) => {
+      if (status.lastError && status.lastError !== lastSyncErrorRef.current) {
+        lastSyncErrorRef.current = status.lastError;
+        showToast(status.lastError, 'error');
+      }
+    });
+
+    return unsubscribe;
+  }, [showSyncModal, showToast]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -174,6 +199,17 @@ export default function BossExpensesScreen() {
     saveExpenseMutation.mutate({ expenseId, isSaved: nextSaved });
   };
 
+  const handleManualSync = () => {
+    showToast('Sync started…', 'info');
+    setShowSyncModal(true);
+  };
+
+  const handleSyncSuccess = () => {
+    showToast('Expenses synchronized', 'success');
+    queryClient.invalidateQueries({ queryKey: ['boss-expenses'] });
+    queryClient.invalidateQueries({ queryKey: ['pending-changes-count'] });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'APPROVED':
@@ -199,6 +235,29 @@ export default function BossExpensesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {isManagerRole && (
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.text }]}>Expenses</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[styles.headerButton, { backgroundColor: theme.background }]}
+              onPress={() => router.push('/pending-changes')}
+            >
+              <ListChecks size={16} color={theme.primary} />
+              <Text style={[styles.headerButtonText, { color: theme.primary }]}>
+                Pending ({pendingChangesCount})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.headerButton, { backgroundColor: theme.primary }]}
+              onPress={handleManualSync}
+            >
+              <RefreshCw size={16} color="#FFF" />
+              <Text style={[styles.headerButtonText, { color: '#FFF' }]}>Sync</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContainer}>
         {(['SUBMITTED', 'APPROVED', 'REJECTED', 'ALL', 'SAVED'] as const).map((f) => (
           <TouchableOpacity
@@ -533,6 +592,15 @@ export default function BossExpensesScreen() {
           </View>
         </View>
       </Modal>
+
+      <SyncProgressModal
+        visible={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        onSuccess={handleSyncSuccess}
+        onCancel={() => setShowSyncModal(false)}
+        reason="expenses_manual"
+        title="Synchronizing expenses"
+      />
     </View>
   );
 }
@@ -546,10 +614,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     gap: 12,
+    justifyContent: 'space-between',
   },
   title: {
     fontSize: 24,
     fontWeight: '700' as const,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  headerButtonText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
   },
   badge: {
     minWidth: 24,
